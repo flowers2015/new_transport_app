@@ -4316,7 +4316,27 @@ async function getFreightHistory(req, res) {
             ELSE NULL 
           END
         ) as vehicle_plate,
-        v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
+        v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
+        -- آخرین تخصیص موفق (شرکتی/شخصی) از تاریخچه یا ثبت نوبت
+        (
+          SELECT MAX(src.ts)
+          FROM (
+            SELECT fah.created_at AS ts
+            FROM freight_announcement_history fah
+            WHERE fah.freight_announcement_id = fa.id
+              AND fah.action IN (
+                'ASSIGNED',
+                'REASSIGNED',
+                'ASSIGNED_STAGE1',
+                'ASSIGNED_STAGE2'
+              )
+            UNION ALL
+            SELECT da_src.created_at AS ts
+            FROM dispatch_assignments da_src
+            WHERE da_src.freight_announcement_id = fa.id
+              AND (da_src.is_cancelled IS NULL OR da_src.is_cancelled = FALSE)
+          ) src
+        ) as assigned_at
       FROM freight_announcements fa
       LEFT JOIN users u_creator ON fa.created_by_user_id = u_creator.id
       LEFT JOIN LATERAL (
@@ -4451,7 +4471,11 @@ async function getFreightHistory(req, res) {
     
     // Count total records for pagination (before LIMIT/OFFSET)
     // برای فیلتر destination، باید از subquery استفاده کنیم
-    let countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(DISTINCT fa.id) as total FROM');
+    // توجه: نباید به اولین FROM داخل subquery (مثل assigned_at) بچسبد
+    let countQuery = query.replace(
+      /SELECT[\s\S]*?FROM\s+freight_announcements\s+fa\b/i,
+      'SELECT COUNT(DISTINCT fa.id) as total FROM freight_announcements fa'
+    );
     const countParams = [...params];
     let countParamIndex = paramIndex;
     if (destination && destination.trim()) {

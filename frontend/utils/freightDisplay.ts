@@ -1,5 +1,5 @@
 import { Destination, Driver, FreightAnnouncement, FreightAnnouncementStatus, FreightLineType, PersonalDriver, Vehicle } from '../types';
-import { formatPlateNumber, jalaliCalendarDayDiff, toTimestamp, coerceToDate } from './jalali';
+import { formatPlateNumber, jalaliCalendarDayDiff, toTimestamp, coerceToDate, formatBillOfLadingDateDisplay } from './jalali';
 
 /** نوع نماینده — همیشه فارسی برای UI و اکسل */
 export function formatRepresentativeType(value?: string | null): string {
@@ -631,7 +631,25 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
             a.awaiting_bill_of_lading_at === null || a.awaitingBillOfLadingAt === null
                 ? undefined
                 : ((a.awaiting_bill_of_lading_at ?? a.awaitingBillOfLadingAt) as string | Date | undefined),
+        assignedAt:
+            a.assigned_at === null || a.assignedAt === null
+                ? undefined
+                : ((a.assigned_at ?? a.assignedAt) as string | Date | undefined),
     };
+}
+
+/** زمان تخصیص راننده/خودرو (شرکتی یا شخصی) از API */
+export function getAnnouncementAssignedAt(ann: any): string | Date | null | undefined {
+    if (!ann) return null;
+    return ann.assignedAt ?? ann.assigned_at ?? null;
+}
+
+/** برچسب نمایشی تاریخ تخصیص برای جدول/اکسل */
+export function formatAssignmentDateLabel(ann: any): string {
+    const raw = getAnnouncementAssignedAt(ann);
+    if (!raw) return '-';
+    const formatted = formatBillOfLadingDateDisplay(raw);
+    return formatted === '-' ? '-' : formatted;
 }
 
 const pickNonEmptyText = (incoming?: string | null, previous?: string | null): string | undefined => {

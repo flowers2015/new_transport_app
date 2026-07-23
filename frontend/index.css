@@ -38,6 +38,25 @@ body {
   --freight-sticky-h1: 2.4rem;
 }
 
+/* برنامه‌ریزی ارسال بار: هدر + ردیف فیلتر */
+.freight-sticky-table-wrap[data-sticky-rows='planning-compact'] {
+  --freight-sticky-h1: 2.35rem;
+}
+
+/* برنامه‌ریزی کامل: هدر گروه‌بندی + زیرستون مقصد + فیلتر */
+.freight-sticky-table-wrap[data-sticky-rows='planning-full'] {
+  --freight-sticky-h1: 2.5rem;
+  --freight-sticky-h2: 4.7rem;
+}
+
+.freight-sticky-table-wrap[data-sticky-rows='planning-full'] table thead tr:nth-child(3) th {
+  position: sticky;
+  top: var(--freight-sticky-h2, 4.7rem);
+  z-index: 10;
+  background-color: #f8fafc;
+  box-shadow: 0 1px 0 #e2e8f0;
+}
+
 .freight-sticky-table-wrap table thead th {
   position: sticky;
   z-index: 12;

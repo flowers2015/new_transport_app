@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDairyDestinationColumnLines } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDestinationRepCompactSegment, formatTonnageKgFromRaw, formatTotalTonnageFromDestinations } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -27,6 +27,67 @@ const DAIRY_DEST_SUB_COL_COUNT = 9;
 const AMBIENT_DEST_SUB_COL_COUNT = 6;
 const DAIRY_DEST_SUB_HEADERS = ['نوع برند', 'کد LIS', 'محصولات', 'نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه'] as const;
 const AMBIENT_DEST_SUB_HEADERS = ['نماینده', 'مقصد', 'تناژ', 'تاریخ تحویل', 'ساعت تخلیه', 'کرایه'] as const;
+
+/** کلاس ستون‌های پاستوریزه فشرده — مطابق پیگیری اعلام بار زنده */
+const PLANNING_DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
+    '': 'col-checkbox',
+    ردیف: 'col-row',
+    'کارمند اعلام‌کننده': 'col-creator',
+    'نوع خودرو': 'col-vehicle-type',
+    'مبدا بارگیری': 'col-origin',
+    'کل تناژ (کیلوگرم)': 'col-tonnage',
+    مقاصد: 'col-destinations',
+    'ارزش بار (ریال)': 'col-cargo-value',
+    'ساعت حضور': 'col-platform-time',
+    'تاریخ اعلام بار': 'col-created-at',
+    توضیحات: 'col-notes',
+    وضعیت: 'col-status',
+    'علت رد': 'col-reject',
+    عملیات: 'col-operations',
+};
+
+const renderDairyCompactText = (text: string) => (
+    <span className="dairy-compact-cell block w-full text-[10px] sm:text-xs leading-snug text-center text-slate-700 break-words">
+        {text}
+    </span>
+);
+
+/** مقاصد فشرده پاستوریزه — همان فرمت پیگیری اعلام بار زنده */
+const renderPlanningDairyCompactDestinations = (ann: FreightAnnouncement) => {
+    if (!ann.destinations?.length) return <span>-</span>;
+    return (
+        <div className="dest-compact-list text-[9px] sm:text-[10px] leading-snug text-right w-full min-w-0">
+            {ann.destinations.map((d, idx) => {
+                const products = formatDestinationProductsLabel(d);
+                return (
+                    <div key={d.id || idx} className="dest-compact-line">
+                        <span className="dest-compact-num">{idx + 1}</span>
+                        <div className="dest-compact-body">
+                            <span className="dest-compact-city">{(d.city || '').trim() || '-'}</span>
+                            {d.tonnage ? (
+                                <span className="dest-compact-tonnage">({formatTonnageKgFromRaw(d.tonnage)})</span>
+                            ) : null}
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-rep">{formatDestinationRepCompactSegment(ann, d)}</span>
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-brand">{formatDestinationBrandLabel(d)}</span>
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-lis">{d.lisCode?.trim() || '-'}</span>
+                            {products !== '-' ? (
+                                <>
+                                    <span className="dest-compact-dot">·</span>
+                                    <span className="dest-compact-products">{products}</span>
+                                </>
+                            ) : null}
+                            <span className="dest-compact-dot">·</span>
+                            <span className="dest-compact-date">{d.deliveryDate || '-'}</span>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
 
 const sortByCanonicalLineOrder = (types: FreightLineType[]) =>
     ALL_FREIGHT_LINE_TYPES.filter((lt) => types.includes(lt));
@@ -178,6 +239,8 @@ const isFreightCreateRole = (user?: User): boolean => {
         user.role === UserRole.SalesExpert ||
         user.role === 'planner' ||
         user.role === 'sales_expert' ||
+        user.role === 'SalesExpert' ||
+        user.role === 'PlanningEmployee' ||
         user.role === 'کارمند برنامه‌ریزی' ||
         user.role === 'کارشناس فروش'
     );
@@ -1452,71 +1515,116 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     }, [routeSuggestions]);
 
     const visibleColumns = useMemo(() => {
-        // Enforce exact order for Dairy compact
+        // پاستوریزه فشرده — مطابق پیگیری اعلام بار زنده (بدون ستون‌های ترابری)
         if (viewMode === 'compact' && activeTab === FreightLineType.Dairy) {
             const checkboxCol = allColumns.find((c: any) => c.header === '');
             const dairyCompactCols: any[] = checkboxCol ? [checkboxCol] : [];
             dairyCompactCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
-                { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'نوع برند', accessor: (ann: FreightAnnouncement) => formatDairyDestinationColumnLines(ann.destinations, 'brandType'), width: '130px', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col text-xs space-y-1">
-                        {ann.destinations.map((d, i) => (
-                            <div key={d.id || i}><span className="font-bold">{i + 1}.</span> {formatDestinationBrandLabel(d)}</div>
-                        ))}
-                    </div>
-                )},
-                { header: 'کد LIS', accessor: (ann: FreightAnnouncement) => formatDairyDestinationColumnLines(ann.destinations, 'lisCode'), width: '120px', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col text-xs space-y-1">
-                        {ann.destinations.map((d, i) => (
-                            <div key={d.id || i}><span className="font-bold">{i + 1}.</span> {d.lisCode || '-'}</div>
-                        ))}
-                    </div>
-                )},
-                { header: 'محصولات', accessor: (ann: FreightAnnouncement) => formatDairyDestinationColumnLines(ann.destinations, 'products'), width: '150px', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col text-xs space-y-1">
-                        {ann.destinations.map((d, i) => (
-                            <div key={d.id || i}><span className="font-bold">{i + 1}.</span> {formatDestinationProductsLabel(d)}</div>
-                        ))}
-                    </div>
-                )},
-                { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
-                { header: 'مقاصد', accessor: (ann: FreightAnnouncement) => ann.destinations.map(d => d.city).join('، '), width: '500px', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col text-xs space-y-1">
-                        {ann.destinations.map((d, i) => (
-                            <div key={d.id} className="flex items-center justify-center gap-2 flex-wrap">
-                                <span className="bg-slate-200 text-slate-700 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
-                                <span className="font-semibold text-slate-800">{d.city}</span>
-                                <span className="text-slate-500">({d.tonnage ? `${Number(d.tonnage).toLocaleString('fa-IR')} kg` : '-'})</span>
-                                {d.deliveryDate && <span className="text-green-600">📅 {d.deliveryDate}</span>}
-                                {d.unloadTime && <span className="text-blue-600">🕐 {d.unloadTime}</span>}
-                                <span className="text-purple-600">{resolveDestinationRepTypeLabel(ann, d)}</span>
-                            </div>
-                        ))}
-                    </div>
-                )},
-                { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => getAnnouncementCreatorLabel(ann), width: '150px', render: (ann: any) => <span className="text-slate-700">{getAnnouncementCreatorLabel(ann)}</span> },
-                { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
-                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
-                }},
-                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
-                    const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
-                    if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
-                        const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
-                        return desc || '-';
-                    }
-                    return ann.rejectionReason || '-';
-                }},
+                {
+                    header: 'کارمند اعلام‌کننده',
+                    accessor: (ann: any) => getAnnouncementCreatorLabel(ann),
+                    width: '120px',
+                    render: (ann: any) => renderDairyCompactText(getAnnouncementCreatorLabel(ann)),
+                },
+                {
+                    header: 'نوع خودرو',
+                    accessor: 'vehicleType',
+                    width: '90px',
+                    render: (ann: FreightAnnouncement) => renderDairyCompactText(ann.vehicleType || '-'),
+                },
+                {
+                    header: 'مبدا بارگیری',
+                    accessor: 'originCity',
+                    width: '110px',
+                    render: (ann: FreightAnnouncement) => renderDairyCompactText(ann.originCity || '-'),
+                },
+                {
+                    header: 'کل تناژ (کیلوگرم)',
+                    accessor: (ann: FreightAnnouncement) =>
+                        ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0),
+                    width: '90px',
+                    render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations),
+                },
+                {
+                    header: 'مقاصد',
+                    accessor: (ann: FreightAnnouncement) => ann.destinations.map((d) => d.city).join('، '),
+                    width: '420px',
+                    render: (ann: FreightAnnouncement) => renderPlanningDairyCompactDestinations(ann),
+                },
+                {
+                    header: 'ارزش بار (ریال)',
+                    accessor: 'cargoValue',
+                    width: '110px',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="block max-w-full break-all leading-snug">
+                            {(ann.cargoValue ?? 0).toLocaleString('fa-IR')}
+                        </span>
+                    ),
+                },
+                {
+                    header: 'ساعت حضور',
+                    accessor: 'platformArrivalTime',
+                    width: '80px',
+                    render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-',
+                },
+                {
+                    header: 'تاریخ اعلام بار',
+                    accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt),
+                    width: '120px',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="block max-w-full break-words leading-snug">
+                            {formatJalaliDateTime(ann.createdAt)}
+                        </span>
+                    ),
+                },
+                {
+                    header: 'توضیحات',
+                    accessor: 'notes',
+                    width: '140px',
+                    render: (ann: FreightAnnouncement) => ann.notes || '-',
+                },
+                {
+                    header: 'وضعیت',
+                    accessor: 'status',
+                    width: '110px',
+                    render: (ann: FreightAnnouncement) => {
+                        const status =
+                            ann.status === FreightAnnouncementStatus.ChangeRequested
+                                ? 'درخواست تغییر'
+                                : ann.status;
+                        return (
+                            <span
+                                className={`inline-block max-w-full px-1.5 py-0.5 rounded-md text-[10px] font-semibold leading-snug whitespace-normal break-words ${statusStyles[ann.status]}`}
+                            >
+                                {status}
+                            </span>
+                        );
+                    },
+                },
+                {
+                    header: 'علت رد',
+                    accessor: 'rejectionReason',
+                    width: '140px',
+                    render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                        const changeReq = (props.changeRequests || []).find(
+                            (cr: any) =>
+                                cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id
+                        );
+                        if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                            const desc =
+                                typeof changeReq.payload === 'string'
+                                    ? JSON.parse(changeReq.payload || '{}')?.description ||
+                                      changeReq.payload
+                                    : changeReq.payload?.description || '';
+                            return desc || '-';
+                        }
+                        return ann.rejectionReason || '-';
+                    },
+                },
             );
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) dairyCompactCols.push(action);
-            try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-compact):', dairyCompactCols.map((c:any)=>c.header)); } catch {}
             return dairyCompactCols;
         }
 
@@ -1564,36 +1672,106 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             return ambientCompactCols;
         }
 
-        // Enforce exact order for Dairy full (before grouped destinations)
+        // پاستوریزه کامل — ترتیب مشترک مثل پیگیری زنده + ستون‌های برنامه‌ریزی
         if (viewMode === 'full' && activeTab === FreightLineType.Dairy) {
             const checkboxCol = allColumns.find((c: any) => c.header === '');
             const dairyFullCommonCols: any[] = checkboxCol ? [checkboxCol] : [];
             dairyFullCommonCols.push(
                 { header: 'ردیف', width: '70px', render: (_: any, idx: number) => idx + 1, accessor: (_: any) => '' },
-                { header: 'نوع خودرو', accessor: 'vehicleType', width: '120px', render: (ann: FreightAnnouncement) => ann.vehicleType },
-                { header: 'مبدا بارگیری', accessor: 'originCity', width: '140px', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
-                { header: 'کل تناژ (کیلوگرم)', accessor: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0), width: '150px', render: (ann: FreightAnnouncement) => ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0).toLocaleString('fa-IR') },
-                { header: 'ارزش بار (ریال)', accessor: 'cargoValue', width: '150px', render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', accessor: 'platformArrivalTime', width: '120px', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
-                { header: 'کارمند اعلام‌کننده', accessor: (ann: any) => getAnnouncementCreatorLabel(ann), width: '150px', render: (ann: any) => <span className="text-slate-700">{getAnnouncementCreatorLabel(ann)}</span> },
-                { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
-                { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
-                { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
-                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
-                }},
-                { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
-                    const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
-                    if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
-                        const desc = typeof changeReq.payload === 'string' ? (JSON.parse(changeReq.payload || '{}')?.description || changeReq.payload) : (changeReq.payload?.description || '');
-                        return desc || '-';
-                    }
-                    return ann.rejectionReason || '-';
-                }},
+                {
+                    header: 'کارمند اعلام‌کننده',
+                    accessor: (ann: any) => getAnnouncementCreatorLabel(ann),
+                    width: '150px',
+                    render: (ann: any) => (
+                        <span className="text-slate-700">{getAnnouncementCreatorLabel(ann)}</span>
+                    ),
+                },
+                {
+                    header: 'نوع خودرو',
+                    accessor: 'vehicleType',
+                    width: '120px',
+                    render: (ann: FreightAnnouncement) => ann.vehicleType,
+                },
+                {
+                    header: 'مبدا بارگیری',
+                    accessor: 'originCity',
+                    width: '140px',
+                    render: (ann: FreightAnnouncement) => ann.originCity || '-',
+                },
+                {
+                    header: 'کل تناژ (کیلوگرم)',
+                    accessor: (ann: FreightAnnouncement) =>
+                        ann.destinations.reduce((s, d) => s + (Number(d.tonnage) || 0), 0),
+                    width: '150px',
+                    render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations),
+                },
+                {
+                    header: 'ارزش بار (ریال)',
+                    accessor: 'cargoValue',
+                    width: '150px',
+                    render: (ann: FreightAnnouncement) => (ann.cargoValue ?? 0).toLocaleString('fa-IR'),
+                },
+                {
+                    header: 'ساعت حضور',
+                    accessor: 'platformArrivalTime',
+                    width: '120px',
+                    render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-',
+                },
+                {
+                    header: 'تاریخ اعلام بار',
+                    accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt),
+                    width: '130px',
+                    render: (ann: FreightAnnouncement) => (
+                        <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span>
+                    ),
+                },
+                {
+                    header: 'توضیحات',
+                    accessor: 'notes',
+                    width: '200px',
+                    render: (ann: FreightAnnouncement) => ann.notes || '-',
+                },
+                {
+                    header: 'وضعیت',
+                    accessor: 'status',
+                    width: '120px',
+                    render: (ann: FreightAnnouncement) => {
+                        const status =
+                            ann.status === FreightAnnouncementStatus.ChangeRequested
+                                ? 'درخواست تغییر'
+                                : ann.status;
+                        return (
+                            <span
+                                className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}
+                            >
+                                {status}
+                            </span>
+                        );
+                    },
+                },
+                {
+                    header: 'علت رد',
+                    accessor: 'rejectionReason',
+                    width: '200px',
+                    render: (ann: FreightAnnouncement, idx: number, props: any) => {
+                        const changeReq = (props.changeRequests || []).find(
+                            (cr: any) =>
+                                cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id
+                        );
+                        if (changeReq && ann.status === FreightAnnouncementStatus.ChangeRequested) {
+                            const desc =
+                                typeof changeReq.payload === 'string'
+                                    ? JSON.parse(changeReq.payload || '{}')?.description ||
+                                      changeReq.payload
+                                    : changeReq.payload?.description || '';
+                            return desc || '-';
+                        }
+                        return ann.rejectionReason || '-';
+                    },
+                },
             );
             const action = allColumns.find((c: any) => c.header === 'عملیات');
             if (action) dairyFullCommonCols.push(action);
-            try { console.log('[DBG][FreightDashboard] visibleColumns (dairy-full):', dairyFullCommonCols.map((c:any)=>c.header)); } catch {}
             return dairyFullCommonCols;
         }
 
@@ -1725,14 +1903,14 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         });
 
         const isOwnDairyAnnouncement = (ann: FreightAnnouncement): boolean => {
-            const uid = String(currentUser?.id || '');
+            const uid = String(currentUser?.id || '').trim();
             if (!uid) return false;
             const creatorId = String(
                 (ann as any).creator_user_id ||
                     (ann as any).createdByUserId ||
                     (ann as any).created_by_user_id ||
                     ''
-            );
+            ).trim();
             if (creatorId && creatorId === uid) return true;
             return (ann.destinations || []).some((d: any) => {
                 const ownerId = String(
@@ -1740,26 +1918,26 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                         d.original_created_by_user_id ||
                         d.original_creator_user_id ||
                         ''
-                );
-                return ownerId === uid;
+                ).trim();
+                return !!ownerId && ownerId === uid;
             });
         };
 
         let sorted: FreightAnnouncement[];
         if (activeTab === FreightLineType.IceCream) {
-            sorted = sortByIceCreamDisplayOrder(data);
+            sorted = sortByIceCreamDisplayOrder([...data]);
         } else if (
             activeTab === FreightLineType.Dairy &&
             isFreightCreateRole(currentUser)
         ) {
-            // پاستوریزه: بارهای خود کاربر (سازنده یا صاحب مقصد) بالاتر از بقیه
+            // پاستوریزه — کارمند/کارشناس: اول بارهای خودشان، بعد بقیه
             const mine = data.filter(isOwnDairyAnnouncement);
             const others = data.filter((a) => !isOwnDairyAnnouncement(a));
             mine.sort(compareByCreatedAtDesc);
             others.sort(compareByCreatedAtDesc);
             sorted = [...mine, ...others];
         } else {
-            sorted = data.sort(compareByCreatedAtDesc);
+            sorted = [...data].sort(compareByCreatedAtDesc);
         }
         return sorted;
     }, [announcements, isManager, managerView, activeTab, filter, columnFilters, allColumns, allowedLineTypes, currentUser, linePermissionsReady]);
@@ -2023,6 +2201,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     };
     
     // Header rendering logic
+    const isDairyCompactTable = viewMode === 'compact' && activeTab === FreightLineType.Dairy;
     const isFullDairyAmbient = viewMode === 'full' && [FreightLineType.Dairy, FreightLineType.Ambient].includes(activeTab as any);
     const isFullDairy = viewMode === 'full' && activeTab === FreightLineType.Dairy;
     const fullDestSubColCount = isFullDairy ? DAIRY_DEST_SUB_COL_COUNT : AMBIENT_DEST_SUB_COL_COUNT;
@@ -2031,6 +2210,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     // فیلتر کردن checkbox و عملیات از commonCols - checkbox جداگانه render می‌شود
     const commonCols = useMemo(() => visibleColumns.filter(c => c.header !== 'عملیات' && c.header !== ''), [visibleColumns]);
     const actionCol = useMemo(() => visibleColumns.find(c => c.header === 'عملیات'), [visibleColumns]);
+    const getDairyCompactColClass = useCallback(
+        (header: string) => (isDairyCompactTable ? PLANNING_DAIRY_COMPACT_COLUMN_CLASSES[header] || '' : ''),
+        [isDairyCompactTable]
+    );
 
 
     return (
@@ -2078,13 +2261,27 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                             <p className="text-xs text-sky-600 mb-2 print:hidden">در حال ذخیره ترتیب نمایش...</p>
                         )}
                         {(
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                        <div
+                            className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${
+                                isDairyCompactTable ? ' planning-dairy-compact-wrap' : ''
+                            }`}
+                            data-sticky-rows={isFullDairyAmbient ? 'planning-full' : 'planning-compact'}
+                            style={{ WebkitOverflowScrolling: 'touch' }}
+                        >
+                            <table
+                                className={
+                                    isDairyCompactTable
+                                        ? 'w-full table-fixed planning-dairy-compact text-sm'
+                                        : isFullDairyAmbient
+                                          ? 'w-full text-sm planning-dairy-full'
+                                          : 'w-full text-sm'
+                                }
+                            >
                                 <thead className="text-xs uppercase bg-gray-50">
                                      {isFullDairyAmbient ? (
                                         <>
                                             <tr>
-                                                    <th rowSpan={2} className="p-2 text-center" style={{ width: '40px' }}>
+                                                    <th rowSpan={2} className="p-2 text-center border" style={{ width: '40px' }}>
                                                         <input
                                                             type="checkbox"
                                                             checked={(() => {
@@ -2095,12 +2292,12 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             className="cursor-pointer"
                                                         />
                                                     </th>
-                                                {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center" style={{ width: col.width }}>{col.header}</th>)}
-                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد اول</th>
-                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد دوم</th>
-                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد سوم</th>
-                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد چهارم</th>
-                                                {actionCol && <th key={actionCol.header} rowSpan={2} className="p-2 text-center" style={{ width: actionCol.width }}>{actionCol.header}</th>}
+                                                {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center border" style={{ width: col.width }}>{col.header}</th>)}
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد اول</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد دوم</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد سوم</th>
+                                                <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد چهارم</th>
+                                                {actionCol && <th key={actionCol.header} rowSpan={2} className="p-2 text-center border" style={{ width: actionCol.width }}>{actionCol.header}</th>}
                                             </tr>
                                             <tr>
                                                 {[1, 2, 3, 4].map(i => (
@@ -2115,7 +2312,11 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                     ) : (
                                         <tr>
                                                 {visibleColumns.map(col => (
-                                                    <th key={col.header} className="p-2 text-center" style={{ width: col.width }}>
+                                                    <th
+                                                        key={col.header}
+                                                        className={`p-2 text-center ${getDairyCompactColClass(col.header)}`}
+                                                        style={isDairyCompactTable ? undefined : { width: col.width }}
+                                                    >
                                                         {col.header === '' ? (
                                                             <input
                                                                 type="checkbox"
@@ -2133,7 +2334,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                     )}
                                     <tr className="print:hidden">
                                         {visibleColumns.map((col) => (
-                                            <th key={`${col.header}-filter`} className="p-1 font-normal">
+                                            <th key={`${col.header}-filter`} className={`p-1 font-normal ${getDairyCompactColClass(col.header)}`}>
                                                 {'accessor' in col && col.accessor ? (
                                                     <input
                                                     type="text"
@@ -2173,7 +2374,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                              {isFullDairyAmbient ? (
                                                 <>
                                                     {/* Checkbox column */}
-                                                    <td className="p-2 text-center">
+                                                    <td className="p-2 text-center border">
                                                         {isAnnouncementSelectable(ann) && (
                                                             <input
                                                                 type="checkbox"
@@ -2183,7 +2384,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             />
                                                         )}
                                                     </td>
-                                                    {commonCols.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)}
+                                                    {commonCols.map(col => <td key={col.header} className="p-2 text-center border">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)}
                                                     {[0, 1, 2, 3].map(i => {
                                                         const dest = ann.destinations[i];
                                                         if (isFullDairy) {
@@ -2212,10 +2413,17 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             </React.Fragment>
                                                         );
                                                     })}
-                                                        {actionCol && <td className="p-2 text-center">{actionCol.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>}
+                                                        {actionCol && <td className="p-2 text-center border">{actionCol.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>}
                                                 </>
                                             ) : (
-                                                    visibleColumns.map(col => <td key={col.header} className="p-2 text-center">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)
+                                                    visibleColumns.map(col => (
+                                                        <td
+                                                            key={col.header}
+                                                            className={`p-2 text-center ${getDairyCompactColClass(col.header)}`}
+                                                        >
+                                                            {col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}
+                                                        </td>
+                                                    ))
                                             )}
                                         </tr>
                                     ))}
@@ -2229,6 +2437,134 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     </div>
                 </div>
             </main>
+
+            {(isDairyCompactTable || isFullDairy) && (
+                <style>{`
+                .planning-dairy-compact-wrap {
+                    /* اسکرول با freight-sticky-table-wrap انجام می‌شود */
+                }
+                .planning-dairy-compact {
+                    table-layout: fixed;
+                    width: max(100%, 1400px);
+                    min-width: 1400px;
+                }
+                .planning-dairy-compact th,
+                .planning-dairy-compact td {
+                    white-space: normal;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
+                    line-height: 1.3;
+                    vertical-align: middle;
+                    overflow: hidden;
+                    border: 1px solid #e2e8f0;
+                    padding: 0.4rem 0.35rem;
+                    max-width: 0; /* با table-layout:fixed باعث wrap واقعی داخل سلول می‌شود */
+                }
+                .planning-dairy-compact .col-destinations {
+                    overflow: hidden;
+                    vertical-align: top;
+                    width: 22%;
+                }
+                .planning-dairy-compact .dairy-compact-cell {
+                    display: block;
+                    width: 100%;
+                    max-width: 100%;
+                    text-align: center;
+                    overflow-wrap: anywhere;
+                    word-break: break-word;
+                }
+                .planning-dairy-compact .col-checkbox { width: 2.25rem; max-width: 2.25rem; }
+                .planning-dairy-compact .col-operations {
+                    width: 11%;
+                    vertical-align: middle;
+                }
+                .planning-dairy-compact .col-operations > div {
+                    display: flex;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    gap: 0.25rem;
+                    max-width: 100%;
+                }
+                .planning-dairy-compact .col-row { width: 2.75%; }
+                .planning-dairy-compact .col-creator { width: 8%; }
+                .planning-dairy-compact .col-vehicle-type { width: 5%; }
+                .planning-dairy-compact .col-origin { width: 7%; }
+                .planning-dairy-compact .col-tonnage {
+                    width: 6%;
+                    font-variant-numeric: tabular-nums;
+                }
+                .planning-dairy-compact .col-cargo-value {
+                    width: 8%;
+                    font-variant-numeric: tabular-nums;
+                    font-size: 0.75rem;
+                }
+                .planning-dairy-compact .col-platform-time { width: 4%; }
+                .planning-dairy-compact .col-created-at {
+                    width: 7.5%;
+                    font-size: 0.72rem;
+                }
+                .planning-dairy-compact .col-notes { width: 5.5%; }
+                .planning-dairy-compact .col-status {
+                    width: 9%;
+                }
+                .planning-dairy-compact .col-reject { width: 5.5%; }
+                .planning-dairy-compact thead th {
+                    background: #f8fafc;
+                    font-size: 0.65rem;
+                    line-height: 1.25;
+                    vertical-align: bottom;
+                    max-width: none;
+                }
+                .planning-dairy-full th,
+                .planning-dairy-full td {
+                    border: 1px solid #e2e8f0;
+                }
+                .dest-compact-list { display: flex; flex-direction: column; gap: 0.2rem; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+                .dest-compact-line {
+                    display: flex;
+                    gap: 0.2rem;
+                    align-items: flex-start;
+                    padding-bottom: 0.2rem;
+                    border-bottom: 1px solid #f1f5f9;
+                    max-width: 100%;
+                }
+                .dest-compact-line:last-child { border-bottom: none; padding-bottom: 0; }
+                .dest-compact-num {
+                    flex-shrink: 0;
+                    width: 0.9rem;
+                    height: 0.9rem;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 9999px;
+                    background: #e2e8f0;
+                    color: #475569;
+                    font-size: 0.55rem;
+                    font-weight: 700;
+                    margin-top: 0.05rem;
+                }
+                .dest-compact-body {
+                    flex: 1;
+                    min-width: 0;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.1rem 0.15rem;
+                    align-items: baseline;
+                    justify-content: flex-start;
+                    text-align: right;
+                    overflow-wrap: anywhere;
+                    word-break: break-word;
+                }
+                .dest-compact-city { font-weight: 600; color: #1e40af; }
+                .dest-compact-tonnage { color: #64748b; font-size: 0.95em; }
+                .dest-compact-dot { color: #cbd5e1; user-select: none; }
+                .dest-compact-rep { color: #7e22ce; }
+                .dest-compact-brand { color: #334155; }
+                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.9em; }
+                .dest-compact-products { color: #047857; }
+                .dest-compact-date { color: #15803d; }
+                `}</style>
+            )}
             
             <AnnouncementPanel
                 isOpen={isPanelOpen}

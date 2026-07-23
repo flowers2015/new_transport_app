@@ -94,6 +94,7 @@ import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import BaleReportDialog from './BaleReportDialog';
 import DairyRouteArrangementDialog from './DairyRouteArrangementDialog';
+import TransportLiveSummaryDialog from './TransportLiveSummaryDialog';
 import {
     buildCompanyBaleReportRows,
     selectCompanyBaleReportAnnouncements,
@@ -447,6 +448,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [filterStorageKey, columnFilters, quickSearch, iceCreamViewMode, hideReferred, isTransportUser, sortColumn, sortDirection]);
     // حذف dateView - همه اعلام‌بارها نمایش داده می‌شوند
     const [isRulesOpen, setIsRulesOpen] = useState(false);
+    const [isSummaryOpen, setIsSummaryOpen] = useState(false);
     const [editingVehicleTypeId, setEditingVehicleTypeId] = useState<string | null>(null);
     
     const [dialog, setDialog] = useState<'assign' | 'transfer' | 'change' | 'vehicle-type' | null>(null);
@@ -2181,6 +2183,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             <button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button>
                             <button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsSummaryOpen(true)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                            title="خلاصه تعداد اعلام‌بار / تخصیص بر اساس ردیف‌های قابل‌مشاهده"
+                        >
+                            خلاصه
+                        </button>
                         {isDairyCompactTable && (
                             <div className="relative" ref={columnPickerRef}>
                                 <button
@@ -2788,6 +2798,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
                 onChangeVehicleType={onChangeVehicleType}
                 onRefresh={onRefresh}
+             />
+             <TransportLiveSummaryDialog
+                open={isSummaryOpen}
+                onClose={() => setIsSummaryOpen(false)}
+                announcements={displayAnnouncements}
+                activeLine={activeLine}
+                pendingSubLine={pendingSubLine}
+                personalDrivers={personalDrivers}
              />
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>

@@ -702,6 +702,8 @@ export interface FreightAnnouncement {
     handoffCarrierName?: string;
     freightCostLockedAt?: string | Date;
     assignmentFinalizedAt?: string | Date;
+    /** زمان آخرین تخصیص موفق راننده/خودرو (شرکتی یا شخصی) */
+    assignedAt?: string | Date;
     /** پس از اتمام تخصیص بدون بارنامه — نمایش در تب «در انتظار بارنامه» */
     awaitingBillOfLadingAt?: string | Date;
     originCity?: string;

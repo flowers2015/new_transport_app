@@ -2,19 +2,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FreightAnnouncement, Vehicle, Driver, FreightAnnouncementStatus, FreightLineType, Destination, UserRole, User, View, PersonalDriver, PersonalVehicle } from '../types';
 import { formatJalaliDateTime, formatJalali, formatPlateNumber, splitJalaliDateTime, parseJalaliDateString } from '../utils/jalali';
-
-const renderAnnouncementDateTimeCell = (createdAt: Date | string | null | undefined) => {
-    const parts = splitJalaliDateTime(createdAt);
-    if (!parts) {
-        return <span className="text-xs">{formatJalaliDateTime(createdAt)}</span>;
-    }
-    return (
-        <div className="flex flex-col items-center justify-center leading-tight gap-0.5 min-w-[4.75rem] py-0.5">
-            <span className="text-xs whitespace-nowrap">{parts.date}</span>
-            <span className="text-[10px] text-slate-500 tabular-nums whitespace-nowrap">{parts.time}</span>
-        </div>
-    );
-};
 import {
     getDestinationCitiesLabel,
     getAnnouncementRepDisplayLabel,
@@ -45,7 +32,32 @@ import {
     isPersonalTransportViewerRole,
     TARIFF_FREIGHT_HEADER,
     TARIFF_DIFF_HEADER,
+    getAnnouncementAssignedAt,
 } from '../utils/freightDisplay';
+
+const renderAnnouncementDateTimeCell = (createdAt: Date | string | null | undefined) => {
+    const parts = splitJalaliDateTime(createdAt);
+    if (!parts) {
+        return <span className="text-xs">{formatJalaliDateTime(createdAt)}</span>;
+    }
+    return (
+        <div className="flex flex-col items-center justify-center leading-tight gap-0.5 min-w-[4.75rem] py-0.5">
+            <span className="text-xs whitespace-nowrap">{parts.date}</span>
+            <span className="text-[10px] text-slate-500 tabular-nums whitespace-nowrap">{parts.time}</span>
+        </div>
+    );
+};
+
+const renderAssignmentDateCell = (ann: FreightAnnouncement) => {
+    const raw = getAnnouncementAssignedAt(ann);
+    if (!raw) return <span className="text-xs text-slate-400">-</span>;
+    return renderAnnouncementDateTimeCell(raw);
+};
+
+const ASSIGNMENT_DATE_COLUMN = {
+    header: 'تاریخ تخصیص',
+    render: (ann: FreightAnnouncement) => renderAssignmentDateCell(ann),
+};
 
 const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     ردیف: 'col-row',
@@ -57,6 +69,7 @@ const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     'ارزش بار (ریال)': 'col-cargo-value',
     'ساعت حضور': 'col-platform-time',
     'تاریخ اعلام بار': 'col-created-at',
+    'تاریخ تخصیص': 'col-assigned-at',
     باربری: 'col-carrier',
     'نام راننده': 'col-driver',
     'تماس راننده': 'col-driver-contact',
@@ -118,6 +131,9 @@ import {
     loadTransportLiveFilterPrefs,
     saveTransportLiveFilterPrefs,
     freightHistoryFilterStorageKey,
+    freightHistoryColumnStorageKey,
+    loadFreightHistoryHiddenColumns,
+    saveTransportLiveHiddenColumns,
 } from '../utils/transportLiveFilters';
 import { getAssignedVehicleCode, shouldShowVehicleCodeColumn } from '../utils/transportLiveViewUtils';
 import { getFinanceRejectType, getFinanceRejectTypeLabel, isFinanceRejectedAnn } from '../utils/financeRejection';
@@ -230,6 +246,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         () => freightHistoryFilterStorageKey(currentUser.id, activeLine, viewMode),
         [currentUser.id, activeLine, viewMode]
     );
+    const columnStorageKey = useMemo(
+        () => freightHistoryColumnStorageKey(currentUser.id, activeLine, viewMode),
+        [currentUser.id, activeLine, viewMode]
+    );
     const isPersonalTransportUser = isPersonalTransportViewerRole(currentUser.role);
     const personalTariffColumns = useMemo(
         () => (isPersonalTransportUser ? buildTariffFreightColumns() : []),
@@ -238,6 +258,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>({});
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [hiddenColumnHeaders, setHiddenColumnHeaders] = useState<Set<string>>(() => new Set());
+    const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+    const columnPickerRef = React.useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         const prefs = loadTransportLiveFilterPrefs(filterStorageKey);
@@ -247,6 +270,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     }, [filterStorageKey]);
 
     useEffect(() => {
+        setHiddenColumnHeaders(loadFreightHistoryHiddenColumns(columnStorageKey, activeLine));
+        setColumnPickerOpen(false);
+    }, [columnStorageKey, activeLine]);
+
+    useEffect(() => {
         saveTransportLiveFilterPrefs(filterStorageKey, {
             columnFilters,
             quickSearch: '',
@@ -254,6 +282,34 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             sortDirection,
         });
     }, [filterStorageKey, columnFilters, sortColumn, sortDirection]);
+
+    useEffect(() => {
+        saveTransportLiveHiddenColumns(columnStorageKey, hiddenColumnHeaders);
+    }, [columnStorageKey, hiddenColumnHeaders]);
+
+    useEffect(() => {
+        if (!columnPickerOpen) return;
+        const onDocClick = (e: MouseEvent) => {
+            if (!columnPickerRef.current?.contains(e.target as Node)) {
+                setColumnPickerOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [columnPickerOpen]);
+
+    const toggleColumnVisibility = useCallback((header: string) => {
+        setHiddenColumnHeaders((prev) => {
+            const next = new Set(prev);
+            if (next.has(header)) next.delete(header);
+            else next.add(header);
+            return next;
+        });
+    }, []);
+
+    const resetColumnVisibility = useCallback(() => {
+        setHiddenColumnHeaders(new Set());
+    }, []);
 
     const [isRulesOpen, setIsRulesOpen] = useState(false);
     const [excelExportDialog, setExcelExportDialog] = useState<{
@@ -456,6 +512,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 header: 'تاریخ اعلام بار',
                 render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
             },
+            ASSIGNMENT_DATE_COLUMN,
         ],
         []
     );
@@ -493,6 +550,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 header: 'تاریخ اعلام بار',
                 render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
             },
+            ASSIGNMENT_DATE_COLUMN,
         ],
         []
     );
@@ -574,6 +632,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
+                ASSIGNMENT_DATE_COLUMN,
             ];
             return [...base, ...extraCols];
         }
@@ -620,6 +679,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     header: 'تاریخ اعلام بار',
                     render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
                 },
+                ASSIGNMENT_DATE_COLUMN,
             ];
             return [...base, ...extraCols];
         }
@@ -659,6 +719,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
+                ASSIGNMENT_DATE_COLUMN,
             ];
             return [...base, ...extraCols];
         }
@@ -1244,7 +1305,15 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         }
     };
 
-    const visibleColumns = useMemo(() => buildVisibleColumns(viewMode), [viewMode, activeLine, props, dairyAmbientFullBase, isDairyOrAmbientTab, personalTariffColumns]);
+    const allColumns = useMemo(
+        () => buildVisibleColumns(viewMode),
+        [viewMode, activeLine, props, dairyAmbientFullBase, dairyFullBase, isDairyOrAmbientTab, personalTariffColumns]
+    );
+
+    const visibleColumns = useMemo(
+        () => allColumns.filter((col) => !hiddenColumnHeaders.has(col.header)),
+        [allColumns, hiddenColumnHeaders]
+    );
 
     const isFullDairyAmbient = viewMode === 'full' && isDairyOrAmbientTab;
     const isFullDairy = isFullDairyAmbient && activeLine === FreightLineType.Dairy;
@@ -1410,6 +1479,59 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
+                        <div className="relative" ref={columnPickerRef}>
+                            <button
+                                type="button"
+                                onClick={() => setColumnPickerOpen((o) => !o)}
+                                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border ${
+                                    hiddenColumnHeaders.size > 0
+                                        ? 'border-sky-400 bg-sky-50 text-sky-800'
+                                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                                }`}
+                                title="نمایش یا پنهان کردن ستون‌ها — تنظیمات برای هر تب و هر کاربر ذخیره می‌شود"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                ستون‌ها
+                                {hiddenColumnHeaders.size > 0 && (
+                                    <span className="bg-sky-600 text-white rounded-full px-1 min-w-[1rem] text-[10px]">
+                                        {hiddenColumnHeaders.size.toLocaleString('fa-IR')}
+                                    </span>
+                                )}
+                            </button>
+                            {columnPickerOpen && (
+                                <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-2 text-right">
+                                    <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
+                                        <span className="text-xs font-semibold text-slate-700">ستون‌های جدول</span>
+                                        <button
+                                            type="button"
+                                            onClick={resetColumnVisibility}
+                                            className="text-[10px] text-sky-700 hover:underline"
+                                        >
+                                            همه
+                                        </button>
+                                    </div>
+                                    {allColumns.map((col) => (
+                                        <label
+                                            key={col.header}
+                                            className="flex items-center gap-2 py-1 px-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={!hiddenColumnHeaders.has(col.header)}
+                                                onChange={() => toggleColumnVisibility(col.header)}
+                                            />
+                                            <span>{col.header}</span>
+                                        </label>
+                                    ))}
+                                    <p className="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                                        انتخاب شما برای این تب و حالت نمایش ذخیره می‌شود.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                         <button onClick={() => openExcelExportDialog('compact')} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
                             اکسل فشرده
                         </button>

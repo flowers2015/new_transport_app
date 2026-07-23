@@ -1,5 +1,5 @@
 import React from 'react';
-import { FreightAnnouncement } from '../types';
+import { FreightAnnouncement, FreightLineType } from '../types';
 import { toTimestamp } from './jalali';
 import { TransportLiveTab } from './freightDisplay';
 
@@ -32,6 +32,36 @@ export function freightHistoryFilterStorageKey(
     viewMode: 'compact' | 'full'
 ): string {
     return `freight-history-filters-v1:${userId}:${activeLine}:${viewMode}`;
+}
+
+export function freightHistoryColumnStorageKey(
+    userId: string,
+    activeLine: string,
+    viewMode: 'compact' | 'full'
+): string {
+    return `freight-history-columns-v2:${userId}:${activeLine}:${viewMode}`;
+}
+
+/** ستون‌هایی که در آرشیو بستنی به‌صورت پیش‌فرض مخفی‌اند (تا کاربر تیک بزند) */
+export const FREIGHT_HISTORY_ICECREAM_DEFAULT_HIDDEN = ['پالت', 'اولویت'] as const;
+
+export function defaultFreightHistoryHiddenColumns(activeLine: string): Set<string> {
+    if (activeLine === FreightLineType.IceCream || activeLine === 'IceCream' || activeLine === 'بستنی') {
+        return new Set(FREIGHT_HISTORY_ICECREAM_DEFAULT_HIDDEN);
+    }
+    return new Set();
+}
+
+/** اگر کلید ذخیره نشده باشد، پیش‌فرض تب را برمی‌گرداند */
+export function loadFreightHistoryHiddenColumns(key: string, activeLine: string): Set<string> {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return defaultFreightHistoryHiddenColumns(activeLine);
+        const parsed = JSON.parse(raw) as { hiddenHeaders?: string[] };
+        return new Set(parsed.hiddenHeaders || []);
+    } catch {
+        return defaultFreightHistoryHiddenColumns(activeLine);
+    }
 }
 
 export function loadTransportLiveFilterPrefs(key: string): TransportLiveFilterPrefs {
@@ -272,6 +302,12 @@ function dateSortValue(header: string, ann: FreightAnnouncement): string | null 
     if (header === 'تاریخ اعلام بار') {
         const t = toTimestamp(ann.createdAt);
         return Number.isFinite(t) ? String(t) : null;
+    }
+    if (header === 'تاریخ تخصیص') {
+        const raw = (ann as any).assignedAt ?? (ann as any).assigned_at;
+        if (!raw) return null;
+        const t = toTimestamp(raw);
+        return Number.isFinite(t) ? String(t) : String(raw);
     }
     if (header === 'تاریخ تحویل بار') {
         return ann.deliveryDate ? String(ann.deliveryDate).replace(/-/g, '/') : null;
