@@ -1838,8 +1838,15 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 >
                                     #
                                 </th>
-                                <th className="px-1 py-1.5 text-center font-medium">کد</th>
-                                <th className="px-1 py-1.5 text-center font-medium">کیلومتر</th>
+                                <th className="px-1 py-1.5 text-center font-medium" title="کد خودرو">
+                                    کد خودرو
+                                </th>
+                                <th
+                                    className="px-1 py-1.5 text-center font-medium"
+                                    title="جمع پیمایش نهایی فقط در دوره جاری نوبت و همین دسته خودرو"
+                                >
+                                    km دوره
+                                </th>
                                 <th className="px-1.5 py-1.5 font-medium">راننده</th>
                                 <th className="px-1 py-1.5 text-center font-medium">اقدام</th>
                             </tr>

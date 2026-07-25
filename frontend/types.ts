@@ -919,6 +919,8 @@ export interface DriverPreferenceAssignment {
     isVeryFar?: boolean;
     lineType?: string | null;
     vehicleType?: string | null;
+    /** دسته خودرو فارسی: تریلی / مینی تریلی / ده چرخ */
+    vehicleCategory?: string | null;
     originCity?: string | null;
     destinationCity?: string | null;
     routeCategory?: string | null;
@@ -946,6 +948,8 @@ export interface DriverPreferencePeerAssignment {
     queuePosition?: number | null;
     queueType?: 'far' | 'near' | 'workshop' | 'external' | 'leave' | 'other';
     lineType?: string | null;
+    vehicleType?: string | null;
+    vehicleCategory?: string | null;
     destinationCity?: string | null;
     roundTripKm?: number | null;
     vehicleCode?: string | null;

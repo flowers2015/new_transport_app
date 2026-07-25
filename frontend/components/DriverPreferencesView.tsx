@@ -23,13 +23,22 @@ type DayQueueEntry = {
     isVeryFar: boolean;
     isTarget: boolean;
     announcementId?: string;
+    certainty?: 'finalized' | 'pending' | 'cancelled' | string;
+    routeBucket?: 'veryFar' | 'far' | 'near' | string;
+    queueType?: 'far' | 'near' | string;
 };
 
 type DayRow = {
     key: string;
+    category: string;
     jalaliLabel: string;
     far: DayQueueEntry[];
     near: DayQueueEntry[];
+};
+
+type CategoryDayGroup = {
+    category: string;
+    days: DayRow[];
 };
 
 function dayKey(value: string) {
@@ -53,13 +62,19 @@ function buildDayTable(
     data: DriverPreferencesResponse,
     targetDriverId: string,
     targetDriverName: string
-): DayRow[] {
+): CategoryDayGroup[] {
     const dayMap = new Map<string, DayRow>();
+    const targetCatsByDay = new Map<string, Set<string>>();
 
-    const ensureDay = (isoLike: string, jalaliFallback?: string | null) => {
-        const key = dayKeyFromJalali(jalaliFallback) || dayKey(isoLike);
-        if (!key) return null;
-        if (!dayMap.has(key)) {
+    const ensureDay = (
+        category: string,
+        isoLike: string,
+        jalaliFallback?: string | null
+    ) => {
+        const dKey = dayKeyFromJalali(jalaliFallback) || dayKey(isoLike);
+        if (!dKey) return null;
+        const mapKey = `${category}::${dKey}`;
+        if (!dayMap.has(mapKey)) {
             let jalaliLabel = jalaliFallback || '';
             if (!jalaliLabel) {
                 const date = new Date(isoLike);
@@ -72,40 +87,61 @@ function buildDayTable(
             } else {
                 jalaliLabel = jalaliLabel.replace(/-/g, '/');
             }
-            dayMap.set(key, {
-                key,
+            dayMap.set(mapKey, {
+                key: mapKey,
+                category,
                 jalaliLabel,
                 far: [],
                 near: [],
             });
         }
-        return dayMap.get(key)!;
+        return { day: dayMap.get(mapKey)!, dayKey: dKey };
     };
 
-    const pushFinalized = (
+    const pushEntry = (
+        category: string,
         assignedAt: string,
         assignedAtJalali: string | null | undefined,
-        queueType: 'far' | 'near' | string,
+        column: 'far' | 'near',
         entry: DayQueueEntry
     ) => {
-        const day = ensureDay(assignedAt, assignedAtJalali);
-        if (!day) return;
-        const bucket = queueType === 'far' ? day.far : day.near;
+        const ensured = ensureDay(category, assignedAt, assignedAtJalali);
+        if (!ensured) return;
+        const bucket = column === 'far' ? ensured.day.far : ensured.day.near;
         bucket.push(entry);
     };
 
+    const columnForItem = (
+        queueType?: string | null,
+        routeBucket?: string | null
+    ): 'far' | 'near' => {
+        if (queueType === 'far' || queueType === 'near') return queueType;
+        if (routeBucket === 'near') return 'near';
+        return 'far';
+    };
+
     for (const item of data.taken || []) {
-        if (item.certainty !== 'finalized') continue;
+        const category = (item.vehicleCategory || '').trim() || 'نامشخص';
         const queueType = item.queueType || (item.stage === 'stage1' ? 'far' : 'near');
-        pushFinalized(item.assignedAt, item.assignedAtJalali, queueType, {
+        const column = columnForItem(queueType, item.routeBucket);
+        const ensured = ensureDay(category, item.assignedAt, item.assignedAtJalali);
+        if (ensured) {
+            const set = targetCatsByDay.get(ensured.dayKey) || new Set<string>();
+            set.add(category);
+            targetCatsByDay.set(ensured.dayKey, set);
+        }
+        pushEntry(category, item.assignedAt, item.assignedAtJalali, column, {
             queuePosition: item.queuePosition ?? null,
             vehicleCode: item.vehicleCode || null,
             driverName: targetDriverName,
             destination: item.destinationCity || item.originCity || '',
             tripKm: item.roundTripKm ?? null,
-            isVeryFar: Boolean(item.isVeryFar),
+            isVeryFar: Boolean(item.isVeryFar) || item.routeBucket === 'veryFar',
             isTarget: true,
             announcementId: item.announcementId,
+            certainty: item.certainty,
+            routeBucket: item.routeBucket,
+            queueType,
         });
     }
 
@@ -117,8 +153,17 @@ function buildDayTable(
         const destination = (peer.destinationCity || '').trim();
         const vehicleCode = (peer.vehicleCode || '').trim();
         if (!destination && !vehicleCode) continue;
+
+        const peerCat = (peer.vehicleCategory || '').trim() || 'نامشخص';
+        const dKey = dayKeyFromJalali(peer.assignedAtJalali) || dayKey(peer.assignedAt);
+        if (!dKey) continue;
+        const allowedCats = targetCatsByDay.get(dKey);
+        // فقط اگر راننده هدف همان روز در همین دسته بار گرفته باشد
+        if (!allowedCats || !allowedCats.has(peerCat)) continue;
+
         const queueType = peer.queueType || (peer.stage === 'stage1' ? 'far' : 'near');
-        pushFinalized(peer.assignedAt, peer.assignedAtJalali, queueType, {
+        const column = columnForItem(queueType, null);
+        pushEntry(peerCat, peer.assignedAt, peer.assignedAtJalali, column, {
             queuePosition: peer.queuePosition ?? null,
             vehicleCode: vehicleCode || null,
             driverName: peerName,
@@ -127,6 +172,8 @@ function buildDayTable(
             isVeryFar: Boolean(peer.isVeryFar),
             isTarget: false,
             announcementId: peer.announcementId,
+            certainty: peer.certainty,
+            queueType,
         });
     }
 
@@ -136,8 +183,8 @@ function buildDayTable(
         for (const entry of list) {
             const key =
                 entry.announcementId && entry.driverName
-                    ? `${entry.announcementId}:${entry.driverName}`
-                    : `${entry.driverName}:${entry.destination}:${entry.tripKm ?? ''}`;
+                    ? `${entry.announcementId}:${entry.driverName}:${entry.certainty || ''}`
+                    : `${entry.driverName}:${entry.destination}:${entry.tripKm ?? ''}:${entry.certainty || ''}`;
             if (seen.has(key)) continue;
             seen.add(key);
             out.push(entry);
@@ -146,20 +193,41 @@ function buildDayTable(
     };
 
     const sortEntries = (list: DayQueueEntry[]) =>
-        [...list].sort((a, b) => (a.queuePosition ?? 999) - (b.queuePosition ?? 999));
+        [...list].sort((a, b) => {
+            if (a.isTarget !== b.isTarget) return a.isTarget ? -1 : 1;
+            return (a.queuePosition ?? 999) - (b.queuePosition ?? 999);
+        });
 
-    return Array.from(dayMap.values())
-        .map(day => ({
+    const categoryOrder = ['تریلی', 'مینی تریلی', 'ده چرخ', 'نامشخص'];
+    const byCategory = new Map<string, DayRow[]>();
+
+    for (const day of dayMap.values()) {
+        if (!day.far.some(e => e.isTarget) && !day.near.some(e => e.isTarget)) continue;
+        const normalized: DayRow = {
             ...day,
             far: sortEntries(dedupeBucket(day.far)),
             near: sortEntries(dedupeBucket(day.near)),
-        }))
-        // فقط روزهایی که خود این راننده در آن‌ها تخصیص نهایی داشته
-        .filter(
-            day =>
-                day.far.some(entry => entry.isTarget) || day.near.some(entry => entry.isTarget)
-        )
-        .sort((a, b) => a.key.localeCompare(b.key));
+        };
+        const list = byCategory.get(day.category) || [];
+        list.push(normalized);
+        byCategory.set(day.category, list);
+    }
+
+    const groups: CategoryDayGroup[] = [];
+    const seenCats = new Set<string>();
+    for (const cat of categoryOrder) {
+        const days = byCategory.get(cat);
+        if (!days?.length) continue;
+        days.sort((a, b) => a.jalaliLabel.localeCompare(b.jalaliLabel, 'fa'));
+        groups.push({ category: cat, days });
+        seenCats.add(cat);
+    }
+    for (const [cat, days] of byCategory) {
+        if (seenCats.has(cat)) continue;
+        days.sort((a, b) => a.jalaliLabel.localeCompare(b.jalaliLabel, 'fa'));
+        groups.push({ category: cat, days });
+    }
+    return groups;
 }
 
 type SkippedDayRow = {
@@ -240,17 +308,46 @@ function StatsBar({ stats }: { stats: DriverPreferenceStats }) {
 }
 
 function QueueEntryLine({ entry }: { entry: DayQueueEntry }) {
+    const certaintyLabel =
+        entry.certainty === 'cancelled'
+            ? 'لغو'
+            : entry.certainty === 'pending'
+              ? 'موقت'
+              : entry.certainty === 'finalized'
+                ? null
+                : null;
+    const routeLabel =
+        entry.routeBucket === 'veryFar'
+            ? 'مسیر خیلی‌دور'
+            : entry.routeBucket === 'far'
+              ? 'مسیر دور'
+              : entry.routeBucket === 'near'
+                ? 'مسیر نزدیک'
+                : null;
+
     return (
         <div
             className={`text-[10px] leading-relaxed py-0.5 border-b border-slate-100 last:border-0 ${
-                entry.isTarget ? 'text-amber-950 bg-amber-50/60 -mx-1 px-1 rounded' : 'text-slate-600'
+                entry.isTarget
+                    ? entry.certainty === 'cancelled'
+                        ? 'text-rose-900 bg-rose-50/70 -mx-1 px-1 rounded'
+                        : entry.certainty === 'pending'
+                          ? 'text-amber-950 bg-amber-50/70 -mx-1 px-1 rounded'
+                          : 'text-amber-950 bg-amber-50/60 -mx-1 px-1 rounded'
+                    : 'text-slate-600'
             }`}
         >
             <span className="font-semibold">{entry.queuePosition ?? '—'}</span>
             <span className="text-slate-400 mx-1">·</span>
-            <span className="text-slate-500">{entry.vehicleCode || '—'}</span>
-            <span className="text-slate-400 mx-1">·</span>
             <span className="font-medium">{entry.driverName}</span>
+            {entry.vehicleCode && (
+                <>
+                    <span className="text-slate-400 mx-1">·</span>
+                    <span className="text-slate-500" title="کد خودرو">
+                        خودرو {entry.vehicleCode}
+                    </span>
+                </>
+            )}
             {entry.destination && (
                 <>
                     <span className="text-slate-400 mx-1">·</span>
@@ -261,57 +358,101 @@ function QueueEntryLine({ entry }: { entry: DayQueueEntry }) {
                     </span>
                 </>
             )}
+            {(certaintyLabel || routeLabel) && (
+                <div className="text-[9px] text-slate-500 mt-0.5 flex flex-wrap gap-1">
+                    {certaintyLabel && (
+                        <span
+                            className={
+                                entry.certainty === 'cancelled'
+                                    ? 'text-rose-700'
+                                    : 'text-amber-700'
+                            }
+                        >
+                            {certaintyLabel}
+                        </span>
+                    )}
+                    {routeLabel && <span>{routeLabel}</span>}
+                    {entry.queueType && (
+                        <span>نوبت {entry.queueType === 'far' ? 'دور' : 'نزدیک'}</span>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
 
-function DayQueueTable({ days }: { days: DayRow[] }) {
-    if (days.length === 0) {
+function DayQueueTable({ groups }: { groups: CategoryDayGroup[] }) {
+    if (groups.length === 0) {
         return (
             <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
-                در این بازه روزی با تخصیص نهایی برای این راننده ثبت نشده است.
+                در این بازه تخصیصی برای این راننده ثبت نشده است.
             </div>
         );
     }
 
     return (
-        <div className="overflow-auto rounded-xl border border-slate-200 max-h-[420px]">
-            <table className="min-w-full text-right text-[11px]">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600 text-[10px]">
-                    <tr>
-                        <th className="px-3 py-2 font-medium w-28">تاریخ</th>
-                        <th className="px-3 py-2 font-medium bg-sky-50/80">نوبت دور</th>
-                        <th className="px-3 py-2 font-medium bg-emerald-50/80">نوبت نزدیک</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {days.map(day => (
-                        <tr key={day.key} className="align-top">
-                            <td className="px-3 py-2 text-slate-600 whitespace-nowrap font-medium">
-                                {day.jalaliLabel}
-                            </td>
-                            <td className="px-2 py-2 bg-sky-50/20 min-w-[200px]">
-                                {day.far.length === 0 ? (
-                                    <span className="text-slate-300">—</span>
-                                ) : (
-                                    day.far.map((entry, i) => (
-                                        <QueueEntryLine key={`far-${day.key}-${i}`} entry={entry} />
-                                    ))
-                                )}
-                            </td>
-                            <td className="px-2 py-2 bg-emerald-50/20 min-w-[200px]">
-                                {day.near.length === 0 ? (
-                                    <span className="text-slate-300">—</span>
-                                ) : (
-                                    day.near.map((entry, i) => (
-                                        <QueueEntryLine key={`near-${day.key}-${i}`} entry={entry} />
-                                    ))
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+        <div className="space-y-4 max-h-[520px] overflow-y-auto">
+            {groups.map(group => (
+                <div
+                    key={group.category}
+                    className="rounded-xl border border-slate-200 overflow-hidden"
+                >
+                    <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-800">
+                            دسته {group.category}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                            {group.days.length.toLocaleString('fa-IR')} روز تخصیص
+                        </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-right text-[11px]">
+                            <thead className="bg-slate-50 text-slate-600 text-[10px]">
+                                <tr>
+                                    <th className="px-3 py-2 font-medium w-28">تاریخ</th>
+                                    <th className="px-3 py-2 font-medium bg-sky-50/80">نوبت دور</th>
+                                    <th className="px-3 py-2 font-medium bg-emerald-50/80">
+                                        نوبت نزدیک
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {group.days.map(day => (
+                                    <tr key={day.key} className="align-top">
+                                        <td className="px-3 py-2 text-slate-600 whitespace-nowrap font-medium">
+                                            {day.jalaliLabel}
+                                        </td>
+                                        <td className="px-2 py-2 bg-sky-50/20 min-w-[200px]">
+                                            {day.far.length === 0 ? (
+                                                <span className="text-slate-300">—</span>
+                                            ) : (
+                                                day.far.map((entry, i) => (
+                                                    <QueueEntryLine
+                                                        key={`far-${day.key}-${i}`}
+                                                        entry={entry}
+                                                    />
+                                                ))
+                                            )}
+                                        </td>
+                                        <td className="px-2 py-2 bg-emerald-50/20 min-w-[200px]">
+                                            {day.near.length === 0 ? (
+                                                <span className="text-slate-300">—</span>
+                                            ) : (
+                                                day.near.map((entry, i) => (
+                                                    <QueueEntryLine
+                                                        key={`near-${day.key}-${i}`}
+                                                        entry={entry}
+                                                    />
+                                                ))
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }
@@ -382,7 +523,7 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
     targetDriverId,
     targetDriverName,
 }) => {
-    const dayRows = useMemo(
+    const categoryGroups = useMemo(
         () => buildDayTable(data, targetDriverId, targetDriverName),
         [data, targetDriverId, targetDriverName]
     );
@@ -414,9 +555,14 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
 
             <StatsBar stats={stats} />
 
-            {stats.finalizedCount === 0 && (
+            {stats.finalizedCount === 0 && stats.cancelledCount === 0 && stats.pendingCount === 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-                    این راننده در بازهٔ انتخاب‌شده <strong>تخصیص نهایی</strong> ندارد — خلاصه دوره صفر است.
+                    این راننده در بازهٔ انتخاب‌شده تخصیصی ندارد — خلاصه دوره صفر است.
+                </div>
+            )}
+            {stats.finalizedCount === 0 && (stats.cancelledCount > 0 || stats.pendingCount > 0) && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700">
+                    تخصیص نهایی ندارد؛ موارد موقت/لغو در جدول روزانه آمده است.
                 </div>
             )}
 
@@ -424,12 +570,14 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
 
             <section className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-slate-700">نوبت‌های روزانه (فقط روزهای تخصیص این راننده)</h3>
+                    <h3 className="text-sm font-semibold text-slate-700">
+                        نوبت‌های روزانه (به تفکیک دسته خودرو)
+                    </h3>
                     <div className="text-[10px] text-slate-500">
-                        نوبت · کد خودرو · نام · مقصد — ردیف زرد = راننده جاری
+                        فقط هم‌دسته‌های همان روز — نوبت · نام · کد خودرو · مقصد
                     </div>
                 </div>
-                <DayQueueTable days={dayRows} />
+                <DayQueueTable groups={categoryGroups} />
             </section>
 
             <SkippedTable items={farSkipped} />

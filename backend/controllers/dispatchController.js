@@ -10,6 +10,7 @@ const {
   buildStats,
   routeIsVeryFar,
   resolveAssignmentCertainty,
+  resolveAssignmentVehicleCategory,
   isFarOrVeryFarOpportunity,
   groupAssignmentsByTrip,
 } = require('../services/dispatch/driverPreferences');
@@ -260,25 +261,34 @@ async function getQueue(req, res) {
     };
 
     const { start: cycleStart, end: cycleEnd } = computeJalaliCycleRange();
-    const { fetchDriversFinalizedKm } = require('../services/dispatch/driverPreferences');
+    const { fetchDriversFinalizedKm, fetchDriversVeryFarCount } = require('../services/dispatch/driverPreferences');
     const driverIds = [...new Set(rows.map(r => r.driver_id).filter(Boolean))];
-    const finalizedKmMap = await fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd);
-    const veryFarCountMap = new Map();
-    if (driverIds.length > 0) {
-      await Promise.all(
-        driverIds.map(async (driverId) => {
-          const history = await getDriverLongRouteHistory(driverId, cycleStart, cycleEnd);
-          veryFarCountMap.set(driverId, history.length);
-        })
-      );
-    }
-    
-    const grouped = {};
-    const categoryRepairs = [];
+
+    // ابتدا دسته نمایشی هر ردیف را مشخص کن، بعد کیلومتر/خیلی‌دور را همان دسته + فقط دوره جاری حساب کن
+    const rowMeta = [];
     for (const row of rows) {
       const rawCategory = row.vehicle_category || null;
       const category = await resolveQueueEntryDisplayCategory(pool, row);
+      rowMeta.push({ row, rawCategory, category });
+    }
 
+    const categoriesNeeded = [...new Set(rowMeta.map(m => m.category).filter(c => c && c !== 'نامشخص'))];
+    const finalizedKmByCategory = new Map(); // category -> Map(driverId -> km)
+    const veryFarByCategory = new Map();
+    await Promise.all(
+      categoriesNeeded.map(async (categoryLabel) => {
+        const [kmMap, vfMap] = await Promise.all([
+          fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd, { categoryLabel }),
+          fetchDriversVeryFarCount(pool, driverIds, cycleStart, cycleEnd, { categoryLabel }),
+        ]);
+        finalizedKmByCategory.set(categoryLabel, kmMap);
+        veryFarByCategory.set(categoryLabel, vfMap);
+      })
+    );
+
+    const grouped = {};
+    const categoryRepairs = [];
+    for (const { row, rawCategory, category } of rowMeta) {
       if (
         rawCategory &&
         category !== 'نامشخص' &&
@@ -298,6 +308,10 @@ async function getQueue(req, res) {
           other: [],
         };
       }
+
+      const kmMap = finalizedKmByCategory.get(category) || new Map();
+      const vfMap = veryFarByCategory.get(category) || new Map();
+      const vfCount = vfMap.get(row.driver_id) || 0;
 
       const info = {
         id: row.id,
@@ -325,11 +339,11 @@ async function getQueue(req, res) {
           name: row.driver_name,
           mobile: row.driver_mobile,
           employeeId: row.employee_id,
-          periodFinalizedKm: finalizedKmMap.get(row.driver_id) || 0,
-          periodVeryFarCount: veryFarCountMap.get(row.driver_id) || 0,
+          periodFinalizedKm: kmMap.get(row.driver_id) || 0,
+          periodVeryFarCount: vfCount,
         },
-        hasVeryFarHistory: (veryFarCountMap.get(row.driver_id) || 0) > 0,
-        periodVeryFarCount: veryFarCountMap.get(row.driver_id) || 0,
+        hasVeryFarHistory: vfCount > 0,
+        periodVeryFarCount: vfCount,
       };
 
       switch (row.queue_type) {
@@ -1820,18 +1834,20 @@ async function getDriverPreferences(req, res) {
           da.queue_position,
           da.assigned_at_jalali,
           da.distance_km,
+          da.vehicle_category AS assignment_vehicle_category,
           fa.announcement_code,
           fa.line_type,
           fa.vehicle_type,
           fa.origin_city,
           fa.brand,
           fa.priority,
-          fd.city AS destination_city,
-          fd.created_at AS destination_created_at,
+          COALESCE(fd.city, fd_fallback.city) AS destination_city,
+          COALESCE(fd.created_at, fd_fallback.created_at) AS destination_created_at,
           dr.route_category,
           dr.distance_category,
           dr.round_trip_km,
           v.vehicle_code,
+          v.vehicle_category AS vehicle_category,
           COALESCE(da.queue_type, dqe.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
           COALESCE(da.is_cancelled, FALSE) AS is_cancelled,
           fa.status AS freight_status,
@@ -1839,6 +1855,13 @@ async function getDriverPreferences(req, res) {
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
         LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
+        LEFT JOIN LATERAL (
+          SELECT fd2.city, fd2.created_at
+          FROM freight_destinations fd2
+          WHERE fd2.freight_announcement_id = fa.id
+          ORDER BY fd2.created_at ASC
+          LIMIT 1
+        ) fd_fallback ON TRUE
         LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
         LEFT JOIN vehicles v ON v.id = da.vehicle_id
         LEFT JOIN LATERAL (
@@ -1852,10 +1875,16 @@ async function getDriverPreferences(req, res) {
           LIMIT 1
         ) dqe ON TRUE
         WHERE da.driver_id = $1
-          AND da.created_at BETWEEN $2 AND $3
-          AND fa.status != 'Cancelled'
-          AND (fa.status IN ('Assigned', 'InTransit', 'Finalized') OR da.is_cancelled = TRUE)
-        ORDER BY da.created_at DESC, fd.created_at ASC
+          AND (
+            da.created_at BETWEEN $2 AND $3
+            OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $2 AND $3
+          )
+          AND (
+            da.is_cancelled = TRUE
+            OR fa.status IS NULL
+            OR fa.status NOT IN ('Cancelled')
+          )
+        ORDER BY da.created_at ASC, COALESCE(fd.created_at, fd_fallback.created_at) ASC
       `,
       [driverId, fromISO, toISO]
     );
@@ -1863,11 +1892,31 @@ async function getDriverPreferences(req, res) {
     const assignmentsWithQueueType = assignmentsRes.rows;
 
     let taken = groupAssignmentsByTrip(
-      assignmentsWithQueueType.map(row => mapAssignmentRow(row, timestampToJalaliDate))
+      assignmentsWithQueueType.map(row => mapAssignmentRow(row, timestampToJalaliDate)),
+      {
+        // هر اعلام‌بار = یک سفر؛ لغو واقعی از نهایی جدا می‌ماند
+        tripKeyFn: item => {
+          if (!item.announcementId) return null;
+          const cancelledOnly =
+            item.certainty === 'cancelled' || (item.isCancelled && item.certainty !== 'finalized');
+          return `${item.announcementId}:${cancelledOnly ? '1' : '0'}`;
+        },
+      }
     );
     if (vehicleCategoryFilter) {
-      taken = taken.filter(item => vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter));
+      taken = taken.filter(
+        item =>
+          (item.vehicleCategory && item.vehicleCategory === vehicleCategoryFilter) ||
+          !item.vehicleType ||
+          vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter)
+      );
     }
+    // قدیمی → جدید برای نمایش پایدار همه بارها
+    taken.sort((a, b) => {
+      const ta = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
+      const tb = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
+      return ta - tb;
+    });
 
     const opportunitiesRes = await pool.query(
       `
@@ -1908,7 +1957,12 @@ async function getDriverPreferences(req, res) {
 
     let skipped = opportunitiesRes.rows
       .map(row => mapOpportunityRow(row, timestampToJalaliDate))
-      .filter(item => vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter))
+      .filter(
+        item =>
+          !vehicleCategoryFilter ||
+          !item.vehicleType ||
+          vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter)
+      )
       .filter(item => isFarOrVeryFarOpportunity(item));
 
     buildAssignmentNotes(taken, skipped);
@@ -1916,18 +1970,25 @@ async function getDriverPreferences(req, res) {
     const cycleSummary = buildCycleSummary(taken);
     const stats = buildStats(taken);
 
+    // فقط دسته‌هایی که خود راننده در بازه بار گرفته — نه همه دسته‌های نوبت آن روز
+    const takenCategoryLabels = [
+      ...new Set(
+        taken
+          .map(item => (item.vehicleCategory || '').trim())
+          .filter(Boolean)
+      ),
+    ];
+    const peerCategoryLabels = vehicleCategoryFilter
+      ? [vehicleCategoryFilter]
+      : takenCategoryLabels;
+
     const peerAssignments = await (async () => {
-      const peerValues = [fromISO, toISO];
-      let categoryClause = '';
-      if (vehicleCategoryFilter) {
-        const categoryIndex = peerValues.push(vehicleCategoryFilter);
-        categoryClause = `
-          AND (
-            v.vehicle_category = $${categoryIndex}
-            OR fa.vehicle_type = $${categoryIndex}
-          )
-        `;
+      // بدون بار گرفته‌شده، جدول هم‌نوبتی خالی است
+      if (!taken.length) {
+        return [];
       }
+
+      const peerValues = [fromISO, toISO];
       const peerRes = await pool.query(
         `
           SELECT
@@ -1947,11 +2008,14 @@ async function getDriverPreferences(req, res) {
             dr.distance_category,
             fa.announcement_code,
             fa.line_type,
+            fa.vehicle_type,
             fa.status AS freight_status,
             COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at,
             COALESCE(fd.city, fd_fallback.city) AS destination_city,
             COALESCE(fd.created_at, fd_fallback.created_at) AS destination_created_at,
             v.vehicle_code,
+            da.vehicle_category AS assignment_vehicle_category,
+            v.vehicle_category AS vehicle_category,
             prev.origin_city AS previous_origin_city
           FROM dispatch_assignments da
           INNER JOIN drivers d ON d.id = da.driver_id
@@ -1976,22 +2040,24 @@ async function getDriverPreferences(req, res) {
             ORDER BY da_prev.created_at DESC
             LIMIT 1
           ) prev ON TRUE
-          WHERE da.created_at BETWEEN $1 AND $2
-            AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-            AND fa.status IN ('Assigned', 'InTransit', 'Finalized')
+          WHERE (
+              da.created_at BETWEEN $1 AND $2
+              OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $1 AND $2
+            )
             AND (
               COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
               OR fa.status IN ('Finalized', 'InTransit')
             )
+            AND fa.status IN ('Assigned', 'InTransit', 'Finalized')
             AND NULLIF(TRIM(d.name), '') IS NOT NULL
-            ${categoryClause}
-          ORDER BY da.created_at DESC, COALESCE(fd.created_at, fd_fallback.created_at) ASC
-          LIMIT 500
+          ORDER BY da.created_at ASC, COALESCE(fd.created_at, fd_fallback.created_at) ASC
+          LIMIT 2000
         `,
         peerValues
       );
       const peerMapped = peerRes.rows.map(row => {
         const certaintyInfo = resolveAssignmentCertainty(row);
+        const vehicleCategory = resolveAssignmentVehicleCategory(row);
         return {
           id: row.id,
           announcementId: row.freight_announcement_id,
@@ -2002,6 +2068,8 @@ async function getDriverPreferences(req, res) {
           queuePosition: row.queue_position ?? null,
           queueType: row.queue_type || (row.stage === 'stage1' ? 'far' : 'near'),
           lineType: row.line_type,
+          vehicleType: row.vehicle_type,
+          vehicleCategory,
           destinationCity: row.destination_city,
           destinationOrder: row.destination_created_at
             ? new Date(row.destination_created_at).getTime()
@@ -2018,19 +2086,31 @@ async function getDriverPreferences(req, res) {
           certaintyLabel: certaintyInfo.certaintyLabel,
         };
       });
+
+      const allowedCategorySet = new Set(peerCategoryLabels);
+
       return groupAssignmentsByTrip(peerMapped, {
-        tripKeyFn: (item) =>
+        tripKeyFn: item =>
           item.announcementId && item.driverId
             ? `${item.driverId}:${item.announcementId}`
             : null,
       })
-        .filter((item) => item.certainty === 'finalized')
-        .filter((item) => Boolean((item.driverName || '').trim()))
+        .filter(item => item.certainty === 'finalized')
+        .filter(item => Boolean((item.driverName || '').trim()))
         .filter(
-          (item) =>
+          item =>
             Boolean((item.destinationCity || '').trim()) ||
             Boolean((item.vehicleCode || '').trim())
         )
+        .filter(item => {
+          if (allowedCategorySet.size === 0) return true;
+          const cat = (item.vehicleCategory || '').trim();
+          if (cat && allowedCategorySet.has(cat)) return true;
+          // تطبیق نرم با vehicleType اگر برچسب دسته خالی بود
+          return peerCategoryLabels.some(
+            label => item.vehicleType && vehicleMatchesCategory(item.vehicleType, label)
+          );
+        })
         .map(item => ({
           id: item.id,
           announcementId: item.announcementId,
@@ -2041,6 +2121,8 @@ async function getDriverPreferences(req, res) {
           queuePosition: item.queuePosition ?? null,
           queueType: item.queueType,
           lineType: item.lineType,
+          vehicleType: item.vehicleType,
+          vehicleCategory: item.vehicleCategory,
           destinationCity: item.destinationCity,
           roundTripKm: item.roundTripKm,
           vehicleCode: item.vehicleCode,
