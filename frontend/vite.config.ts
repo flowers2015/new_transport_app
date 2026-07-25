@@ -22,74 +22,44 @@ export default defineConfig(({ mode }) => {
       build: {
         rollupOptions: {
           output: {
+            /**
+             * فقط vendorها را جدا کن.
+             * اجبار کردن همه کامپوننت‌های Freight یا Transport به یک chunk،
+             * code-splitting ناشی از React.lazy را از بین می‌برد
+             * و باعث فایل‌های خیلی بزرگ و کندی ورود به پیگیری زنده می‌شود.
+             */
             manualChunks: (id) => {
-              // Vendor chunks - separate large libraries
-              if (id.includes('node_modules')) {
-                // React and React DOM MUST stay together to avoid initialization errors
-                // Keep them in the main vendor chunk, not separate
-                // Recharts for charts
-                if (id.includes('recharts')) {
-                  return 'charts-vendor';
-                }
-                // XLSX for Excel operations
-                if (id.includes('xlsx')) {
-                  return 'xlsx-vendor';
-                }
-                // PDF generation libraries
-                if (id.includes('jspdf') || id.includes('html2canvas')) {
-                  return 'pdf-vendor';
-                }
-                // All other node_modules (including React and React-DOM)
-                return 'vendor';
+              if (!id.includes('node_modules')) return;
+
+              if (id.includes('recharts')) return 'charts-vendor';
+              if (id.includes('xlsx') || id.includes('exceljs')) return 'xlsx-vendor';
+              if (id.includes('jspdf') || id.includes('html2canvas')) return 'pdf-vendor';
+
+              // React + scheduler با هم بمانند تا خطای init ندهند
+              if (
+                id.includes('node_modules/react-dom') ||
+                id.includes('node_modules\\react-dom') ||
+                id.includes('node_modules/react/') ||
+                id.includes('node_modules\\react\\') ||
+                id.includes('node_modules/scheduler') ||
+                id.includes('node_modules\\scheduler')
+              ) {
+                return 'react-vendor';
               }
-              
-              // Component chunks by feature/route
-              if (id.includes('components/Transport')) {
-                return 'transport';
-              }
-              if (id.includes('components/Freight')) {
-                return 'freight';
-              }
-              if (id.includes('components/Finance')) {
-                return 'finance';
-              }
-              if (id.includes('components/Dashboard')) {
-                return 'dashboard';
-              }
-              if (id.includes('components/Admin')) {
-                return 'admin';
-              }
-              if (id.includes('components/Vehicle')) {
-                return 'vehicle';
-              }
-              if (id.includes('components/Repair')) {
-                return 'repair';
-              }
-              
-              // Utils chunk
-              if (id.includes('utils/')) {
-                return 'utils';
-              }
-              
-              // Types chunk
-              if (id.includes('types.ts')) {
-                return 'types';
-              }
+
+              return 'vendor';
             },
           },
         },
-        // Optimize build output
         target: 'esnext',
         minify: 'terser',
         terserOptions: {
           compress: {
-            drop_console: mode === 'production', // Remove console.log in production
+            drop_console: mode === 'production',
             drop_debugger: true,
           },
         },
-        // Chunk size warning limit (moved to build level in Vite 6)
-        chunkSizeWarningLimit: 1000, // 1MB warning threshold
-        // Enable source maps for debugging (optional, can disable in production)
+        chunkSizeWarningLimit: 900,
         sourcemap: mode !== 'production',
       },
     };

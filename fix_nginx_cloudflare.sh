@@ -145,9 +145,16 @@ server {
 
     # Frontend routes (SPA - Single Page Application)
     # همه درخواست‌ها به index.html هدایت می‌شوند تا React Router کار کند
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma "no-cache" always;
+        expires -1;
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
-        
+
         # Cache control برای static files
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
             expires 1y;

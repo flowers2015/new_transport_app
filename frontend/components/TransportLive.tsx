@@ -8,7 +8,6 @@ import IranianPlateInput, {
     parseIranianPlateString,
     type IranianPlateParts,
 } from './IranianPlateInput';
-import DestinationTransferDialog from './DestinationTransferDialog';
 import {
     getDestinationCitiesLabel,
     getAnnouncementCreatorLabel,
@@ -90,18 +89,19 @@ import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { PencilIcon } from './icons/PencilIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
-import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
-import BaleReportDialog from './BaleReportDialog';
-import DairyRouteArrangementDialog from './DairyRouteArrangementDialog';
-import TransportLiveSummaryDialog from './TransportLiveSummaryDialog';
 import {
     buildCompanyBaleReportRows,
     selectCompanyBaleReportAnnouncements,
 } from '../utils/baleCompanyReport';
 import { isDairyAnnouncementForArrangement } from '../utils/dairyRouteArrangement';
-import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
+
+/** دیالوگ‌ها و Excel فقط هنگام نیاز لود شوند تا ورود اول سبک‌تر شود */
+const DestinationTransferDialog = React.lazy(() => import('./DestinationTransferDialog'));
+const WorkflowRules = React.lazy(() => import('./WorkflowRules'));
+const BaleReportDialog = React.lazy(() => import('./BaleReportDialog'));
+const DairyRouteArrangementDialog = React.lazy(() => import('./DairyRouteArrangementDialog'));
+const TransportLiveSummaryDialog = React.lazy(() => import('./TransportLiveSummaryDialog'));
 
 const ReannounceBadge: React.FC = () => (
     <span
@@ -1469,7 +1469,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     );
 
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
-    const generateExcelExport = (mode: 'compact' | 'full') => {
+    const generateExcelExport = (mode: 'compact' | 'full', XLSX: typeof import('xlsx')) => {
         const applyDairyHiddenColumns =
             activeLine === FreightLineType.Dairy &&
             !isPendingBillOfLadingTab(activeLine) &&
@@ -1729,8 +1729,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         const dateStr = new Date().toISOString().split('T')[0];
         const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
         
-        // استفاده از ExcelJS برای استایل‌ها
+        // Excel فقط هنگام دانلود لود می‌شود (نه در ورود اول صفحه)
         try {
+            const ExcelJS = (await import('exceljs')).default;
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('اعلام بار');
             
@@ -1969,7 +1970,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
         
         // Fallback: استفاده از xlsx بدون استایل
-        const wb = generateExcelExport(mode);
+        const XLSX = await import('xlsx');
+        const wb = generateExcelExport(mode, XLSX);
         XLSX.writeFile(wb, fileName);
     };
 
@@ -2729,7 +2731,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 </div>
             </div>
              {selectedAnnouncement && dialog === 'assign' && <AssignmentDialog announcement={selectedAnnouncement} drivers={drivers} vehicles={vehicles} personalDrivers={personalDrivers} personalVehicles={personalVehicles} onUpdateAssignment={onUpdateAssignment} currentUser={currentUser} onChangeRequest={onChangeRequest} onChangeVehicleType={onChangeVehicleType} onOpenHistory={onOpenHistory} onOpenAssignmentDialog={onOpenAssignmentDialog} activeLine={activeLine} setActiveLine={setActiveLine} finalizePermissions={finalizePermissions} onClose={handleCloseDialog} />}
+             <React.Suspense fallback={null}>
              {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
+             </React.Suspense>
              {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
              {referDialogAnns && referDialogAnns.length > 0 && onReferToCarrier && (
                 <CarrierReferDialog
@@ -2769,11 +2773,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     }
                 />
              )}
+             <React.Suspense fallback={null}>
+             {baleReportOpen && (
              <BaleReportDialog
                 open={baleReportOpen}
                 onClose={() => setBaleReportOpen(false)}
                 rows={companyBaleReportRows}
              />
+             )}
+             {dairyArrangementOpen && (
              <DairyRouteArrangementDialog
                 isOpen={dairyArrangementOpen}
                 onClose={() => setDairyArrangementOpen(false)}
@@ -2799,6 +2807,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 onChangeVehicleType={onChangeVehicleType}
                 onRefresh={onRefresh}
              />
+             )}
+             {isSummaryOpen && (
              <TransportLiveSummaryDialog
                 open={isSummaryOpen}
                 onClose={() => setIsSummaryOpen(false)}
@@ -2807,10 +2817,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 pendingSubLine={pendingSubLine}
                 personalDrivers={personalDrivers}
              />
+             )}
+             </React.Suspense>
              {isRulesOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={() => setIsRulesOpen(false)}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
-                        <WorkflowRules view={View.TransportLive} userRole={currentUser.role} />
+                        <React.Suspense fallback={<div className="text-sm text-slate-500 p-4">در حال بارگذاری...</div>}>
+                            <WorkflowRules view={View.TransportLive} userRole={currentUser.role} />
+                        </React.Suspense>
                          <button onClick={() => setIsRulesOpen(false)} className="mt-4 px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     </div>
                 </div>
