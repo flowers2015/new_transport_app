@@ -933,7 +933,6 @@ export const renderInvoiceLayoutHorizontal = (
                                 <th colSpan={4} style={{ 
                                     border: '2px solid #1e3a8a', 
                                     borderRight: '1px solid #1e3a8a',
-                                    fontWeight: '700',
                                     padding: '12px 8px', 
                                     backgroundColor: '#1e3a8a', 
                                     color: '#ffffff',
@@ -1569,7 +1568,6 @@ export const renderInvoiceLayoutHorizontal = (
                                             <th colSpan={4} style={{ 
                                                 border: '2px solid #1e3a8a', 
                                                 borderRight: '1px solid #1e3a8a',
-                                                fontWeight: '700',
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
@@ -1595,7 +1593,6 @@ export const renderInvoiceLayoutHorizontal = (
                                             <th colSpan={2} style={{ 
                                                 border: '2px solid #1e3a8a', 
                                                 borderRight: '1px solid #1e3a8a',
-                                                fontWeight: '700',
                                                 padding: '8px', 
                                                 backgroundColor: '#1e3a8a', 
                                                 color: '#ffffff',
