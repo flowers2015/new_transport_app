@@ -17,25 +17,41 @@ interface StatisticsData {
     successRate: number;
 }
 
-interface RepresentativeStatisticsData {
-    representativeName: string;
-    city: string;
-    totalFreights: number;
-    companyCount: number;
+interface LineFreightCell {
     personalCount: number;
-    totalPersonalFreightCost: number;
-    unpaidInvoiceCount: number;
-    unpaidAmount: number;
+    personalFreightCost: number;
+    companyCount: number;
+}
+
+interface RepresentativeStatisticsData {
+    city: string;
+    province: string;
+    totalVehicles: number;
+    personalCount: number;
+    companyCount: number;
+    totalFreightCost: number;
+    lines: {
+        iceCream: LineFreightCell;
+        dairy: LineFreightCell;
+        ambient: LineFreightCell;
+    };
 }
 
 interface RepresentativeDetailData {
     id: string;
     announcementCode: string;
     loadingDate: string;
+    announcedAt?: string | null;
     lineType: string;
     assignmentType: string;
     totalFreightCost: number;
+    destinationFreightCost?: number;
     assignedAt: string | null;
+    destinations?: Array<{
+        id: string | null;
+        city: string;
+        freightCost: number;
+    }>;
     driver: {
         id: string;
         name: string;
@@ -189,8 +205,19 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     
     // Representative statistics
     const [representativeStats, setRepresentativeStats] = useState<RepresentativeStatisticsData[]>([]);
+    const [representativeAvailableProvinces, setRepresentativeAvailableProvinces] = useState<string[]>([]);
+    const [representativeAvailableVehicleTypes, setRepresentativeAvailableVehicleTypes] = useState<string[]>([]);
+    const [representativeSelectedProvinces, setRepresentativeSelectedProvinces] = useState<string[]>([]);
+    const [representativeSelectedRepTypes, setRepresentativeSelectedRepTypes] = useState<string[]>([
+        'agent',
+        'distributor',
+        'organizational',
+        'depot',
+    ]);
+    const [representativeSelectedVehicleTypes, setRepresentativeSelectedVehicleTypes] = useState<string[]>([]);
     const [representativeStatsLoading, setRepresentativeStatsLoading] = useState(false);
     const [representativeStatsError, setRepresentativeStatsError] = useState<string | null>(null);
+    const [representativeFiltersLoaded, setRepresentativeFiltersLoaded] = useState(false);
 
     const [lineAnalytics, setLineAnalytics] = useState<LineAnalyticsItem[]>([]);
     const [lineAnalyticsMeta, setLineAnalyticsMeta] = useState<LineAnalyticsResponse['meta'] | null>(null);
@@ -337,6 +364,34 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         }
     };
 
+    const fetchRepresentativeFilterOptions = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers: HeadersInit = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            };
+            const res = await fetch(getApiUrl('freight-announcements/representative-filter-options'), { headers });
+            if (!res.ok) return;
+            const data = await res.json();
+            const provinces = Array.isArray(data?.provinces) ? data.provinces : [];
+            const vehicleTypes = Array.isArray(data?.vehicleTypes) ? data.vehicleTypes : [];
+            setRepresentativeAvailableProvinces(provinces);
+            setRepresentativeAvailableVehicleTypes(vehicleTypes);
+            setRepresentativeSelectedProvinces((prev) => (prev.length > 0 ? prev : provinces));
+            setRepresentativeSelectedVehicleTypes((prev) => (prev.length > 0 ? prev : vehicleTypes));
+            setRepresentativeFiltersLoaded(true);
+        } catch (err) {
+            console.warn('⚠️ [RepresentativeFilterOptions] Failed to load:', err);
+        }
+    };
+
+    useEffect(() => {
+        if (!representativeFiltersLoaded) {
+            fetchRepresentativeFilterOptions();
+        }
+    }, [representativeFiltersLoaded]);
+
     const fetchRepresentativeStatistics = async () => {
         try {
             setRepresentativeStatsLoading(true);
@@ -348,17 +403,31 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 'Content-Type': 'application/json',
             };
 
-            // تبدیل تاریخ‌های شمسی به پارامترهای API
-            const start = parseJalaliDateToAPI(representativeStartDate);
-            const detectedTimeRange = detectTimeRange(representativeStartDate, representativeEndDate);
-
             const params = new URLSearchParams();
-            if (start) {
-                params.append('year', start.year.toString());
-                params.append('month', start.month.toString());
-                params.append('day', start.day.toString());
+            params.append('startDate', representativeStartDate);
+            params.append('endDate', representativeEndDate);
+
+            const allRepTypes = ['agent', 'distributor', 'organizational', 'depot'];
+            if (
+                representativeSelectedRepTypes.length > 0 &&
+                representativeSelectedRepTypes.length < allRepTypes.length
+            ) {
+                params.append('representativeTypes', representativeSelectedRepTypes.join(','));
             }
-            params.append('timeRange', detectedTimeRange);
+            if (
+                representativeAvailableProvinces.length > 0 &&
+                representativeSelectedProvinces.length > 0 &&
+                representativeSelectedProvinces.length < representativeAvailableProvinces.length
+            ) {
+                params.append('provinces', representativeSelectedProvinces.join(','));
+            }
+            if (
+                representativeAvailableVehicleTypes.length > 0 &&
+                representativeSelectedVehicleTypes.length > 0 &&
+                representativeSelectedVehicleTypes.length < representativeAvailableVehicleTypes.length
+            ) {
+                params.append('vehicleTypes', representativeSelectedVehicleTypes.join(','));
+            }
 
             const res = await fetch(getApiUrl(`freight-announcements/representative-statistics?${params.toString()}`), { headers });
             
@@ -367,7 +436,22 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             }
             
             const data = await res.json();
-            setRepresentativeStats(Array.isArray(data) ? data : []);
+            const rows = Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
+            const provinces = Array.isArray(data?.availableProvinces) ? data.availableProvinces : [];
+            const vehicleTypes = Array.isArray(data?.availableVehicleTypes) ? data.availableVehicleTypes : [];
+            setRepresentativeStats(rows);
+            setRepresentativeAvailableProvinces(provinces);
+            setRepresentativeAvailableVehicleTypes(vehicleTypes);
+            setRepresentativeSelectedProvinces((prev) => {
+                if (!prev || prev.length === 0) return provinces;
+                const kept = prev.filter((p) => provinces.includes(p));
+                return kept.length > 0 ? kept : provinces;
+            });
+            setRepresentativeSelectedVehicleTypes((prev) => {
+                if (!prev || prev.length === 0) return vehicleTypes;
+                const kept = prev.filter((v) => vehicleTypes.includes(v));
+                return kept.length > 0 ? kept : vehicleTypes;
+            });
         } catch (err: any) {
             console.error('❌ [RepresentativeStatistics] Failed to fetch:', err);
             setRepresentativeStatsError(err.message || 'خطا در دریافت آمار نمایندگان');
@@ -376,7 +460,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
         }
     };
 
-    const fetchRepresentativeDetails = async (representativeName: string, city: string, lineType?: string): Promise<RepresentativeDetailData[]> => {
+    const fetchRepresentativeDetails = async (city: string, lineType?: string): Promise<RepresentativeDetailData[]> => {
         try {
             const token = localStorage.getItem('token');
             const headers: HeadersInit = {
@@ -384,20 +468,33 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 'Content-Type': 'application/json',
             };
 
-            // تبدیل تاریخ‌های شمسی به پارامترهای API
-            const start = parseJalaliDateToAPI(representativeStartDate);
-            const detectedTimeRange = detectTimeRange(representativeStartDate, representativeEndDate);
-
             const params = new URLSearchParams();
-            params.append('representativeName', representativeName);
             params.append('city', city);
+            params.append('startDate', representativeStartDate);
+            params.append('endDate', representativeEndDate);
             if (lineType) params.append('lineType', lineType);
-            if (start) {
-                params.append('year', start.year.toString());
-                params.append('month', start.month.toString());
-                params.append('day', start.day.toString());
+
+            const allRepTypes = ['agent', 'distributor', 'organizational', 'depot'];
+            if (
+                representativeSelectedRepTypes.length > 0 &&
+                representativeSelectedRepTypes.length < allRepTypes.length
+            ) {
+                params.append('representativeTypes', representativeSelectedRepTypes.join(','));
             }
-            params.append('timeRange', detectedTimeRange);
+            if (
+                representativeAvailableProvinces.length > 0 &&
+                representativeSelectedProvinces.length > 0 &&
+                representativeSelectedProvinces.length < representativeAvailableProvinces.length
+            ) {
+                params.append('provinces', representativeSelectedProvinces.join(','));
+            }
+            if (
+                representativeAvailableVehicleTypes.length > 0 &&
+                representativeSelectedVehicleTypes.length > 0 &&
+                representativeSelectedVehicleTypes.length < representativeAvailableVehicleTypes.length
+            ) {
+                params.append('vehicleTypes', representativeSelectedVehicleTypes.join(','));
+            }
 
             const res = await fetch(getApiUrl(`freight-announcements/representative-details?${params.toString()}`), { headers });
             
@@ -563,6 +660,14 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 onTimeRangeChange={setTimeRange}
                 onRefresh={fetchStatistics}
                 representativeStats={representativeStats}
+                representativeAvailableProvinces={representativeAvailableProvinces}
+                representativeAvailableVehicleTypes={representativeAvailableVehicleTypes}
+                representativeSelectedProvinces={representativeSelectedProvinces}
+                representativeSelectedRepTypes={representativeSelectedRepTypes}
+                representativeSelectedVehicleTypes={representativeSelectedVehicleTypes}
+                onRepresentativeSelectedProvincesChange={setRepresentativeSelectedProvinces}
+                onRepresentativeSelectedRepTypesChange={setRepresentativeSelectedRepTypes}
+                onRepresentativeSelectedVehicleTypesChange={setRepresentativeSelectedVehicleTypes}
                 representativeStatsLoading={representativeStatsLoading}
                 representativeStatsError={representativeStatsError}
                 onFetchRepresentativeDetails={fetchRepresentativeDetails}

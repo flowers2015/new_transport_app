@@ -798,6 +798,41 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     const statusFromEvent =
                         (data.status as FreightAnnouncementStatus) || existing?.status;
 
+                    const mapRealtimeDestinations = (raw: any[]): FreightAnnouncement['destinations'] =>
+                        raw.map((d: any) => ({
+                            id: d.id,
+                            city: d.city,
+                            representativeName: d.representativeName || d.representative_name,
+                            tonnage:
+                                d.tonnage != null && d.tonnage !== ''
+                                    ? normalizeTonnageKg(d.tonnage)
+                                    : undefined,
+                            unloadTime: d.unloadTime || d.unload_time,
+                            freightCost: d.freightCost ?? d.freight_cost,
+                            cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
+                            deliveryDate: d.deliveryDate || d.delivery_date,
+                            representativeType: d.representativeType || d.representative_type,
+                            lisCode: d.lis_code || d.lisCode,
+                            brandType: d.brand_type || d.brandType,
+                            brand: d.brand,
+                            brand2: d.brand2,
+                            products: Array.isArray(d.products)
+                                ? d.products
+                                : typeof d.products === 'string'
+                                  ? (() => {
+                                        try {
+                                            return JSON.parse(d.products);
+                                        } catch {
+                                            return [];
+                                        }
+                                    })()
+                                  : [],
+                        }));
+
+                    const destinationsFromEvent = Array.isArray((data as any).destinations)
+                        ? mapRealtimeDestinations((data as any).destinations)
+                        : undefined;
+
                     const cancelledOrUnassigned =
                         updateType === 'cancelled' ||
                         updateType === 'unassigned' ||
@@ -832,6 +867,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                       new Date().toISOString(),
                               }
                             : {}),
+                        ...(destinationsFromEvent ? { destinations: destinationsFromEvent } : {}),
                     });
                     return updated.map((ann) =>
                         ann.id === announcementId

@@ -1,5 +1,167 @@
 const pool = require('../db');
 const jalaliUtils = require('../utils/jalali');
+const { classifyRouteDistanceBucket } = require('../services/dispatch/dispatchRouteRules');
+
+/** مبادی گزارش عملکرد — تطبیق نرم با origin_city دیتابیس */
+const PERFORMANCE_ORIGIN_GROUPS = [
+  {
+    key: 'aminzadeh',
+    label: 'امین‌زاده',
+    test: (n) => n.includes('امین') && n.includes('زاد'),
+  },
+  {
+    key: 'mihan_factory',
+    label: 'کارخانه میهن',
+    test: (n) =>
+      (n.includes('میهن') && n.includes('کارخانه')) ||
+      n.includes('کارخانهمیهن'),
+  },
+  {
+    key: 'panda_factory',
+    label: 'کارخانه پاندا',
+    test: (n) => n.includes('پاندا'),
+  },
+  {
+    key: 'shahrnosh',
+    label: 'شهرنوشیدنی',
+    test: (n) => n.includes('شهرنوش') || n.includes('شهنوش') || n.includes('شهرنوشیدنی'),
+  },
+  {
+    key: 'tehranpars',
+    label: 'تهرانپارس',
+    test: (n) => n.includes('تهرانپارس') || (n.includes('تهران') && n.includes('پارس')),
+  },
+  {
+    key: 'varamin',
+    label: 'ورامین',
+    test: (n) => n.includes('ورامین'),
+  },
+  {
+    key: 'central_warehouse',
+    label: 'انبار مرکزی',
+    test: (n) => n.includes('انبار') && n.includes('مرکز'),
+  },
+  {
+    key: 'golfam',
+    label: 'گلفام',
+    test: (n) => n.includes('گلفام'),
+  },
+  {
+    key: 'dairy_city',
+    label: 'شهر لبنیات',
+    test: (n) =>
+      n.includes('شهرلبنیات') ||
+      (n.includes('شهر') && n.includes('لبنیات')) ||
+      n.includes('کارخانهشهرلبنیات'),
+  },
+];
+
+function normalizeOriginText(value) {
+  return (value || '')
+    .toString()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/[\s_\-‌]/g, '')
+    .toLowerCase();
+}
+
+function matchOriginGroup(originCity) {
+  const n = normalizeOriginText(originCity);
+  if (!n) return null;
+  for (const group of PERFORMANCE_ORIGIN_GROUPS) {
+    if (group.test(n)) return group;
+  }
+  return null;
+}
+
+/** فقط بارهایی که مبدا آن‌ها یکی از مبادی ستاد است */
+function isHqOrigin(originCity) {
+  return Boolean(matchOriginGroup(originCity));
+}
+
+/** مسیر مقصد از جدول شهرها (dispatch_routes) — دورترین مقصد */
+const DEST_ROUTE_SQL = `
+  SELECT
+    dr.round_trip_km,
+    dr.distance_category,
+    dr.route_category,
+    fd.city
+  FROM freight_destinations fd
+  INNER JOIN dispatch_routes dr
+    ON dr.is_active = TRUE
+   AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+     = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+  WHERE fd.freight_announcement_id = fa.id
+  ORDER BY COALESCE(dr.round_trip_km, 0) DESC NULLS LAST
+  LIMIT 1
+`;
+
+function resolveTripDistance(row) {
+  const routeKm = Number(row.route_km || 0);
+  const financeKm =
+    Number(row.approved_kilometers || 0) + Number(row.excess_kilometers || 0);
+  const km =
+    financeKm > 0 ? financeKm : routeKm > 0 ? routeKm : null;
+
+  // اول از دسته‌بندی ثبت‌شده در مسیر/شهر؛ بدون fallback اشتباه به نزدیک وقتی km=0
+  let bucket = classifyRouteDistanceBucket({
+    distance_category: row.distance_category,
+    route_category: row.route_category,
+    round_trip_km: km,
+  });
+
+  if (!bucket && km != null && km > 0) {
+    bucket = km >= 500 ? 'far' : 'near';
+  }
+
+  return { km: km || 0, bucket: bucket || null };
+}
+
+/** مثل مالی ترابری: تریلی/مینی‌تریلی → کشنده ، ده چرخ → ده چرخ */
+function normalizeFinanceVehicleCategory(raw) {
+  const t = (raw || '').toString().trim();
+  if (!t) return null;
+  if (t.includes('ده چرخ') || t.includes('ده‌چرخ') || t === 'ده چرخ') return 'ده چرخ';
+  if (
+    t.includes('تریلی') ||
+    t.includes('تریلر') ||
+    t.includes('کشنده') ||
+    t.includes('مینی')
+  ) {
+    return 'کشنده';
+  }
+  if (t === 'کشنده') return 'کشنده';
+  return null;
+}
+
+function parseRangeQuery(query) {
+  const { startYear, startMonth, startDay, endYear, endMonth, endDay } = query || {};
+  if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
+    return { error: 'تمام پارامترهای تاریخ الزامی است.' };
+  }
+  const [startGy, startGm, startGd] = jalaliUtils.jalaliToGregorian(
+    parseInt(startYear, 10),
+    parseInt(startMonth, 10),
+    parseInt(startDay, 10)
+  );
+  const [endGy, endGm, endGd] = jalaliUtils.jalaliToGregorian(
+    parseInt(endYear, 10),
+    parseInt(endMonth, 10),
+    parseInt(endDay, 10)
+  );
+  const startDate = new Date(startGy, startGm - 1, startGd, 0, 0, 0, 0);
+  const endDate = new Date(endGy, endGm - 1, endGd, 23, 59, 59, 999);
+  const startJalali = `${startYear}/${String(startMonth).padStart(2, '0')}/${String(startDay).padStart(2, '0')}`;
+  const endJalali = `${endYear}/${String(endMonth).padStart(2, '0')}/${String(endDay).padStart(2, '0')}`;
+  return { startDate, endDate, startJalali, endJalali };
+}
+
+function emptyOriginCounts() {
+  const counts = {};
+  for (const g of PERFORMANCE_ORIGIN_GROUPS) counts[g.key] = 0;
+  counts.other = 0;
+  return counts;
+}
 
 /**
  * GET /api/v1/freight-announcements/performance-index
@@ -451,8 +613,425 @@ async function getPersonalPerformanceIndex(req, res) {
   }
 }
 
+/**
+ * GET /api/v1/freight-announcements/company-driver-performance
+ * عملکرد رانندگان شرکتی — به تفکیک راننده، دوره ۲۶–۲۵، دو مبنا
+ * basis=assignment → تاریخ اتمام/ثبت تخصیص
+ * basis=finance → ثبت تور مالی ترابری
+ */
+async function getCompanyDriverPerformance(req, res) {
+  try {
+    const basis = String(req.query.basis || 'assignment').toLowerCase() === 'finance'
+      ? 'finance'
+      : 'assignment';
+    const driverIdFilter = req.query.driverId ? String(req.query.driverId) : null;
+    const includeTrips = String(req.query.includeTrips || '') === '1' || Boolean(driverIdFilter);
+    const vehicleCategoryFilterRaw = String(req.query.vehicleCategory || '').trim();
+    const vehicleCategoryFilter =
+      vehicleCategoryFilterRaw === 'کشنده' || vehicleCategoryFilterRaw === 'ده چرخ'
+        ? vehicleCategoryFilterRaw
+        : null;
+
+    const range = parseRangeQuery(req.query);
+    if (range.error) {
+      return res.status(400).json({ message: range.error });
+    }
+    const { startDate, endDate, startJalali, endJalali } = range;
+
+    let rows;
+    if (basis === 'finance') {
+      const result = await pool.query(
+        `
+        SELECT
+          dc.id AS calc_id,
+          dc.announcement_id,
+          dc.driver_id,
+          d.name AS driver_name,
+          d.employee_id,
+          fa.announcement_code,
+          fa.origin_city,
+          fa.loading_date,
+          fa.vehicle_type,
+          fa.assignment_finalized_at,
+          COALESCE(NULLIF(TRIM(dc.bill_of_lading_date), ''), NULL) AS bill_of_lading_date,
+          dc.created_at AS calc_created_at,
+          COALESCE(dc.approved_kilometers, 0)::float AS approved_kilometers,
+          COALESCE(dc.excess_kilometers, 0)::float AS excess_kilometers,
+          (
+            SELECT STRING_AGG(fd.city, '، ' ORDER BY fd.created_at ASC)
+            FROM freight_destinations fd
+            WHERE fd.freight_announcement_id = fa.id
+          ) AS destinations,
+          (
+            SELECT r.round_trip_km FROM (${DEST_ROUTE_SQL}) r
+          ) AS route_km,
+          (
+            SELECT r.distance_category FROM (${DEST_ROUTE_SQL}) r
+          ) AS distance_category,
+          (
+            SELECT r.route_category FROM (${DEST_ROUTE_SQL}) r
+          ) AS route_category,
+          COALESCE(
+            (
+              SELECT da2.assigned_at_jalali
+              FROM dispatch_assignments da2
+              WHERE da2.freight_announcement_id = fa.id
+                AND da2.driver_id = dc.driver_id
+              ORDER BY da2.created_at ASC
+              LIMIT 1
+            ),
+            NULL
+          ) AS assigned_at_jalali
+        FROM driver_calculations dc
+        INNER JOIN freight_announcements fa ON fa.id = dc.announcement_id
+        INNER JOIN drivers d ON d.id = dc.driver_id
+        WHERE fa.assignment_type = 'company'
+          AND fa.status = 'Finalized'
+          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+          AND dc.driver_id IS NOT NULL
+          AND (
+            (
+              NULLIF(TRIM(dc.bill_of_lading_date), '') IS NOT NULL
+              AND REPLACE(dc.bill_of_lading_date, '-', '/') >= $1
+              AND REPLACE(dc.bill_of_lading_date, '-', '/') <= $2
+            )
+            OR (
+              (dc.bill_of_lading_date IS NULL OR TRIM(dc.bill_of_lading_date) = '')
+              AND dc.created_at >= $3
+              AND dc.created_at <= $4
+            )
+          )
+          AND ($5::text IS NULL OR dc.driver_id::text = $5::text)
+        ORDER BY d.employee_id NULLS LAST, d.name, dc.created_at ASC
+        `,
+        [startJalali, endJalali, startDate.toISOString(), endDate.toISOString(), driverIdFilter]
+      );
+      rows = result.rows;
+    } else {
+      const result = await pool.query(
+        `
+        SELECT DISTINCT ON (fa.id, fa.assigned_driver_id)
+          fa.id AS announcement_id,
+          fa.assigned_driver_id AS driver_id,
+          COALESCE(d.name, fa.assigned_driver_name) AS driver_name,
+          COALESCE(d.employee_id, fa.assigned_driver_employee_id) AS employee_id,
+          fa.announcement_code,
+          fa.origin_city,
+          fa.loading_date,
+          fa.vehicle_type,
+          fa.assignment_finalized_at,
+          da.created_at AS assignment_created_at,
+          da.assigned_at_jalali,
+          COALESCE(
+            (SELECT r.round_trip_km FROM (${DEST_ROUTE_SQL}) r),
+            da.distance_km,
+            0
+          )::float AS route_km,
+          COALESCE(
+            (SELECT r.distance_category FROM (${DEST_ROUTE_SQL}) r),
+            dr.distance_category
+          ) AS distance_category,
+          COALESCE(
+            (SELECT r.route_category FROM (${DEST_ROUTE_SQL}) r),
+            dr.route_category
+          ) AS route_category,
+          (
+            SELECT STRING_AGG(fd.city, '، ' ORDER BY fd.created_at ASC)
+            FROM freight_destinations fd
+            WHERE fd.freight_announcement_id = fa.id
+          ) AS destinations
+        FROM freight_announcements fa
+        LEFT JOIN drivers d ON d.id = fa.assigned_driver_id
+        LEFT JOIN LATERAL (
+          SELECT da2.*
+          FROM dispatch_assignments da2
+          WHERE da2.freight_announcement_id = fa.id
+            AND (da2.is_cancelled IS NULL OR da2.is_cancelled = FALSE)
+            AND (
+              fa.assigned_driver_id IS NULL
+              OR da2.driver_id = fa.assigned_driver_id
+            )
+          ORDER BY da2.created_at ASC
+          LIMIT 1
+        ) da ON TRUE
+        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+        WHERE fa.assignment_type = 'company'
+          AND fa.status = 'Finalized'
+          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+          AND fa.assigned_driver_id IS NOT NULL
+          AND (
+            COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at, da.created_at)
+              BETWEEN $1 AND $2
+          )
+          AND ($3::text IS NULL OR fa.assigned_driver_id::text = $3::text)
+        ORDER BY fa.id, fa.assigned_driver_id, da.created_at ASC NULLS LAST
+        `,
+        [startDate.toISOString(), endDate.toISOString(), driverIdFilter]
+      );
+      rows = result.rows;
+    }
+
+    const byDriver = new Map();
+
+    for (const row of rows) {
+      const driverId = row.driver_id;
+      if (!driverId) continue;
+
+      // فقط مبادی ستاد (امین‌زاده، کارخانه میهن، …) — مبداهایی مثل یزد→امین‌زاده حساب نمی‌شوند
+      const originGroup = matchOriginGroup(row.origin_city);
+      if (!originGroup) continue;
+
+      const vehicleCategory = normalizeFinanceVehicleCategory(row.vehicle_type);
+      if (vehicleCategoryFilter && vehicleCategory !== vehicleCategoryFilter) continue;
+
+      if (!byDriver.has(driverId)) {
+        byDriver.set(driverId, {
+          driverId,
+          driverName: row.driver_name || 'نامشخص',
+          employeeId: row.employee_id || null,
+          vehicleCategory: vehicleCategory || null,
+          tourCount: 0,
+          periodKm: 0,
+          veryFarCount: 0,
+          farCount: 0,
+          nearCount: 0,
+          originCounts: emptyOriginCounts(),
+          trips: [],
+        });
+      }
+      const agg = byDriver.get(driverId);
+      if (!agg.vehicleCategory && vehicleCategory) agg.vehicleCategory = vehicleCategory;
+
+      const { km, bucket } = resolveTripDistance(row);
+
+      agg.originCounts[originGroup.key] += 1;
+      agg.tourCount += 1;
+      agg.periodKm += km;
+      if (bucket === 'veryFar') agg.veryFarCount += 1;
+      else if (bucket === 'far') agg.farCount += 1;
+      else if (bucket === 'near') agg.nearCount += 1;
+
+      if (includeTrips) {
+        const assignedJalali =
+          row.assigned_at_jalali ||
+          (row.assignment_finalized_at
+            ? jalaliUtils.timestampToJalaliDate(row.assignment_finalized_at)
+            : null) ||
+          (row.assignment_created_at
+            ? jalaliUtils.timestampToJalaliDate(row.assignment_created_at)
+            : null) ||
+          row.bill_of_lading_date ||
+          null;
+
+        agg.trips.push({
+          announcementId: row.announcement_id,
+          announcementCode: row.announcement_code,
+          loadingDate: row.loading_date || null,
+          originCity: row.origin_city || null,
+          originLabel: originGroup.label,
+          destinations: row.destinations || null,
+          assignedAtJalali: assignedJalali,
+          km: km > 0 ? km : null,
+          distanceBucket: bucket,
+          distanceCategory: row.distance_category || null,
+          vehicleCategory: vehicleCategory || null,
+          vehicleType: row.vehicle_type || null,
+          basisDate:
+            basis === 'finance'
+              ? row.bill_of_lading_date ||
+                (row.calc_created_at
+                  ? jalaliUtils.formatJalali(new Date(row.calc_created_at))
+                  : null)
+              : assignedJalali,
+        });
+      }
+    }
+
+    const drivers = [...byDriver.values()]
+      .map((d) => ({
+        ...d,
+        periodKm: Math.round(d.periodKm),
+        trips: includeTrips
+          ? d.trips.sort((a, b) =>
+              String(a.assignedAtJalali || '').localeCompare(String(b.assignedAtJalali || ''), 'fa')
+            )
+          : undefined,
+      }))
+      .sort((a, b) => {
+        const ea = String(a.employeeId || '');
+        const eb = String(b.employeeId || '');
+        if (ea !== eb) return ea.localeCompare(eb, 'fa', { numeric: true });
+        return String(a.driverName || '').localeCompare(String(b.driverName || ''), 'fa');
+      });
+
+    res.json({
+      basis,
+      fromJalali: startJalali,
+      toJalali: endJalali,
+      originGroups: PERFORMANCE_ORIGIN_GROUPS.map((g) => ({ key: g.key, label: g.label })),
+      drivers,
+    });
+  } catch (error) {
+    console.error('❌ [CompanyDriverPerformance] Error:', error);
+    res.status(500).json({
+      message: 'خطا در دریافت عملکرد رانندگان شرکتی',
+      error: error.message,
+    });
+  }
+}
+
+const DISPATCH_LINE_DEFS = [
+  { key: 'IceCream', label: 'بستنی' },
+  { key: 'Dairy', label: 'پاستوریزه' },
+  { key: 'Ambient', label: 'لبنیات-فروتلند' },
+];
+
+function normalizeDispatchLineKey(raw) {
+  const t = (raw || '').toString().trim();
+  if (!t) return null;
+  if (t === 'IceCream' || t.includes('بستنی')) return 'IceCream';
+  if (t === 'Dairy' || t.includes('پاستوریزه')) return 'Dairy';
+  if (t === 'Ambient' || t.includes('فروتلند') || t.includes('لبنیات')) return 'Ambient';
+  return null;
+}
+
+/**
+ * GET /api/v1/freight-announcements/dispatch-line-stats
+ * آمار اعزام به تفکیک لاین: شخصی / شرکتی / درصد / کرایه شخصی
+ */
+async function getDispatchLineStats(req, res) {
+  try {
+    const range = parseRangeQuery(req.query);
+    if (range.error) {
+      return res.status(400).json({ message: range.error });
+    }
+    const { startDate, endDate, startJalali, endJalali } = range;
+
+    const result = await pool.query(
+      `
+      SELECT
+        fa.line_type,
+        fa.assignment_type,
+        COUNT(*)::int AS assignment_count,
+        COALESCE(SUM(
+          CASE
+            WHEN LOWER(COALESCE(fa.assignment_type, '')) IN ('personal', 'شخصی')
+            THEN COALESCE(fa.total_freight_cost, 0)
+            ELSE 0
+          END
+        ), 0)::float AS personal_freight_sum
+      FROM freight_announcements fa
+      WHERE fa.status = 'Finalized'
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+        AND fa.assignment_type IS NOT NULL
+        AND (
+          (
+            fa.assignment_finalized_at IS NOT NULL
+            AND fa.assignment_finalized_at >= $1
+            AND fa.assignment_finalized_at <= $2
+          )
+          OR (
+            fa.assignment_finalized_at IS NULL
+            AND (
+              (CAST(fa.loading_date AS TEXT) >= $3 AND CAST(fa.loading_date AS TEXT) <= $4)
+              OR (CAST(fa.loading_date AS TEXT) >= $5 AND CAST(fa.loading_date AS TEXT) <= $6)
+            )
+          )
+        )
+      GROUP BY fa.line_type, fa.assignment_type
+      `,
+      [
+        startDate.toISOString(),
+        endDate.toISOString(),
+        startJalali,
+        endJalali,
+        startJalali.replace(/\//g, '-'),
+        endJalali.replace(/\//g, '-'),
+      ]
+    );
+
+    const bucket = {};
+    for (const def of DISPATCH_LINE_DEFS) {
+      bucket[def.key] = {
+        lineKey: def.key,
+        lineLabel: def.label,
+        companyCount: 0,
+        personalCount: 0,
+        personalFreightSum: 0,
+      };
+    }
+
+    for (const row of result.rows) {
+      const lineKey = normalizeDispatchLineKey(row.line_type);
+      if (!lineKey || !bucket[lineKey]) continue;
+      const type = String(row.assignment_type || '').toLowerCase();
+      const isPersonal = type === 'personal' || type.includes('شخص');
+      const isCompany = type === 'company' || type.includes('شرکت');
+      const count = Number(row.assignment_count) || 0;
+      if (isPersonal) {
+        bucket[lineKey].personalCount += count;
+        bucket[lineKey].personalFreightSum += Number(row.personal_freight_sum) || 0;
+      } else if (isCompany) {
+        bucket[lineKey].companyCount += count;
+      }
+    }
+
+    const lines = DISPATCH_LINE_DEFS.map((def) => {
+      const row = bucket[def.key];
+      const totalAssignments = row.companyCount + row.personalCount;
+      const personalToCompanyPercent =
+        row.companyCount > 0
+          ? Math.round((row.personalCount / row.companyCount) * 1000) / 10
+          : row.personalCount > 0
+            ? null
+            : 0;
+      return {
+        lineKey: row.lineKey,
+        lineLabel: row.lineLabel,
+        totalAssignments,
+        personalCount: row.personalCount,
+        companyCount: row.companyCount,
+        personalToCompanyPercent,
+        personalFreightSum: Math.round(row.personalFreightSum),
+      };
+    });
+
+    const totals = lines.reduce(
+      (acc, line) => {
+        acc.totalAssignments += line.totalAssignments;
+        acc.personalCount += line.personalCount;
+        acc.companyCount += line.companyCount;
+        acc.personalFreightSum += line.personalFreightSum;
+        return acc;
+      },
+      { totalAssignments: 0, personalCount: 0, companyCount: 0, personalFreightSum: 0 }
+    );
+    totals.personalToCompanyPercent =
+      totals.companyCount > 0
+        ? Math.round((totals.personalCount / totals.companyCount) * 1000) / 10
+        : totals.personalCount > 0
+          ? null
+          : 0;
+
+    res.json({
+      fromJalali: startJalali,
+      toJalali: endJalali,
+      lines,
+      totals,
+    });
+  } catch (error) {
+    console.error('❌ [DispatchLineStats] Error:', error);
+    res.status(500).json({
+      message: 'خطا در دریافت آمار اعزام',
+      error: error.message,
+    });
+  }
+}
+
 module.exports = {
   getPerformanceIndex,
-  getPersonalPerformanceIndex
+  getPersonalPerformanceIndex,
+  getCompanyDriverPerformance,
+  getDispatchLineStats,
 };
 

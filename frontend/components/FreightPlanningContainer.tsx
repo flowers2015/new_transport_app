@@ -438,6 +438,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     platformArrivalTime: (updated as any).platformArrivalTime,
                     status: updated.status,
                     destinations: updated.destinations,
+                    lisCodeOnly: !!(updated as any).lisCodeOnly,
                 }),
             });
             if (!res.ok) throw new Error(await res.text());

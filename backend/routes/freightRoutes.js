@@ -19,6 +19,7 @@ const {
   getTransportStatistics,
   getAssignmentStatistics,
   getRepresentativeStatistics,
+  getRepresentativeFilterOptions,
   getRepresentativeDetails,
   getCityStatistics,
   getCityDetails,
@@ -54,7 +55,7 @@ const {
   updateDairyArrangementLock,
 } = require('../controllers/dairyArrangementController');
 
-const { getPerformanceIndex, getPersonalPerformanceIndex } = require('../controllers/performanceIndexController');
+const { getPerformanceIndex, getPersonalPerformanceIndex, getCompanyDriverPerformance, getDispatchLineStats } = require('../controllers/performanceIndexController');
 
 const PLANNER_ROLES = [
   'planner',
@@ -91,9 +92,12 @@ router.get('/assignment-statistics', authenticateToken, getAssignmentStatistics)
 // Get performance index (شاخص عملکرد)
 router.get('/performance-index', authenticateToken, getPerformanceIndex);
 router.get('/personal-performance-index', authenticateToken, getPersonalPerformanceIndex);
+router.get('/company-driver-performance', authenticateToken, getCompanyDriverPerformance);
+router.get('/dispatch-line-stats', authenticateToken, getDispatchLineStats);
 
 // Get representative statistics (for transport dashboard)
 router.get('/representative-statistics', authenticateToken, getRepresentativeStatistics);
+router.get('/representative-filter-options', authenticateToken, getRepresentativeFilterOptions);
 
 // Get representative details (vehicle assignments for a specific representative)
 router.get('/representative-details', authenticateToken, getRepresentativeDetails);

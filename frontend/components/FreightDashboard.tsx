@@ -256,6 +256,69 @@ const isSalesExpertUser = (user?: User): boolean => {
     );
 };
 
+/** بعد از ارجاع تا قبل اتمام تخصیص: فقط کد LIS پاستوریزه */
+const canEditDairyLisCodes = (ann: FreightAnnouncement, user?: User): boolean => {
+    if (!user || !isFreightCreateRole(user)) return false;
+    const line = String(ann.lineType || '');
+    if (
+        ann.lineType !== FreightLineType.Dairy &&
+        line !== 'Dairy' &&
+        line !== 'پاستوریزه'
+    ) {
+        return false;
+    }
+    if ((ann as any).assignmentFinalizedAt || (ann as any).assignment_finalized_at) {
+        return false;
+    }
+    const statusStr = String(ann.status);
+    const fullEditStatuses = new Set([
+        FreightAnnouncementStatus.Draft,
+        FreightAnnouncementStatus.Rejected,
+        FreightAnnouncementStatus.ReturnedToCreator,
+        FreightAnnouncementStatus.Leftover,
+        'Draft',
+        'Rejected',
+        'ReturnedToCreator',
+        'Leftover',
+        'پیش‌نویس',
+        'رد شده',
+        'برگشت به اعلام‌کننده',
+        'بار مانده',
+    ]);
+    if (fullEditStatuses.has(ann.status as any) || fullEditStatuses.has(statusStr)) {
+        return false;
+    }
+    const lockedAfterFinalize = new Set([
+        FreightAnnouncementStatus.Finalized,
+        FreightAnnouncementStatus.InTransit,
+        FreightAnnouncementStatus.Cancelled,
+        'Finalized',
+        'InTransit',
+        'Cancelled',
+        'نهایی شده',
+        'در حال حمل',
+        'لغو شده',
+    ]);
+    if (lockedAfterFinalize.has(ann.status as any) || lockedAfterFinalize.has(statusStr)) {
+        return false;
+    }
+    const lisWindow = new Set([
+        FreightAnnouncementStatus.PendingManagerApproval,
+        FreightAnnouncementStatus.PendingPersonalAssignment,
+        FreightAnnouncementStatus.PendingCompanyAssignment,
+        FreightAnnouncementStatus.Assigned,
+        'PendingManagerApproval',
+        'PendingPersonalAssignment',
+        'PendingCompanyAssignment',
+        'Assigned',
+        'در انتظار تایید مدیر',
+        'در انتظار تخصیص (شخصی)',
+        'در انتظار تخصیص (شرکت)',
+        'تخصیص یافته',
+    ]);
+    return lisWindow.has(ann.status as any) || lisWindow.has(statusStr);
+};
+
 const isPlanningManagerUser = (user?: User): boolean => {
     if (!user) return false;
     return (
@@ -677,7 +740,8 @@ const columnsConfig = (props: {
     currentUser: User, 
     onApprove: (id: string) => void, 
     onReject: (id: string) => void, 
-    onEdit: (ann: FreightAnnouncement) => void, 
+    onEdit: (ann: FreightAnnouncement) => void,
+    onEditLisCodes?: (ann: FreightAnnouncement) => void,
     onSendForApproval: (ann: FreightAnnouncement) => void, 
     onDelete: (id: string) => void,
     onReAnnounce: (announcementId: string) => void,
@@ -690,7 +754,7 @@ const columnsConfig = (props: {
     selectedIds?: string[],
     onToggleSelect?: (id: string) => void
 }) => {
-    const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete, onReAnnounce } = props;
+    const { currentUser, onApprove, onReject, onEdit, onEditLisCodes, onSendForApproval, onDelete, onReAnnounce } = props;
     
     return [
         // --- Checkbox column for bulk selection ---
@@ -847,7 +911,7 @@ const columnsConfig = (props: {
             return ann.rejectionReason || '-';
         }},
         { header: 'عملیات', width: '270px', display: () => true, render: (ann: FreightAnnouncement, idx: number, props: any) => {
-            const { currentUser, onApprove, onReject, onEdit, onSendForApproval, onDelete, onReAnnounce } = props;
+            const { currentUser, onApprove, onReject, onEdit, onEditLisCodes, onSendForApproval, onDelete, onReAnnounce } = props;
             
             // Debug: بررسی وضعیت
             if (!currentUser) {
@@ -1090,6 +1154,30 @@ const columnsConfig = (props: {
                     </div>
                 );
             }
+
+            if (canEditDairyLisCodes(ann, currentUser)) {
+                return (
+                    <div className="flex justify-center gap-1">
+                        <button
+                            onClick={() => (onEditLisCodes || onEdit)?.(ann)}
+                            className="px-2 py-1 bg-teal-600 text-white rounded-md text-xs"
+                            title="فقط ثبت یا ویرایش کد LIS مقاصد"
+                        >
+                            ثبت کد LIS
+                        </button>
+                        {props.onOpenHistory && (
+                            <button
+                                onClick={() => props.onOpenHistory!(ann.id, ann.announcementCode)}
+                                className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"
+                                title="مشاهده تاریخچه تغییرات"
+                            >
+                                <HistoryIcon className="w-4 h-4" />
+                                <span>تاریخچه</span>
+                            </button>
+                        )}
+                    </div>
+                );
+            }
             
             // برای Archived: ویرایش و ارجاع (برای بازگرداندن به چرخه)
             if ((currentUser?.role === UserRole.PlanningEmployee || currentUser?.role === UserRole.SalesExpert || currentUser?.role === UserRole.PlanningManager) && ann.status === FreightAnnouncementStatus.Archived) {
@@ -1140,6 +1228,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelData, setPanelData] = useState<FreightAnnouncement | null>(null); // null for new, object for edit
     const [panelLineType, setPanelLineType] = useState<FreightLineType>(FreightLineType.IceCream);
+    const [panelLisCodeOnly, setPanelLisCodeOnly] = useState(false);
 
     const [rejectInfo, setRejectInfo] = useState<{ id: string; reason: string } | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -1255,17 +1344,26 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     const handleOpenCreatePanel = useCallback(() => {
         // Create mode: no preset data object to avoid accidental edit-mode
         setPanelData(null);
+        setPanelLisCodeOnly(false);
         setPanelLineType(activeTab);
         setIsPanelOpen(true);
     }, [activeTab]);
 
     const handleOpenEditPanel = useCallback((ann: FreightAnnouncement) => {
         setPanelData(ann);
+        setPanelLisCodeOnly(false);
+        setIsPanelOpen(true);
+    }, []);
+
+    const handleOpenLisCodePanel = useCallback((ann: FreightAnnouncement) => {
+        setPanelData(ann);
+        setPanelLisCodeOnly(true);
         setIsPanelOpen(true);
     }, []);
     
     const handleClosePanel = useCallback(() => {
         setIsPanelOpen(false);
+        setPanelLisCodeOnly(false);
     }, []);
 
     const handleOpenHistory = useCallback((announcementId: string, announcementCode: string) => {
@@ -1465,6 +1563,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             onApprove, 
             onReject: handleOpenRejectDialog, 
             onEdit: handleOpenEditPanel, 
+            onEditLisCodes: handleOpenLisCodePanel,
             onSendForApproval: handleSendForApproval, 
             onDelete: onDelete,
             changeRequests: changeRequests,
@@ -1478,7 +1577,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         });
         try { console.log('[DBG][FreightDashboard] allColumns headers:', cols.map((c:any)=>c.header)); } catch {}
         return cols;
-    }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleSendForApproval, onDelete, onReAnnounce, selectedIds]);
+    }, [props, onApprove, handleOpenRejectDialog, handleOpenEditPanel, handleOpenLisCodePanel, handleSendForApproval, onDelete, onReAnnounce, selectedIds]);
 
     useEffect(() => {
         if (routeSearchTimeout.current) {
@@ -2038,6 +2137,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             onOpenHistory: handleOpenHistory,
             currentUser,
             onEdit: handleOpenEditPanel,
+            onEditLisCodes: handleOpenLisCodePanel,
             onSendForApproval: handleSendForApproval,
             onDelete,
             onApprove,
@@ -2053,6 +2153,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             onRejectChangeRequest,
             onArchiveChangeRequest,
             currentUser,
+            handleOpenEditPanel,
+            handleOpenLisCodePanel,
+            handleSendForApproval,
             onDelete,
             onApprove,
             onReAnnounce,
@@ -2569,6 +2672,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             <AnnouncementPanel
                 isOpen={isPanelOpen}
                 data={panelData}
+                lisCodeOnlyMode={panelLisCodeOnly}
                 initialLineType={panelLineType}
                 onClose={handleClosePanel}
                 onSaveNew={onAddAnnouncement}
@@ -2629,6 +2733,7 @@ const RejectDialog: React.FC<{reason: string, onReasonChange: (r: string) => voi
 const AnnouncementPanel: React.FC<{
     isOpen: boolean;
     data: FreightAnnouncement | null;
+    lisCodeOnlyMode?: boolean;
     onClose: () => void;
     onSaveNew: Function;
     onSaveEdit: (data: FreightAnnouncement) => void;
@@ -2637,7 +2742,7 @@ const AnnouncementPanel: React.FC<{
     currentUser?: User;
     allowedLineTypes?: FreightLineType[];
     initialLineType?: FreightLineType;
-}> = ({ isOpen, data, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [], initialLineType }) => {
+}> = ({ isOpen, data, lisCodeOnlyMode = false, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [], initialLineType }) => {
     const isEditMode = !!(data && data.id);
     
     const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: 0, vehicleType: '', notes: '' };
@@ -2670,10 +2775,19 @@ const AnnouncementPanel: React.FC<{
     const isDairyCollaboratorEditor =
         currentUser?.role === UserRole.PlanningEmployee ||
         currentUser?.role === UserRole.SalesExpert;
+    const isDairyLisCodeOnlyEdit =
+        Boolean(lisCodeOnlyMode && isEditMode && data?.lineType === FreightLineType.Dairy);
     const isDairyNextDestEdit =
-        isEditMode && data?.lineType === FreightLineType.Dairy && isDairyCollaboratorEditor;
-    const isDestinationLocked = (id?: string) =>
-        Boolean(isDairyNextDestEdit && id && lockedDestinationIds.has(id));
+        isEditMode &&
+        data?.lineType === FreightLineType.Dairy &&
+        isDairyCollaboratorEditor &&
+        !isDairyLisCodeOnlyEdit;
+    const lockSharedAnnouncementFields = isDairyNextDestEdit || isDairyLisCodeOnlyEdit;
+    const isDestinationLocked = (id?: string) => {
+        if (!id) return false;
+        if (isDairyLisCodeOnlyEdit) return true;
+        return Boolean(isDairyNextDestEdit && lockedDestinationIds.has(id));
+    };
     const lockedFieldClass = 'bg-slate-100 text-slate-600 cursor-not-allowed';
     const currentUserId = String(currentUser?.id || '');
     const resolveDestinationOwnerId = (dest: Partial<Destination>, announcement?: FreightAnnouncement | null) => {
@@ -2925,17 +3039,25 @@ const AnnouncementPanel: React.FC<{
                         if (d.id) cityValidity[d.id] = !!d.city?.trim();
                     });
                     setDestCityValid(cityValidity);
-                    if (data.lineType === FreightLineType.Dairy && isDairyCollaboratorEditor) {
-                        // فقط مقصدهایی که مال کاربر دیگری است قفل می‌شوند
-                        const locked = new Set<string>();
-                        finalDests.forEach((d) => {
-                            if (!d.id) return;
-                            const ownerId = resolveDestinationOwnerId(d, data);
-                            if (ownerId && ownerId !== currentUserId) {
-                                locked.add(d.id);
-                            }
-                        });
-                        setLockedDestinationIds(locked);
+                    if (data.lineType === FreightLineType.Dairy && (isDairyCollaboratorEditor || lisCodeOnlyMode)) {
+                        if (lisCodeOnlyMode) {
+                            const locked = new Set<string>();
+                            finalDests.forEach((d) => {
+                                if (d.id) locked.add(d.id);
+                            });
+                            setLockedDestinationIds(locked);
+                        } else {
+                            // فقط مقصدهایی که مال کاربر دیگری است قفل می‌شوند
+                            const locked = new Set<string>();
+                            finalDests.forEach((d) => {
+                                if (!d.id) return;
+                                const ownerId = resolveDestinationOwnerId(d, data);
+                                if (ownerId && ownerId !== currentUserId) {
+                                    locked.add(d.id);
+                                }
+                            });
+                            setLockedDestinationIds(locked);
+                        }
                     } else {
                         setLockedDestinationIds(new Set());
                     }
@@ -2957,7 +3079,7 @@ const AnnouncementPanel: React.FC<{
                 }
             }
         }
-    }, [data, isOpen, currentUser, allowedLineTypes]);
+    }, [data, isOpen, currentUser, allowedLineTypes, lisCodeOnlyMode]);
 
     useEffect(() => {
         // Only run for new announcements and when lineType changes
@@ -3019,6 +3141,7 @@ const AnnouncementPanel: React.FC<{
     }, [loadingLocationState.originCity1]);
 
     const addDestination = () => {
+        if (isDairyLisCodeOnlyEdit) return;
         if (destinations.length < 4) {
             const newDest =
                 lineType === FreightLineType.Dairy
@@ -3086,6 +3209,35 @@ const AnnouncementPanel: React.FC<{
 
     const handleSubmit = (e: React.FormEvent, isDraft: boolean = false) => {
         e.preventDefault();
+
+        if (isDairyLisCodeOnlyEdit && isEditMode && data?.id) {
+            const destinationsForLis = destinations
+                .filter((d) => d.id)
+                .map((d) => ({
+                    id: d.id!,
+                    lisCode: (d.lisCode || '').trim(),
+                    city: d.city,
+                    representativeName: d.representativeName,
+                    representativeType: d.representativeType,
+                    tonnage: d.tonnage,
+                    unloadTime: d.unloadTime,
+                    freightCost: d.freightCost,
+                    cargoValue: d.cargoValue,
+                    deliveryDate: d.deliveryDate,
+                    brandType: d.brandType,
+                    brand: d.brand,
+                    brand2: d.brand2,
+                    products: d.products,
+                }));
+            onSaveEdit({
+                ...data,
+                destinations: destinationsForLis as Destination[],
+                lisCodeOnly: true,
+            } as FreightAnnouncement & { lisCodeOnly?: boolean });
+            onClose();
+            return;
+        }
+
         let cargoValueInRials = commonState.cargoValue;
         if (lineType === FreightLineType.Dairy) {
             const dairyDestsForCargo = isDraft
@@ -3389,15 +3541,23 @@ const AnnouncementPanel: React.FC<{
             <aside className={`fixed top-0 right-0 h-full w-full sm:w-[44rem] bg-slate-50 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 <div className="p-4 border-b bg-white flex justify-between items-center">
                     <h3 className="text-lg font-bold">
-                        {isDairyNextDestEdit
-                            ? `افزودن مقصد بعدی #${data?.announcementCode}`
-                            : isEditMode
-                              ? `ویرایش اعلام بار #${data?.announcementCode}`
-                              : 'ثبت اعلام بار جدید'}
+                        {isDairyLisCodeOnlyEdit
+                            ? `ثبت کد LIS #${data?.announcementCode}`
+                            : isDairyNextDestEdit
+                              ? `افزودن مقصد بعدی #${data?.announcementCode}`
+                              : isEditMode
+                                ? `ویرایش اعلام بار #${data?.announcementCode}`
+                                : 'ثبت اعلام بار جدید'}
                     </h3>
                     <button onClick={onClose} className="text-2xl text-slate-500 hover:text-slate-800">&times;</button>
                 </div>
                 <form id="freight-form" onSubmit={(e) => handleSubmit(e, false)} className="flex-grow overflow-y-auto p-4 space-y-4">
+                    {isDairyLisCodeOnlyEdit && (
+                        <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900">
+                            پس از ارجاع فقط <strong>کد LIS</strong> هر مقصد قابل ثبت/ویرایش است. بقیه فیلدها قفل‌اند.
+                            پس از ذخیره، در پیگیری اعلام بار زنده برای همه به‌روز می‌شود.
+                        </div>
+                    )}
                     {isDairyNextDestEdit && (
                         <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
                             در ویرایش پاستوریزه می‌توانید مقصد خودتان را ویرایش کنید یا مقصد بعدی اضافه کنید.
@@ -3428,7 +3588,7 @@ const AnnouncementPanel: React.FC<{
                                                      allowedLineTypes.length === 3 ||
                                                      allowedLineTypes.includes(lt as any);
                                     const isEmployee = isFreightCreateRole(currentUser);
-                                    const isDisabled = isDairyNextDestEdit || (isEmployee && !isAllowed);
+                                    const isDisabled = lockSharedAnnouncementFields || (isEmployee && !isAllowed);
                                     
                                     return (
                                         <button 
@@ -3446,8 +3606,8 @@ const AnnouncementPanel: React.FC<{
                                                         : 'bg-slate-200 hover:bg-slate-300'
                                             }`}
                                             title={
-                                                isDairyNextDestEdit
-                                                    ? 'در ویرایش پاستوریزه نوع لاین قابل تغییر نیست'
+                                                lockSharedAnnouncementFields
+                                                    ? 'در این حالت نوع لاین قابل تغییر نیست'
                                                     : isDisabled
                                                       ? 'شما مجوز ایجاد اعلام بار برای این لاین را ندارید'
                                                       : ''
@@ -3473,9 +3633,9 @@ const AnnouncementPanel: React.FC<{
                                     type="text" 
                                     placeholder="1404/09/18" 
                                     value={commonState.loadingDate} 
-                                    disabled={isDairyNextDestEdit}
+                                    disabled={lockSharedAnnouncementFields}
                                     onChange={e => {
-                                        if (isDairyNextDestEdit) return;
+                                        if (lockSharedAnnouncementFields) return;
                                         let value = e.target.value.replace(/[^\d\/]/g, '');
                                         // اعمال خودکار فرمت YYYY/MM/DD
                                         if (value.length > 4 && !value.includes('/')) {
@@ -3493,7 +3653,7 @@ const AnnouncementPanel: React.FC<{
                                         }
                                     }} 
                                     onBlur={e => {
-                                        if (isDairyNextDestEdit) return;
+                                        if (lockSharedAnnouncementFields) return;
                                         // هنگام blur، فرمت را کامل کن (اضافه کردن صفرهای ابتدایی)
                                         const value = e.target.value;
                                         const parts = value.split('/');
@@ -3506,7 +3666,7 @@ const AnnouncementPanel: React.FC<{
                                             }
                                         }
                                     }}
-                                    className={`input-style mt-1${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
+                                    className={`input-style mt-1${lockSharedAnnouncementFields ? ` ${lockedFieldClass}` : ''}`}
                                     pattern="\d{4}\/\d{2}\/\d{2}"
                                     title="فرمت صحیح: 1404/09/18 (ماه و روز باید دو رقمی باشند)"
                                     required
@@ -3562,9 +3722,9 @@ const AnnouncementPanel: React.FC<{
                                 <select
                                     value={commonState.vehicleType}
                                     onChange={e => setCommonState(s=>({...s, vehicleType: e.target.value}))}
-                                    className={`input-style mt-1 w-full${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
+                                    className={`input-style mt-1 w-full${lockSharedAnnouncementFields ? ` ${lockedFieldClass}` : ''}`}
                                     required
-                                    disabled={isDairyNextDestEdit}
+                                    disabled={lockSharedAnnouncementFields}
                                 >
                                     <option value="">-- انتخاب کنید --</option>
                                     {VEHICLE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}
@@ -3904,15 +4064,15 @@ const AnnouncementPanel: React.FC<{
                             <div className="mb-3">
                                 <label className="text-xs font-semibold mb-2 block">نوع بارگیری</label>
                                 <div className="flex gap-4">
-                                    <label className={`flex items-center gap-2 ${isDairyNextDestEdit ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                                    <label className={`flex items-center gap-2 ${lockSharedAnnouncementFields ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                         <input
                                             type="radio"
                                             name="loadingType"
                                             value="single"
                                             checked={loadingLocationState.loadingType === 'single'}
-                                            disabled={isDairyNextDestEdit}
+                                            disabled={lockSharedAnnouncementFields}
                                             onChange={() => {
-                                                if (isDairyNextDestEdit) return;
+                                                if (lockSharedAnnouncementFields) return;
                                                 setLoadingLocationState(s => ({
                                                     ...s,
                                                     loadingType: 'single' as 'single' | 'double',
@@ -3924,15 +4084,15 @@ const AnnouncementPanel: React.FC<{
                                         />
                                         <span className="text-xs">تک مبدا</span>
                                     </label>
-                                    <label className={`flex items-center gap-2 ${isDairyNextDestEdit ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                                    <label className={`flex items-center gap-2 ${lockSharedAnnouncementFields ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                         <input
                                             type="radio"
                                             name="loadingType"
                                             value="double"
                                             checked={loadingLocationState.loadingType === 'double'}
-                                            disabled={isDairyNextDestEdit}
+                                            disabled={lockSharedAnnouncementFields}
                                             onChange={(e) => {
-                                                if (isDairyNextDestEdit) return;
+                                                if (lockSharedAnnouncementFields) return;
                                                 setLoadingLocationState(s => ({ ...s, loadingType: 'double' as 'single' | 'double' }));
                                             }}
                                             className="cursor-pointer"
@@ -3948,11 +4108,11 @@ const AnnouncementPanel: React.FC<{
                                             cityOnlyLabels
                                             value={loadingLocationState.originCity1}
                                             onChange={(city) => {
-                                                if (isDairyNextDestEdit) return;
+                                                if (lockSharedAnnouncementFields) return;
                                                 onRouteQueryChange(city);
                                                 setLoadingLocationState(s => ({ ...s, originCity1: city }));
                                             }}
-                                            disabled={isDairyNextDestEdit}
+                                            disabled={lockSharedAnnouncementFields}
                                             placeholder="جستجوی مبدا..."
                                             className="input-style mt-1 w-full"
                                             required
@@ -3965,11 +4125,11 @@ const AnnouncementPanel: React.FC<{
                                                 cityOnlyLabels
                                                 value={loadingLocationState.originCity1}
                                                 onChange={(city) => {
-                                                    if (isDairyNextDestEdit) return;
+                                                    if (lockSharedAnnouncementFields) return;
                                                     onRouteQueryChange(city);
                                                     setLoadingLocationState(s => ({ ...s, originCity1: city }));
                                                 }}
-                                                disabled={isDairyNextDestEdit}
+                                                disabled={lockSharedAnnouncementFields}
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
@@ -3980,13 +4140,13 @@ const AnnouncementPanel: React.FC<{
                                                 cityOnlyLabels
                                                 value={loadingLocationState.originCity2}
                                                 onChange={(city) => {
-                                                    if (isDairyNextDestEdit) return;
+                                                    if (lockSharedAnnouncementFields) return;
                                                     onRouteQueryChange(city);
                                                     setLoadingLocationState(s => ({ ...s, originCity2: city }));
                                                 }}
                                                 onValidityChange={setOriginCity2Valid}
                                                 requireSelection
-                                                disabled={isDairyNextDestEdit}
+                                                disabled={lockSharedAnnouncementFields}
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
                                                 required
@@ -3999,8 +4159,8 @@ const AnnouncementPanel: React.FC<{
                                 <select
                                     value={multiDestState.platformArrivalTime}
                                     onChange={e=>setMultiDestState(s=>({...s, platformArrivalTime: e.target.value}))}
-                                    className={`input-style mt-1${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
-                                    disabled={isDairyNextDestEdit}
+                                    className={`input-style mt-1${lockSharedAnnouncementFields ? ` ${lockedFieldClass}` : ''}`}
+                                    disabled={lockSharedAnnouncementFields}
                                 >
                                     <option value="">-- انتخاب کنید --</option>
                                     {Array.from({ length: 24 }, (_, i) => (
@@ -4088,6 +4248,7 @@ const AnnouncementPanel: React.FC<{
                                 {destinations.map((dest, index) => {
                                     const destLocked = isDestinationLocked(dest.id);
                                     const canReorderDest =
+                                        !isDairyLisCodeOnlyEdit &&
                                         destinations.length > 1 &&
                                         (!isDairyNextDestEdit || !destLocked);
                                     return (
@@ -4117,7 +4278,9 @@ const AnnouncementPanel: React.FC<{
                                                 </>
                                             )}
                                             {destLocked && (
-                                                <span className="text-[10px] text-slate-500 mr-1">مقصد همکار (قفل)</span>
+                                                <span className="text-[10px] text-slate-500 mr-1">
+                                                    {isDairyLisCodeOnlyEdit ? 'فقط کد LIS' : 'مقصد همکار (قفل)'}
+                                                </span>
                                             )}
                                             {!destLocked && destinations.length > 1 && (
                                                 <button type="button" onClick={() => removeDestination(dest.id!)} className="text-red-500 text-xs mr-1">حذف</button>
@@ -4187,12 +4350,21 @@ const AnnouncementPanel: React.FC<{
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs">کد LIS{destLocked ? ' (قابل ویرایش)' : ''}</label>
+                                                        <label className="text-xs">
+                                                            کد LIS
+                                                            {destLocked || isDairyLisCodeOnlyEdit ? ' (قابل ویرایش)' : ''}
+                                                        </label>
                                                         <input
                                                             value={dest.lisCode || ''}
                                                             onChange={(e) => handleDestinationChange(dest.id!, 'lisCode', e.target.value)}
-                                                            className="input-style"
-                                                            title={destLocked ? 'کد LIS روی مقصد همکار قابل ویرایش است' : undefined}
+                                                            className={`input-style${isDairyLisCodeOnlyEdit ? ' ring-2 ring-teal-400 border-teal-400' : ''}`}
+                                                            title={
+                                                                isDairyLisCodeOnlyEdit
+                                                                    ? 'فقط این فیلد قابل ویرایش است'
+                                                                    : destLocked
+                                                                      ? 'کد LIS روی مقصد همکار قابل ویرایش است'
+                                                                      : undefined
+                                                            }
                                                         />
                                                     </div>
                                                     <div>
@@ -4379,7 +4551,7 @@ const AnnouncementPanel: React.FC<{
                                     </div>
                                     );
                                 })}
-                                {destinations.length < 4 && (
+                                {destinations.length < 4 && !isDairyLisCodeOnlyEdit && (
                                     <button type="button" onClick={addDestination} className="text-sm text-sky-600 hover:underline mt-2">
                                         {isDairyNextDestEdit ? '+ افزودن مقصد بعدی' : '+ افزودن مقصد'}
                                     </button>
@@ -4395,10 +4567,10 @@ const AnnouncementPanel: React.FC<{
                             value={commonState.notes}
                             onChange={e => setCommonState(s=>({...s, notes: e.target.value}))}
                             placeholder="..."
-                            className={`input-style w-full${isDairyNextDestEdit ? ` ${lockedFieldClass}` : ''}`}
+                            className={`input-style w-full${lockSharedAnnouncementFields ? ` ${lockedFieldClass}` : ''}`}
                             rows={2}
-                            disabled={isDairyNextDestEdit}
-                            readOnly={isDairyNextDestEdit}
+                            disabled={lockSharedAnnouncementFields}
+                            readOnly={lockSharedAnnouncementFields}
                         />
                     </fieldset>
                 </form>
@@ -4406,11 +4578,13 @@ const AnnouncementPanel: React.FC<{
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-sm">بستن</button>
                     {!isEditMode && <button type="button" onClick={(e) => handleSubmit(e, true)} className="px-4 py-2 bg-slate-600 text-white rounded-md text-sm">ذخیره پیش‌نویس</button>}
                     <button type="submit" form="freight-form" className="px-4 py-2 bg-sky-600 text-white rounded-md text-sm">
-                        {isDairyNextDestEdit
-                            ? 'ذخیره مقصد'
-                            : isEditMode
-                              ? 'ذخیره تغییرات'
-                              : (isSalesExpertUser(currentUser) ? 'ثبت و ارسال به ترابری' : 'ثبت و ارجاع')}
+                        {isDairyLisCodeOnlyEdit
+                            ? 'ذخیره کد LIS'
+                            : isDairyNextDestEdit
+                              ? 'ذخیره مقصد'
+                              : isEditMode
+                                ? 'ذخیره تغییرات'
+                                : (isSalesExpertUser(currentUser) ? 'ثبت و ارسال به ترابری' : 'ثبت و ارجاع')}
                     </button>
                 </div>
                 <datalist id="cities">

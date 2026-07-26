@@ -1,21 +1,40 @@
 /**
  * API Configuration
- * 
- * این فایل آدرس پایه API را از متغیرهای محیطی می‌خواند.
+ *
  * در محیط توسعه: VITE_API_BASE_URL=http://localhost:3000/api/v1
- * در محیط پروداکشن: VITE_API_BASE_URL=/api/v1
+ * در محیط پروداکشن: VITE_API_BASE_URL=/api/v1  (نسبی — همان پروتکل صفحه)
+ *
+ * توجه: بعضی شبکه‌های داخلی فقط پورت 80 (HTTP) دارند و 443 بسته است.
+ * اگر base مطلق https باشد ولی صفحه روی http باز شده، به مسیر نسبی برمی‌گردیم.
  */
 
-// خواندن متغیر محیطی - در صورت عدم وجود، از مقدار پیش‌فرض استفاده می‌شود
-// در production: باید /api/v1 باشد (آدرس نسبی)
-// در development: باید http://localhost:3000/api/v1 باشد (آدرس کامل)
 const envUrl = import.meta.env.VITE_API_BASE_URL;
-const API_BASE_URL = envUrl || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:3000/api/v1');
+let API_BASE_URL = envUrl || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:3000/api/v1');
 
-// لاگ برای دیباگ (در همه محیط‌ها برای troubleshooting)
+/** اگر روی HTTP هستیم، base مطلق https همان هاست را به مسیر نسبی تبدیل کن */
+function preferSameOriginHttp(base: string): string {
+  if (typeof window === 'undefined') return base;
+  if (window.location.protocol !== 'http:') return base;
+  const trimmed = (base || '').trim();
+  if (!trimmed.startsWith('https://')) return trimmed;
+  try {
+    const u = new URL(trimmed);
+    if (u.hostname === window.location.hostname) {
+      const path = (u.pathname || '/').replace(/\/$/, '') || '';
+      return path || '/api/v1';
+    }
+  } catch {
+    /* ignore */
+  }
+  return trimmed;
+}
+
+API_BASE_URL = preferSameOriginHttp(API_BASE_URL);
+
 console.log('🔧 [API Config] Mode:', import.meta.env.MODE);
 console.log('🔧 [API Config] VITE_API_BASE_URL from env:', envUrl || '(not set)');
 console.log('🔧 [API Config] Final API_BASE_URL:', API_BASE_URL);
+console.log('🔧 [API Config] Page protocol:', typeof window !== 'undefined' ? window.location.protocol : 'ssr');
 
 /**
  * تابع کمکی برای ساخت URL کامل API
@@ -23,14 +42,24 @@ console.log('🔧 [API Config] Final API_BASE_URL:', API_BASE_URL);
  * @returns URL کامل برای درخواست API
  */
 export const getApiUrl = (endpoint: string): string => {
-  // حذف اسلش اولیه اگر وجود دارد
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-  
-  // اگر API_BASE_URL با اسلش تمام می‌شود، اسلش اضافی اضافه نکن
-  const baseUrl = API_BASE_URL.endsWith('/') 
-    ? API_BASE_URL.slice(0, -1) 
-    : API_BASE_URL;
-  
+  const baseUrl = preferSameOriginHttp(
+    API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
+  );
+
+  // اگر هنوز مطلق https برای همین هاست بود، فقط path را برگردان
+  if (baseUrl.startsWith('https://') && typeof window !== 'undefined' && window.location.protocol === 'http:') {
+    try {
+      const u = new URL(baseUrl);
+      if (u.hostname === window.location.hostname) {
+        const path = u.pathname.replace(/\/$/, '');
+        return `${path}/${cleanEndpoint}`;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
   return `${baseUrl}/${cleanEndpoint}`;
 };
 

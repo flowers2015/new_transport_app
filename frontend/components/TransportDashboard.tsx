@@ -88,26 +88,35 @@ interface AssignmentStatisticsResponse {
     };
 }
 
-interface RepresentativeStatisticsData {
-    representativeName: string;
-    city: string;
-    lineType: string;
-    totalFreights: number;
-    companyCount: number;
+interface LineFreightCell {
     personalCount: number;
-    totalPersonalFreightCost: number;
-    unpaidInvoiceCount: number;
-    unpaidAmount: number;
+    personalFreightCost: number;
+    companyCount: number;
+}
+
+interface RepresentativeStatisticsData {
+    city: string;
+    province: string;
+    totalVehicles: number;
+    personalCount: number;
+    companyCount: number;
+    totalFreightCost: number;
+    lines: {
+        iceCream: LineFreightCell;
+        dairy: LineFreightCell;
+        ambient: LineFreightCell;
+    };
 }
 
 interface RepresentativeDetailData {
     id: string;
     announcementCode: string;
     loadingDate: string;
+    announcedAt?: string | null;
     lineType: string;
     assignmentType: string;
     totalFreightCost: number;
-    destinationFreightCost?: number; // کرایه مقصد خاص (مشهد)
+    destinationFreightCost?: number;
     assignedAt: string | null;
     destinations?: Array<{
         id: string | null;
@@ -206,9 +215,17 @@ interface TransportDashboardProps {
     onTimeRangeChange: (range: 'day' | 'month' | 'year') => void;
     onRefresh: () => void;
     representativeStats: RepresentativeStatisticsData[];
+    representativeAvailableProvinces: string[];
+    representativeAvailableVehicleTypes: string[];
+    representativeSelectedProvinces: string[];
+    representativeSelectedRepTypes: string[];
+    representativeSelectedVehicleTypes: string[];
+    onRepresentativeSelectedProvincesChange: (provinces: string[]) => void;
+    onRepresentativeSelectedRepTypesChange: (types: string[]) => void;
+    onRepresentativeSelectedVehicleTypesChange: (types: string[]) => void;
     representativeStatsLoading: boolean;
     representativeStatsError: string | null;
-    onFetchRepresentativeDetails: (representativeName: string, city: string, lineType?: string) => Promise<RepresentativeDetailData[]>;
+    onFetchRepresentativeDetails: (city: string, lineType?: string) => Promise<RepresentativeDetailData[]>;
     lineAnalytics: LineAnalyticsItem[];
     lineAnalyticsMeta: LineAnalyticsMeta | null;
     lineAnalyticsLoading: boolean;
@@ -1122,6 +1139,14 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     onTimeRangeChange,
     onRefresh,
     representativeStats,
+    representativeAvailableProvinces,
+    representativeAvailableVehicleTypes,
+    representativeSelectedProvinces,
+    representativeSelectedRepTypes,
+    representativeSelectedVehicleTypes,
+    onRepresentativeSelectedProvincesChange,
+    onRepresentativeSelectedRepTypesChange,
+    onRepresentativeSelectedVehicleTypesChange,
     representativeStatsLoading,
     representativeStatsError,
     onFetchRepresentativeDetails,
@@ -1240,13 +1265,6 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
 
     // استخراج month برای analytics
     const analyticsMonth = parseMonthFromJalaliDate(analyticsStartDate);
-    
-    // استخراج props برای RepresentativeStatisticsTable
-    const representativeDateParsed = parseJalaliDate(representativeStartDate);
-    const representativeYear = representativeDateParsed?.year || selectedYear;
-    const representativeMonth = representativeDateParsed?.month || null;
-    const representativeDay = representativeDateParsed?.day || null;
-    const representativeTimeRange = detectTimeRange(representativeStartDate, representativeEndDate);
 
     // Fetch daily statistics - memoized to prevent re-creation
     const fetchDailyStats = React.useCallback(async () => {
@@ -2239,13 +2257,17 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             {/* Representative Statistics Table */}
                             <RepresentativeStatisticsTable
                                 stats={representativeStats}
+                                availableProvinces={representativeAvailableProvinces}
+                                availableVehicleTypes={representativeAvailableVehicleTypes}
+                                selectedProvinces={representativeSelectedProvinces}
+                                selectedRepTypes={representativeSelectedRepTypes}
+                                selectedVehicleTypes={representativeSelectedVehicleTypes}
+                                onSelectedProvincesChange={onRepresentativeSelectedProvincesChange}
+                                onSelectedRepTypesChange={onRepresentativeSelectedRepTypesChange}
+                                onSelectedVehicleTypesChange={onRepresentativeSelectedVehicleTypesChange}
                                 loading={representativeStatsLoading}
                                 error={representativeStatsError}
                                 onFetchDetails={onFetchRepresentativeDetails}
-                                selectedYear={representativeYear}
-                                selectedMonth={representativeMonth}
-                                selectedDay={representativeDay}
-                                timeRange={representativeTimeRange}
                                 representativeStartDate={representativeStartDate}
                                 representativeEndDate={representativeEndDate}
                                 onRepresentativeStartDateChange={onRepresentativeStartDateChange}
@@ -2377,48 +2399,189 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
 };
 
 // Representative Statistics Table Component
+const REP_TYPE_OPTIONS = [
+    { value: 'agent', label: 'نماینده' },
+    { value: 'distributor', label: 'پخش' },
+    { value: 'organizational', label: 'سازمانی' },
+    { value: 'depot', label: 'دپو' },
+] as const;
+
+const emptyLineCell = (): LineFreightCell => ({
+    personalCount: 0,
+    personalFreightCost: 0,
+    companyCount: 0,
+});
+
+const MultiCheckDropdown: React.FC<{
+    label: string;
+    options: Array<{ value: string; label: string }>;
+    selected: string[];
+    onChange: (next: string[]) => void;
+    allLabel?: string;
+    emptyOptionsLabel?: string;
+}> = ({ label, options, selected, onChange, allLabel = 'همه', emptyOptionsLabel = 'در حال بارگذاری...' }) => {
+    const [open, setOpen] = useState(false);
+    const allSelected =
+        options.length > 0 &&
+        options.every((o) => selected.includes(o.value));
+    const summary =
+        options.length === 0
+            ? emptyOptionsLabel
+            : allSelected
+              ? allLabel
+              : selected.length === 0
+                ? 'هیچکدام'
+                : `${selected.length} مورد`;
+
+    return (
+        <div className="relative flex-1 min-w-[160px]">
+            <label className="block text-sm font-medium text-slate-700 mb-2">{label}</label>
+            <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-right bg-white hover:bg-slate-50"
+            >
+                {summary}
+            </button>
+            {open && (
+                <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg p-2 space-y-1">
+                    {options.length === 0 ? (
+                        <div className="text-xs text-slate-500 px-1 py-2">{emptyOptionsLabel}</div>
+                    ) : (
+                        <>
+                            <label className="flex items-center gap-2 text-xs px-1 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    onChange={(e) => {
+                                        onChange(e.target.checked ? options.map((o) => o.value) : []);
+                                    }}
+                                />
+                                <span>{allLabel}</span>
+                            </label>
+                            <div className="border-t border-slate-100 my-1" />
+                            {options.map((opt) => {
+                                const checked = selected.includes(opt.value);
+                                return (
+                                    <label
+                                        key={opt.value}
+                                        className="flex items-center gap-2 text-xs px-1 py-1 hover:bg-slate-50 rounded cursor-pointer"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    onChange(Array.from(new Set([...selected, opt.value])));
+                                                } else {
+                                                    onChange(selected.filter((v) => v !== opt.value));
+                                                }
+                                            }}
+                                        />
+                                        <span>{opt.label}</span>
+                                    </label>
+                                );
+                            })}
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const PersonalLineCell: React.FC<{ cell?: LineFreightCell }> = ({ cell }) => {
+    const c = cell || emptyLineCell();
+    const formatCurrency = (amount: number) => new Intl.NumberFormat('fa-IR').format(amount || 0);
+    if (!c.personalCount && !c.personalFreightCost) {
+        return <span className="text-slate-300 text-xs">—</span>;
+    }
+    return (
+        <div className="text-center leading-tight">
+            <div className="text-sm font-semibold text-slate-800 tabular-nums" dir="ltr">
+                {c.personalCount}
+            </div>
+            <div className="text-[11px] text-emerald-700 tabular-nums" dir="ltr">
+                {formatCurrency(c.personalFreightCost)}
+            </div>
+        </div>
+    );
+};
+
+const CompanyLineCell: React.FC<{ cell?: LineFreightCell }> = ({ cell }) => {
+    const c = cell || emptyLineCell();
+    if (!c.companyCount) {
+        return <span className="text-slate-300 text-xs">—</span>;
+    }
+    return (
+        <div className="text-center text-sm font-semibold text-sky-800 tabular-nums" dir="ltr">
+            {c.companyCount}
+        </div>
+    );
+};
+
 const RepresentativeStatisticsTable: React.FC<{
     stats: RepresentativeStatisticsData[];
+    availableProvinces: string[];
+    availableVehicleTypes: string[];
+    selectedProvinces: string[];
+    selectedRepTypes: string[];
+    selectedVehicleTypes: string[];
+    onSelectedProvincesChange: (provinces: string[]) => void;
+    onSelectedRepTypesChange: (types: string[]) => void;
+    onSelectedVehicleTypesChange: (types: string[]) => void;
     loading: boolean;
     error: string | null;
-    onFetchDetails: (representativeName: string, city: string, lineType?: string) => Promise<RepresentativeDetailData[]>;
-    selectedYear: number;
-    selectedMonth: number | null;
-    selectedDay: number | null;
-    timeRange: 'day' | 'month' | 'year';
+    onFetchDetails: (city: string, lineType?: string) => Promise<RepresentativeDetailData[]>;
     representativeStartDate: string;
     representativeEndDate: string;
     onRepresentativeStartDateChange: (date: string) => void;
     onRepresentativeEndDateChange: (date: string) => void;
     onFetchRepresentativeStatistics: () => Promise<void>;
-}> = ({ stats, loading, error, onFetchDetails, selectedYear, selectedMonth, selectedDay, timeRange, representativeStartDate, representativeEndDate, onRepresentativeStartDateChange, onRepresentativeEndDateChange, onFetchRepresentativeStatistics }) => {
-    const [selectedRepresentative, setSelectedRepresentative] = useState<{ name: string; city: string; lineType?: string } | null>(null);
+}> = ({
+    stats,
+    availableProvinces,
+    availableVehicleTypes,
+    selectedProvinces,
+    selectedRepTypes,
+    selectedVehicleTypes,
+    onSelectedProvincesChange,
+    onSelectedRepTypesChange,
+    onSelectedVehicleTypesChange,
+    loading,
+    error,
+    onFetchDetails,
+    representativeStartDate,
+    representativeEndDate,
+    onRepresentativeStartDateChange,
+    onRepresentativeEndDateChange,
+    onFetchRepresentativeStatistics,
+}) => {
+    const [selectedCity, setSelectedCity] = useState<string | null>(null);
     const [details, setDetails] = useState<RepresentativeDetailData[]>([]);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
-    const [filterRepresentative, setFilterRepresentative] = useState<string>('');
-    const [filterCity, setFilterCity] = useState<string>('');
-    const [filterLine, setFilterLine] = useState<string>('');
-    const [statsPage, setStatsPage] = useState<number>(1);
-    const [statsPageSize, setStatsPageSize] = useState<number>(10);
-    const [detailsSearch, setDetailsSearch] = useState<string>('');
-    const [detailsLineFilter, setDetailsLineFilter] = useState<string>('');
-    const [detailsPage, setDetailsPage] = useState<number>(1);
-    const [detailsPageSize, setDetailsPageSize] = useState<number>(10);
+    const [filterCity, setFilterCity] = useState('');
+    const [statsPage, setStatsPage] = useState(1);
+    const [statsPageSize, setStatsPageSize] = useState(10);
+    const [detailsSearch, setDetailsSearch] = useState('');
+    const [detailsLineFilter, setDetailsLineFilter] = useState('');
+    const [detailsPage, setDetailsPage] = useState(1);
+    const [detailsPageSize, setDetailsPageSize] = useState(10);
 
-    const handleShowDetails = async (representativeName: string, city: string, lineType?: string) => {
-        setSelectedRepresentative({ name: representativeName, city, lineType });
+    const formatCurrency = (amount: number) => new Intl.NumberFormat('fa-IR').format(amount || 0);
+
+    const handleShowDetails = async (city: string) => {
+        setSelectedCity(city);
         setDetailsLoading(true);
         setDetailsError(null);
         setDetailsSearch('');
         setDetailsLineFilter('');
         setDetailsPage(1);
-        setDetailsPageSize(10);
         setShowDetailsModal(true);
-        
         try {
-            const data = await onFetchDetails(representativeName, city, lineType);
+            const data = await onFetchDetails(city);
             setDetails(data);
         } catch (err: any) {
             setDetailsError(err.message || 'خطا در دریافت جزئیات');
@@ -2427,41 +2590,41 @@ const RepresentativeStatisticsTable: React.FC<{
         }
     };
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('fa-IR').format(amount);
-    };
-
-    const getTimeRangeLabel = () => {
-        if (timeRange === 'day' && selectedYear && selectedMonth && selectedDay) {
-            return `${selectedYear}/${String(selectedMonth).padStart(2, '0')}/${String(selectedDay).padStart(2, '0')}`;
-        } else if (timeRange === 'month' && selectedYear && selectedMonth) {
-            return `${selectedYear}/${String(selectedMonth).padStart(2, '0')}`;
-        } else if (timeRange === 'year' && selectedYear) {
-            return `${selectedYear}`;
+    const filteredStats = stats.filter((stat) => {
+        if (filterCity && !stat.city?.toLowerCase().includes(filterCity.toLowerCase())) return false;
+        if (
+            selectedProvinces.length > 0 &&
+            availableProvinces.length > 0 &&
+            selectedProvinces.length < availableProvinces.length &&
+            !selectedProvinces.includes(stat.province)
+        ) {
+            return false;
         }
-        return 'همه';
-    };
+        return true;
+    });
 
-    // تابع برای تولید محتوای CSV/Excel
-    const generateExcelContent = (data: RepresentativeStatisticsData[], timeRangeLabel: string) => {
+    const totalPages = Math.max(1, Math.ceil(filteredStats.length / statsPageSize));
+    const startIndex = (statsPage - 1) * statsPageSize;
+    const paginatedStats = filteredStats.slice(startIndex, startIndex + statsPageSize);
+
+    const generateExcelContent = (data: RepresentativeStatisticsData[]) => {
         const headers = [
-            'نماینده/پخش',
             'شهر',
-            'لاین',
-            'تعداد ارسال',
-            'شرکتی',
+            'استان',
+            'تعداد تور',
             'شخصی',
-            'جمع کرایه شخصی',
-            'بارنامه پرداخت نشده',
-            'مبلغ پرداخت نشده'
+            'شرکتی',
+            'مجموع کرایه',
+            'شخصی-بستنی تعداد',
+            'شخصی-بستنی کرایه',
+            'شخصی-پاستوریزه تعداد',
+            'شخصی-پاستوریزه کرایه',
+            'شخصی-لبنیات تعداد',
+            'شخصی-لبنیات کرایه',
+            'شرکتی-بستنی',
+            'شرکتی-پاستوریزه',
+            'شرکتی-لبنیات',
         ];
-
-        // تبدیل اعداد فارسی به انگلیسی برای Excel
-        const toEnglishNumber = (num: number) => {
-            return num.toString().replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
-        };
-
-        // Escape کردن مقادیر برای CSV
         const escapeCSV = (value: string | number) => {
             const str = String(value);
             if (str.includes(',') || str.includes('"') || str.includes('\n')) {
@@ -2469,49 +2632,35 @@ const RepresentativeStatisticsTable: React.FC<{
             }
             return str;
         };
-
-        // هدرها
-        let csv = '\uFEFF'; // BOM برای UTF-8
-        csv += headers.map(h => escapeCSV(h)).join(',') + '\n';
-
-        // داده‌ها
-        data.forEach(stat => {
-            const row = [
-                stat.representativeName || 'پخش',
-                stat.city,
-                stat.lineType || '-',
-                toEnglishNumber(stat.totalFreights),
-                toEnglishNumber(stat.companyCount),
-                toEnglishNumber(stat.personalCount),
-                toEnglishNumber(stat.totalPersonalFreightCost),
-                toEnglishNumber(stat.unpaidInvoiceCount),
-                toEnglishNumber(stat.unpaidAmount)
-            ];
-            csv += row.map(cell => escapeCSV(cell)).join(',') + '\n';
+        let csv = '\uFEFF' + headers.map(escapeCSV).join(',') + '\n';
+        data.forEach((stat) => {
+            const ice = stat.lines?.iceCream || emptyLineCell();
+            const dairy = stat.lines?.dairy || emptyLineCell();
+            const ambient = stat.lines?.ambient || emptyLineCell();
+            csv +=
+                [
+                    stat.city,
+                    stat.province,
+                    stat.totalVehicles,
+                    stat.personalCount,
+                    stat.companyCount,
+                    stat.totalFreightCost,
+                    ice.personalCount,
+                    ice.personalFreightCost,
+                    dairy.personalCount,
+                    dairy.personalFreightCost,
+                    ambient.personalCount,
+                    ambient.personalFreightCost,
+                    ice.companyCount,
+                    dairy.companyCount,
+                    ambient.companyCount,
+                ]
+                    .map(escapeCSV)
+                    .join(',') + '\n';
         });
-
-        // خلاصه کل
-        const totalPersonalFreightCost = data.reduce((sum, s) => sum + (s.totalPersonalFreightCost || 0), 0);
-        const totalUnpaidAmount = data.reduce((sum, s) => sum + (s.unpaidAmount || 0), 0);
-        const totalFreights = data.reduce((sum, s) => sum + (s.totalFreights || 0), 0);
-        const totalCompany = data.reduce((sum, s) => sum + (s.companyCount || 0), 0);
-        const totalPersonal = data.reduce((sum, s) => sum + (s.personalCount || 0), 0);
-        const totalUnpaidInvoices = data.reduce((sum, s) => sum + (s.unpaidInvoiceCount || 0), 0);
-
-        csv += '\n';
-        csv += 'خلاصه کل,' + escapeCSV(timeRangeLabel) + ',,,,,,\n';
-        csv += 'جمع کل,' + escapeCSV('') + ',' + escapeCSV('') + ',' + 
-               toEnglishNumber(totalFreights) + ',' + 
-               toEnglishNumber(totalCompany) + ',' + 
-               toEnglishNumber(totalPersonal) + ',' + 
-               toEnglishNumber(totalPersonalFreightCost) + ',' + 
-               toEnglishNumber(totalUnpaidInvoices) + ',' + 
-               toEnglishNumber(totalUnpaidAmount) + '\n';
-
         return csv;
     };
 
-    // تابع برای دانلود CSV
     const downloadCSV = (content: string, filename: string) => {
         const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
@@ -2524,59 +2673,13 @@ const RepresentativeStatisticsTable: React.FC<{
         document.body.removeChild(link);
     };
 
-    // فیلتر کردن داده‌ها بر اساس نماینده، شهر و لاین
-    const filteredStats = stats.filter(stat => {
-        const matchesRepresentative = !filterRepresentative || 
-            stat.representativeName?.toLowerCase().includes(filterRepresentative.toLowerCase()) ||
-            (stat.representativeName === '' && 'پخش'.includes(filterRepresentative.toLowerCase()));
-        const matchesCity = !filterCity || 
-            stat.city?.toLowerCase().includes(filterCity.toLowerCase());
-        const matchesLine = !filterLine || 
-            stat.lineType?.toLowerCase().includes(filterLine.toLowerCase());
-        return matchesRepresentative && matchesCity && matchesLine;
-    });
-
-    // استخراج لیست منحصر به فرد نمایندگان، شهرها و لاین‌ها برای فیلتر
-    const uniqueRepresentatives = Array.from(new Set(stats.map(s => s.representativeName || 'پخش'))).sort();
-    const uniqueCities = Array.from(new Set(stats.map(s => s.city))).sort();
-    const uniqueLines = Array.from(new Set(stats.map(s => s.lineType))).filter(Boolean).sort();
-
-    // گروه‌بندی بر اساس نماینده/شهر برای نمایش خلاصه
-    const groupedStats = filteredStats.reduce((acc, stat) => {
-        const key = `${stat.representativeName || 'پخش'}_${stat.city}`;
-        if (!acc[key]) {
-            acc[key] = {
-                representativeName: stat.representativeName || 'پخش',
-                city: stat.city,
-                items: [],
-                totalPersonalFreightCost: 0,
-                totalUnpaidAmount: 0
-            };
-        }
-        acc[key].items.push(stat);
-        acc[key].totalPersonalFreightCost += stat.totalPersonalFreightCost || 0;
-        acc[key].totalUnpaidAmount += stat.unpaidAmount || 0;
-        return acc;
-    }, {} as Record<string, {
-        representativeName: string;
-        city: string;
-        items: RepresentativeStatisticsData[];
-        totalPersonalFreightCost: number;
-        totalUnpaidAmount: number;
-    }>);
-
-    // تبدیل به آرایه و صفحه‌بندی
-    const groupedStatsArray = Object.values(groupedStats);
-    const totalPages = Math.ceil(groupedStatsArray.length / statsPageSize);
-    const startIndex = (statsPage - 1) * statsPageSize;
-    const paginatedGroups = groupedStatsArray.slice(startIndex, startIndex + statsPageSize);
-
     return (
         <>
             <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-                {/* Filters in one row */}
+                <div className="mb-3 text-xs text-slate-500">
+                    مبنای گزارش: <span className="font-semibold text-slate-700">تاریخ تخصیص</span>
+                </div>
                 <div className="flex flex-wrap gap-3 items-end mb-4">
-                    {/* Start Date Filter */}
                     <div className="flex-1 min-w-[140px]">
                         <label className="block text-sm font-medium text-slate-700 mb-2">از تاریخ (شمسی)</label>
                         <input
@@ -2584,17 +2687,13 @@ const RepresentativeStatisticsTable: React.FC<{
                             value={representativeStartDate}
                             onChange={(e) => {
                                 let value = e.target.value.replace(/[^\d\/]/g, '');
-                                if (value.length <= 10) {
-                                    onRepresentativeStartDateChange(value);
-                                }
+                                if (value.length <= 10) onRepresentativeStartDateChange(value);
                             }}
                             placeholder="1404/05/01"
                             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
                             dir="rtl"
                         />
                     </div>
-
-                    {/* End Date Filter */}
                     <div className="flex-1 min-w-[140px]">
                         <label className="block text-sm font-medium text-slate-700 mb-2">تا تاریخ (شمسی)</label>
                         <input
@@ -2602,9 +2701,7 @@ const RepresentativeStatisticsTable: React.FC<{
                             value={representativeEndDate}
                             onChange={(e) => {
                                 let value = e.target.value.replace(/[^\d\/]/g, '');
-                                if (value.length <= 10) {
-                                    onRepresentativeEndDateChange(value);
-                                }
+                                if (value.length <= 10) onRepresentativeEndDateChange(value);
                             }}
                             placeholder="1404/05/31"
                             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
@@ -2612,22 +2709,41 @@ const RepresentativeStatisticsTable: React.FC<{
                         />
                     </div>
 
-                    {/* جستجوی نماینده/پخش */}
-                    <div className="flex-1 min-w-[140px]">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">جستجوی نماینده/پخش</label>
-                        <input
-                            type="text"
-                            value={filterRepresentative}
-                            onChange={(e) => {
-                                setFilterRepresentative(e.target.value);
-                                setStatsPage(1);
-                            }}
-                            placeholder="جستجو نماینده..."
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-                        />
-                    </div>
+                    <MultiCheckDropdown
+                        label="فیلتر استان"
+                        options={availableProvinces.map((p) => ({ value: p, label: p }))}
+                        selected={selectedProvinces}
+                        onChange={(next) => {
+                            onSelectedProvincesChange(next);
+                            setStatsPage(1);
+                        }}
+                        allLabel="همه استان‌ها"
+                        emptyOptionsLabel="در حال بارگذاری..."
+                    />
 
-                    {/* جستجوی شهر */}
+                    <MultiCheckDropdown
+                        label="نوع نمایندگی"
+                        options={REP_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                        selected={selectedRepTypes}
+                        onChange={(next) => {
+                            onSelectedRepTypesChange(next);
+                            setStatsPage(1);
+                        }}
+                        allLabel="همه انواع"
+                    />
+
+                    <MultiCheckDropdown
+                        label="نوع خودرو"
+                        options={availableVehicleTypes.map((v) => ({ value: v, label: v }))}
+                        selected={selectedVehicleTypes}
+                        onChange={(next) => {
+                            onSelectedVehicleTypesChange(next);
+                            setStatsPage(1);
+                        }}
+                        allLabel="همه انواع خودرو"
+                        emptyOptionsLabel="در حال بارگذاری..."
+                    />
+
                     <div className="flex-1 min-w-[140px]">
                         <label className="block text-sm font-medium text-slate-700 mb-2">جستجوی شهر</label>
                         <input
@@ -2642,25 +2758,6 @@ const RepresentativeStatisticsTable: React.FC<{
                         />
                     </div>
 
-                    {/* فیلتر لاین */}
-                    <div className="flex-1 min-w-[140px]">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">فیلتر لاین</label>
-                        <select
-                            value={filterLine}
-                            onChange={(e) => {
-                                setFilterLine(e.target.value);
-                                setStatsPage(1);
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-                        >
-                            <option value="">همه لاین‌ها</option>
-                            {uniqueLines.map(line => (
-                                <option key={line} value={line}>{line}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* تعداد ردیف */}
                     <div className="min-w-[100px]">
                         <label className="block text-sm font-medium text-slate-700 mb-2">تعداد ردیف</label>
                         <select
@@ -2677,23 +2774,20 @@ const RepresentativeStatisticsTable: React.FC<{
                         </select>
                     </div>
 
-                    {/* خروجی اکسل */}
                     <div>
                         <button
                             onClick={() => {
-                                const csvContent = generateExcelContent(filteredStats, getTimeRangeLabel());
-                                downloadCSV(csvContent, `آمار_کرایه_نماینده_${getTimeRangeLabel()}.csv`);
+                                downloadCSV(
+                                    generateExcelContent(filteredStats),
+                                    `آمار_کرایه_شهر_${representativeStartDate}_${representativeEndDate}.csv`
+                                );
                             }}
                             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium flex items-center gap-2 flex-row-reverse h-[38px]"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
                             خروجی اکسل
                         </button>
                     </div>
 
-                    {/* جستجو */}
                     <div>
                         <button
                             onClick={onFetchRepresentativeStatistics}
@@ -2703,23 +2797,6 @@ const RepresentativeStatisticsTable: React.FC<{
                             {loading ? 'در حال جستجو...' : 'جستجو'}
                         </button>
                     </div>
-
-                    {/* پاک کردن فیلترها */}
-                    {(filterRepresentative || filterCity || filterLine) && (
-                        <div>
-                            <button
-                                onClick={() => {
-                                    setFilterRepresentative('');
-                                    setFilterCity('');
-                                    setFilterLine('');
-                                    setStatsPage(1);
-                                }}
-                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 text-sm font-medium h-[38px]"
-                            >
-                                پاک کردن فیلترها
-                            </button>
-                        </div>
-                    )}
                 </div>
 
                 {error && (
@@ -2729,170 +2806,177 @@ const RepresentativeStatisticsTable: React.FC<{
                 )}
 
                 <div className="overflow-x-auto">
-
-                        {loading ? (
-                            <div className="text-center py-8 text-slate-500">در حال بارگذاری...</div>
-                        ) : filteredStats.length === 0 ? (
-                            <div className="text-center py-8 text-slate-500">
-                                {stats.length === 0 ? 'داده‌ای برای نمایش وجود ندارد' : 'نتیجه‌ای با فیلترهای انتخابی یافت نشد'}
-                            </div>
-                        ) : (
-                            <>
+                    {loading ? (
+                        <div className="text-center py-8 text-slate-500">در حال بارگذاری...</div>
+                    ) : filteredStats.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500">
+                            {stats.length === 0 ? 'داده‌ای برای نمایش وجود ندارد' : 'نتیجه‌ای با فیلترهای انتخابی یافت نشد'}
+                        </div>
+                    ) : (
+                        <>
                             <table className="min-w-full text-sm border-collapse">
                                 <thead>
-                                    <tr className="border-b border-slate-300 bg-slate-50">
-                                        <th className="px-4 py-3 text-right text-slate-700 font-semibold">شهر</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">لاین</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">تعداد ارسال</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">شرکتی</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">شخصی</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">جمع کرایه شخصی</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">بارنامه پرداخت نشده</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ پرداخت نشده</th>
-                                        <th className="px-4 py-3 text-center text-slate-700 font-semibold">جزئیات</th>
+                                    <tr className="bg-slate-100 border-b border-slate-300">
+                                        <th rowSpan={2} className="px-2 py-2 text-right text-slate-700 font-semibold border-l border-slate-200 align-middle">
+                                            شهر
+                                        </th>
+                                        <th rowSpan={2} className="px-2 py-2 text-center text-slate-700 font-semibold border-l border-slate-200 align-middle whitespace-nowrap">
+                                            تعداد تور
+                                        </th>
+                                        <th rowSpan={2} className="px-2 py-2 text-center text-slate-700 font-semibold border-l border-slate-200 align-middle whitespace-nowrap">
+                                            مجموع کرایه
+                                        </th>
+                                        <th
+                                            colSpan={3}
+                                            className="px-2 py-1.5 text-center text-emerald-800 font-bold bg-emerald-50 border-l border-emerald-200"
+                                        >
+                                            شخصی
+                                        </th>
+                                        <th
+                                            colSpan={3}
+                                            className="px-2 py-1.5 text-center text-sky-800 font-bold bg-sky-50 border-l border-sky-200"
+                                        >
+                                            شرکتی
+                                        </th>
+                                        <th rowSpan={2} className="px-2 py-2 text-center text-slate-700 font-semibold align-middle">
+                                            جزئیات
+                                        </th>
+                                    </tr>
+                                    <tr className="border-b border-slate-300 text-[11px]">
+                                        <th className="px-1.5 py-1.5 text-center font-semibold text-emerald-800 bg-emerald-50/80 border-l border-emerald-100 whitespace-nowrap">
+                                            بستنی
+                                        </th>
+                                        <th className="px-1.5 py-1.5 text-center font-semibold text-emerald-800 bg-emerald-50/80 border-l border-emerald-100 whitespace-nowrap">
+                                            پاستوریزه
+                                        </th>
+                                        <th className="px-1.5 py-1.5 text-center font-semibold text-emerald-800 bg-emerald-50/80 border-l border-emerald-200 whitespace-nowrap">
+                                            لبنیات-فروتلند
+                                        </th>
+                                        <th className="px-1.5 py-1.5 text-center font-semibold text-sky-800 bg-sky-50/80 border-l border-sky-100 whitespace-nowrap">
+                                            بستنی
+                                        </th>
+                                        <th className="px-1.5 py-1.5 text-center font-semibold text-sky-800 bg-sky-50/80 border-l border-sky-100 whitespace-nowrap">
+                                            پاستوریزه
+                                        </th>
+                                        <th className="px-1.5 py-1.5 text-center font-semibold text-sky-800 bg-sky-50/80 border-l border-sky-200 whitespace-nowrap">
+                                            لبنیات-فروتلند
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                        {paginatedGroups.map((group, groupIdx) => (
-                                            <React.Fragment key={`${group.city}_${groupIdx}`}>
-                                                {group.items.map((stat, itemIdx) => (
-                                                    <tr key={`${stat.city}_${stat.lineType}_${itemIdx}`} className="border-b border-slate-200 hover:bg-slate-50">
-                                                        <td className="px-4 py-3 text-right">{stat.city}</td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                                                {stat.lineType || '-'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">{stat.totalFreights}</td>
-                                                        <td className="px-4 py-3 text-center">{stat.companyCount}</td>
-                                                        <td className="px-4 py-3 text-center">{stat.personalCount}</td>
-                                                        <td className="px-4 py-3 text-center">{formatCurrency(stat.totalPersonalFreightCost)}</td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {stat.unpaidInvoiceCount > 0 ? (
-                                                                <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">
-                                                                    {stat.unpaidInvoiceCount}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-slate-400">0</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {stat.unpaidAmount > 0 ? (
-                                                                <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-100 text-orange-800">
-                                                                    {formatCurrency(stat.unpaidAmount)}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-slate-400">0</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            <button
-                                                                onClick={() => handleShowDetails(stat.representativeName, stat.city, stat.lineType)}
-                                                                className="text-sky-600 hover:text-sky-800 text-sm font-medium flex items-center gap-1 flex-row-reverse"
-                                                            >
-                                                                مشاهده
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                </svg>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                                {group.items.length > 0 && (
-                                                    <tr className="bg-slate-100 border-b-2 border-slate-300">
-                                                        <td className="px-4 py-3 text-center text-slate-600 font-bold">
-                                                            {group.items.reduce((sum, item) => sum + item.totalFreights, 0)} ارسال | {group.items.reduce((sum, item) => sum + item.companyCount, 0)} شرکتی | {group.items.reduce((sum, item) => sum + item.personalCount, 0)} شخصی
-                                                        </td>
-                                                        <td className="px-4 py-3"></td>
-                                                        <td className="px-4 py-3"></td>
-                                                        <td className="px-4 py-3"></td>
-                                                        <td className="px-4 py-3"></td>
-                                                        <td className="px-4 py-3 text-center font-bold text-slate-800">
-                                                            {formatCurrency(group.totalPersonalFreightCost)}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {group.items.reduce((sum, item) => sum + item.unpaidInvoiceCount, 0) > 0 ? (
-                                                                <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">
-                                                                    {group.items.reduce((sum, item) => sum + item.unpaidInvoiceCount, 0)}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-slate-400">0</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center font-bold text-orange-800">
-                                                            {formatCurrency(group.totalUnpaidAmount)}
-                                                        </td>
-                                                        <td className="px-4 py-3"></td>
-                                                    </tr>
-                                                )}
-                                            </React.Fragment>
+                                    {paginatedStats.map((stat) => (
+                                        <tr key={stat.city} className="border-b border-slate-200 hover:bg-slate-50">
+                                            <td className="px-2 py-2 text-right font-medium text-slate-800 border-l border-slate-100">
+                                                <div className="text-sm">{stat.city}</div>
+                                                <div className="text-[10px] text-slate-500">{stat.province}</div>
+                                            </td>
+                                            <td className="px-2 py-2 text-center border-l border-slate-100">
+                                                <div className="font-semibold text-slate-800 tabular-nums" dir="ltr">
+                                                    {stat.totalVehicles}
+                                                </div>
+                                                <div className="text-[10px] text-slate-500">
+                                                    شخصی {stat.personalCount} · شرکتی {stat.companyCount}
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2 text-center font-semibold text-slate-800 border-l border-slate-100 tabular-nums whitespace-nowrap" dir="ltr">
+                                                {formatCurrency(stat.totalFreightCost)}
+                                            </td>
+                                            <td className="px-1.5 py-2 bg-emerald-50/40 border-l border-emerald-50">
+                                                <PersonalLineCell cell={stat.lines?.iceCream} />
+                                            </td>
+                                            <td className="px-1.5 py-2 bg-emerald-50/40 border-l border-emerald-50">
+                                                <PersonalLineCell cell={stat.lines?.dairy} />
+                                            </td>
+                                            <td className="px-1.5 py-2 bg-emerald-50/40 border-l border-emerald-100">
+                                                <PersonalLineCell cell={stat.lines?.ambient} />
+                                            </td>
+                                            <td className="px-1.5 py-2 bg-sky-50/40 border-l border-sky-50">
+                                                <CompanyLineCell cell={stat.lines?.iceCream} />
+                                            </td>
+                                            <td className="px-1.5 py-2 bg-sky-50/40 border-l border-sky-50">
+                                                <CompanyLineCell cell={stat.lines?.dairy} />
+                                            </td>
+                                            <td className="px-1.5 py-2 bg-sky-50/40 border-l border-sky-100">
+                                                <CompanyLineCell cell={stat.lines?.ambient} />
+                                            </td>
+                                            <td className="px-2 py-2 text-center">
+                                                <button
+                                                    onClick={() => handleShowDetails(stat.city)}
+                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-sky-600 hover:bg-sky-50"
+                                                    title="مشاهده جزئیات"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                        </tr>
                                     ))}
                                 </tbody>
                             </table>
 
-                                {/* صفحه‌بندی */}
-                                {totalPages > 1 && (
-                                    <div className="mt-4 flex justify-center items-center gap-2">
-                                        <button
-                                            onClick={() => setStatsPage(p => Math.max(1, p - 1))}
-                                            disabled={statsPage === 1}
-                                            className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-                                        >
-                                            قبلی
-                                        </button>
-                                        <span className="px-4 py-2 text-slate-700">
-                                            صفحه {statsPage} از {totalPages}
-                                        </span>
-                                        <button
-                                            onClick={() => setStatsPage(p => Math.min(totalPages, p + 1))}
-                                            disabled={statsPage === totalPages}
-                                            className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-                                        >
-                                            بعدی
-                                        </button>
-                                    </div>
-                                )}
+                            {totalPages > 1 && (
+                                <div className="mt-4 flex justify-center items-center gap-2">
+                                    <button
+                                        onClick={() => setStatsPage((p) => Math.max(1, p - 1))}
+                                        disabled={statsPage === 1}
+                                        className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                                    >
+                                        قبلی
+                                    </button>
+                                    <span className="px-4 py-2 text-slate-700">
+                                        صفحه {statsPage} از {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setStatsPage((p) => Math.min(totalPages, p + 1))}
+                                        disabled={statsPage === totalPages}
+                                        className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                                    >
+                                        بعدی
+                                    </button>
+                                </div>
+                            )}
 
-                                {/* خلاصه کل */}
-                                <div className="mt-4 p-4 bg-slate-50 rounded-lg">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex gap-6">
-                                            <div>
-                                                <span className="text-sm text-slate-600">مبلغ کل کرایه شخصی: </span>
-                                                <span className="text-lg font-semibold text-slate-800">
-                                                    {formatCurrency(filteredStats.reduce((sum, s) => sum + (s.totalPersonalFreightCost || 0), 0))}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="text-sm text-slate-600">مبلغ کل پرداخت نشده: </span>
-                                                <span className="text-lg font-semibold text-orange-800">
-                                                    {formatCurrency(filteredStats.reduce((sum, s) => sum + (s.unpaidAmount || 0), 0))}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="text-sm text-slate-500">
-                                            نمایش {startIndex + 1} تا {Math.min(startIndex + statsPageSize, groupedStatsArray.length)} از {groupedStatsArray.length} گروه
-                                        </div>
+                            <div className="mt-4 p-4 bg-slate-50 rounded-lg flex justify-between items-center flex-wrap gap-3">
+                                <div className="flex gap-6 flex-wrap">
+                                    <div>
+                                        <span className="text-sm text-slate-600">مجموع کرایه: </span>
+                                        <span className="text-lg font-semibold text-slate-800">
+                                            {formatCurrency(filteredStats.reduce((s, r) => s + (r.totalFreightCost || 0), 0))}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-sm text-slate-600">کل تور: </span>
+                                        <span className="text-lg font-semibold text-slate-800">
+                                            {filteredStats.reduce((s, r) => s + (r.totalVehicles || 0), 0)}
+                                        </span>
                                     </div>
                                 </div>
-                            </>
-                        )}
+                                <div className="text-sm text-slate-500">
+                                    نمایش {filteredStats.length === 0 ? 0 : startIndex + 1} تا{' '}
+                                    {Math.min(startIndex + statsPageSize, filteredStats.length)} از {filteredStats.length} شهر
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Details Modal */}
-            {showDetailsModal && selectedRepresentative && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowDetailsModal(false)}>
-                    <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            {showDetailsModal && selectedCity && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+                    onClick={() => setShowDetailsModal(false)}
+                >
+                    <div
+                        className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-slate-800">
-                                جزئیات تخصیص‌های خودرو - {selectedRepresentative.name} ({selectedRepresentative.city})
+                                جزئیات تخصیص‌های خودرو - {selectedCity}
                             </h3>
-                            <button
-                                onClick={() => setShowDetailsModal(false)}
-                                className="text-slate-500 hover:text-slate-700"
-                            >
+                            <button onClick={() => setShowDetailsModal(false)} className="text-slate-500 hover:text-slate-700">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -2902,228 +2986,147 @@ const RepresentativeStatisticsTable: React.FC<{
                             {detailsLoading ? (
                                 <div className="text-center py-8 text-slate-500">در حال بارگذاری...</div>
                             ) : detailsError ? (
-                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                                    {detailsError}
-                                </div>
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{detailsError}</div>
                             ) : details.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">داده‌ای برای نمایش وجود ندارد</div>
                             ) : (
-                                <>
-                                    {/* فیلترها و سرچ */}
-                                    <div className="mb-4 space-y-3">
-                                        <div className="flex gap-4 items-end">
-                                            <div className="flex-1">
-                                                <label className="block text-sm font-medium text-slate-700 mb-2">جستجو (کد، راننده، خودرو، ...)</label>
-                                                <input
-                                                    type="text"
-                                                    value={detailsSearch}
-                                                    onChange={(e) => {
-                                                        setDetailsSearch(e.target.value);
-                                                        setDetailsPage(1);
-                                                    }}
-                                                    placeholder="جستجو..."
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="block text-sm font-medium text-slate-700 mb-2">فیلتر لاین</label>
-                                                <select
-                                                    value={detailsLineFilter}
-                                                    onChange={(e) => {
-                                                        setDetailsLineFilter(e.target.value);
-                                                        setDetailsPage(1);
-                                                    }}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                                >
-                                                    <option value="">همه لاین‌ها</option>
-                                                    {Array.from(new Set(details.map(d => d.lineType))).map(line => (
-                                                        <option key={line} value={line}>{line}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-2">تعداد ردیف</label>
-                                                <select
-                                                    value={detailsPageSize}
-                                                    onChange={(e) => {
-                                                        setDetailsPageSize(Number(e.target.value));
-                                                        setDetailsPage(1);
-                                                    }}
-                                                    className="px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                                >
-                                                    <option value={10}>10</option>
-                                                    <option value={30}>30</option>
-                                                    <option value={100}>100</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
+                                (() => {
+                                    const filteredDetails = details.filter((detail) => {
+                                        const searchLower = detailsSearch.toLowerCase();
+                                        const matchesSearch =
+                                            !detailsSearch ||
+                                            detail.driver?.name?.toLowerCase().includes(searchLower) ||
+                                            detail.driver?.employeeId?.toLowerCase().includes(searchLower) ||
+                                            detail.driver?.phone?.toLowerCase().includes(searchLower) ||
+                                            `${detail.vehicle?.plateNumber.part1}${detail.vehicle?.plateNumber.letter}${detail.vehicle?.plateNumber.part2}`
+                                                .toLowerCase()
+                                                .includes(searchLower) ||
+                                            detail.loadingDate?.toLowerCase().includes(searchLower) ||
+                                            detail.announcedAt?.toLowerCase().includes(searchLower) ||
+                                            detail.assignedAt?.toLowerCase().includes(searchLower) ||
+                                            detail.announcementCode?.toLowerCase().includes(searchLower) ||
+                                            detail.destinations?.some((dest) => dest.city?.toLowerCase().includes(searchLower));
+                                        const matchesLine = !detailsLineFilter || detail.lineType === detailsLineFilter;
+                                        return matchesSearch && matchesLine;
+                                    });
+                                    const dTotalPages = Math.max(1, Math.ceil(filteredDetails.length / detailsPageSize));
+                                    const dStart = (detailsPage - 1) * detailsPageSize;
+                                    const pageRows = filteredDetails.slice(dStart, dStart + detailsPageSize);
 
-                                    {/* فیلتر کردن داده‌ها */}
-                                    {(() => {
-                                        const filteredDetails = details.filter(detail => {
-                                            const searchLower = detailsSearch.toLowerCase();
-                                            const matchesSearch = !detailsSearch || 
-                                                detail.driver?.name?.toLowerCase().includes(searchLower) ||
-                                                detail.driver?.employeeId?.toLowerCase().includes(searchLower) ||
-                                                detail.driver?.phone?.toLowerCase().includes(searchLower) ||
-                                                `${detail.vehicle?.plateNumber.part1}${detail.vehicle?.plateNumber.letter}${detail.vehicle?.plateNumber.part2}`.toLowerCase().includes(searchLower) ||
-                                                detail.vehicle?.make?.toLowerCase().includes(searchLower) ||
-                                                detail.vehicle?.model?.toLowerCase().includes(searchLower) ||
-                                                detail.loadingDate?.toLowerCase().includes(searchLower) ||
-                                                detail.assignedAt?.toLowerCase().includes(searchLower) ||
-                                                detail.destinations?.some(dest => dest.city?.toLowerCase().includes(searchLower));
-                                            
-                                            const matchesLine = !detailsLineFilter || detail.lineType === detailsLineFilter;
-                                            
-                                            return matchesSearch && matchesLine;
-                                        });
-
-                                        const totalPages = Math.ceil(filteredDetails.length / detailsPageSize);
-                                        const startIndex = (detailsPage - 1) * detailsPageSize;
-                                        const paginatedDetails = filteredDetails.slice(startIndex, startIndex + detailsPageSize);
-
-                                        // محاسبه مبالغ - استفاده از destinationFreightCost (کرایه مقصد خاص) به جای totalFreightCost
-                                        const totalPaid = filteredDetails
-                                            .filter(d => d.assignmentType === 'personal')
-                                            .reduce((sum, d) => sum + (d.destinationFreightCost || d.totalFreightCost || 0), 0);
-                                        
-                                        const totalUnpaid = filteredDetails
-                                            .filter(d => d.assignmentType === 'personal')
-                                            .reduce((sum, d) => sum + (d.destinationFreightCost || d.totalFreightCost || 0), 0);
-
-                                        return (
-                                            <>
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full text-sm border-collapse">
-                                        <thead>
-                                            <tr className="border-b border-slate-300 bg-slate-50">
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ بارگیری</th>
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">تاریخ تخصیص</th>
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">لاین</th>
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">نوع تخصیص</th>
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">مقاصد</th>
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">راننده</th>
-                                                <th className="px-4 py-3 text-right text-slate-700 font-semibold">خودرو</th>
-                                                <th className="px-4 py-3 text-center text-slate-700 font-semibold">مبلغ کرایه</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                                            {paginatedDetails.map((detail, idx) => (
-                                                                <tr key={`${detail.id}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
-                                                    <td className="px-4 py-3 text-right">{detail.loadingDate}</td>
-                                                    <td className="px-4 py-3 text-right">{detail.assignedAt || '-'}</td>
-                                                    <td className="px-4 py-3 text-right">{detail.lineType}</td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                                            detail.assignmentType === 'company' 
-                                                                ? 'bg-green-100 text-green-800' 
-                                                                : 'bg-orange-100 text-orange-800'
-                                                        }`}>
-                                                            {detail.assignmentType === 'company' ? 'شرکتی' : 'شخصی'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        {detail.destinations && detail.destinations.length > 0 ? (
-                                                            <div>
-                                                                <div>
-                                                                    {detail.destinations.map((dest: any, destIdx: number) => (
-                                                                        <span key={destIdx} className="font-semibold text-blue-700">
-                                                                            {dest.city}
-                                                                            {destIdx < detail.destinations.length - 1 ? '، ' : ''}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                                {detail.totalFreightCost > 0 && (
-                                                                    <div className="text-xs text-slate-500 mt-1">
-                                                                        ({formatCurrency(detail.totalFreightCost)})
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-slate-400">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        {detail.driver ? (
-                                                            <div>
-                                                                <div className="font-semibold">{detail.driver.name}</div>
-                                                                {detail.driver.employeeId && (
-                                                                    <div className="text-xs text-slate-500">کد: {detail.driver.employeeId}</div>
-                                                                )}
-                                                                {detail.driver.phone && (
-                                                                    <div className="text-xs text-slate-500">{detail.driver.phone}</div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-slate-400">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        {detail.vehicle ? (
-                                                            <div>
-                                                                <div className="font-semibold">
-                                                                    {detail.vehicle.plateNumber.part1} 
-                                                                    {detail.vehicle.plateNumber.letter} 
-                                                                    {detail.vehicle.plateNumber.part2} 
-                                                                    {detail.vehicle.plateNumber.cityCode && `-${detail.vehicle.plateNumber.cityCode}`}
-                                                                </div>
-                                                                {(detail.vehicle.make || detail.vehicle.model) && (
-                                                                    <div className="text-xs text-slate-500">
-                                                                        {detail.vehicle.make} {detail.vehicle.model}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-slate-400">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">{formatCurrency(detail.destinationFreightCost || detail.totalFreightCost)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                    return (
+                                        <>
+                                            <div className="mb-4 flex gap-4 items-end flex-wrap">
+                                                <div className="flex-1 min-w-[180px]">
+                                                    <label className="block text-sm font-medium text-slate-700 mb-2">جستجو</label>
+                                                    <input
+                                                        type="text"
+                                                        value={detailsSearch}
+                                                        onChange={(e) => {
+                                                            setDetailsSearch(e.target.value);
+                                                            setDetailsPage(1);
+                                                        }}
+                                                        placeholder="کد، راننده، خودرو، تاریخ..."
+                                                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                    />
                                                 </div>
-
-                                                {/* خلاصه مبالغ */}
-                                                <div className="mt-4 p-4 bg-slate-50 rounded-lg flex justify-between items-center">
-                                                    <div className="flex gap-6">
-                                                        <div>
-                                                            <span className="text-sm text-slate-600">مبلغ کل کرایه شخصی: </span>
-                                                            <span className="text-lg font-semibold text-slate-800">{formatCurrency(totalUnpaid)}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-sm text-slate-500">
-                                                        نمایش {startIndex + 1} تا {Math.min(startIndex + detailsPageSize, filteredDetails.length)} از {filteredDetails.length} ردیف
-                                                    </div>
+                                                <div className="flex-1 min-w-[140px]">
+                                                    <label className="block text-sm font-medium text-slate-700 mb-2">فیلتر لاین</label>
+                                                    <select
+                                                        value={detailsLineFilter}
+                                                        onChange={(e) => {
+                                                            setDetailsLineFilter(e.target.value);
+                                                            setDetailsPage(1);
+                                                        }}
+                                                        className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                    >
+                                                        <option value="">همه لاین‌ها</option>
+                                                        {Array.from(new Set(details.map((d) => d.lineType))).map((line) => (
+                                                            <option key={line} value={line}>
+                                                                {line}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </div>
+                                            </div>
 
-                                                {/* صفحه‌بندی */}
-                                                {totalPages > 1 && (
-                                                    <div className="mt-4 flex justify-center items-center gap-2">
-                                                        <button
-                                                            onClick={() => setDetailsPage(p => Math.max(1, p - 1))}
-                                                            disabled={detailsPage === 1}
-                                                            className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-                                                        >
-                                                            قبلی
-                                                        </button>
-                                                        <span className="px-4 py-2 text-slate-700">
-                                                            صفحه {detailsPage} از {totalPages}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => setDetailsPage(p => Math.min(totalPages, p + 1))}
-                                                            disabled={detailsPage === totalPages}
-                                                            className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-                                                        >
-                                                            بعدی
-                                                        </button>
-                                </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-                                </>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full text-sm border-collapse">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-300 bg-slate-50">
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">تاریخ اعلام</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">تاریخ تخصیص</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">لاین</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">نوع تخصیص</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">مقاصد</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">راننده</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">خودرو</th>
+                                                            <th className="px-3 py-3 text-center text-slate-700 font-semibold">مبلغ کرایه</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {pageRows.map((detail, idx) => (
+                                                            <tr key={`${detail.id}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
+                                                                <td className="px-3 py-3 text-right">{detail.announcedAt || '-'}</td>
+                                                                <td className="px-3 py-3 text-right">{detail.assignedAt || '-'}</td>
+                                                                <td className="px-3 py-3 text-right">{detail.lineType}</td>
+                                                                <td className="px-3 py-3 text-right">
+                                                                    <span
+                                                                        className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                                            detail.assignmentType === 'company'
+                                                                                ? 'bg-blue-100 text-blue-800'
+                                                                                : 'bg-emerald-100 text-emerald-800'
+                                                                        }`}
+                                                                    >
+                                                                        {detail.assignmentType === 'company' ? 'شرکتی' : 'شخصی'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-3 py-3 text-right text-xs">
+                                                                    {(detail.destinations || []).map((d) => d.city).join('، ') || '-'}
+                                                                </td>
+                                                                <td className="px-3 py-3 text-right">
+                                                                    <div>{detail.driver?.name || '-'}</div>
+                                                                    <div className="text-[11px] text-slate-500">
+                                                                        {detail.driver?.employeeId || ''} {detail.driver?.phone ? `· ${detail.driver.phone}` : ''}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-3 py-3 text-right text-xs">
+                                                                    {detail.vehicle
+                                                                        ? `${detail.vehicle.plateNumber.part1} ${detail.vehicle.plateNumber.letter} ${detail.vehicle.plateNumber.part2} - ${detail.vehicle.plateNumber.cityCode}`
+                                                                        : '-'}
+                                                                </td>
+                                                                <td className="px-3 py-3 text-center">
+                                                                    {formatCurrency(detail.destinationFreightCost || detail.totalFreightCost || 0)}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {dTotalPages > 1 && (
+                                                <div className="mt-4 flex justify-center items-center gap-2">
+                                                    <button
+                                                        onClick={() => setDetailsPage((p) => Math.max(1, p - 1))}
+                                                        disabled={detailsPage === 1}
+                                                        className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50"
+                                                    >
+                                                        قبلی
+                                                    </button>
+                                                    <span className="px-4 py-2 text-slate-700">
+                                                        صفحه {detailsPage} از {dTotalPages}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => setDetailsPage((p) => Math.min(dTotalPages, p + 1))}
+                                                        disabled={detailsPage === dTotalPages}
+                                                        className="px-4 py-2 border border-slate-300 rounded-md disabled:opacity-50"
+                                                    >
+                                                        بعدی
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()
                             )}
                         </div>
                     </div>
@@ -3132,6 +3135,7 @@ const RepresentativeStatisticsTable: React.FC<{
         </>
     );
 };
+
 
 const LineAnalyticsSection: React.FC<{
     data: LineAnalyticsItem[];
