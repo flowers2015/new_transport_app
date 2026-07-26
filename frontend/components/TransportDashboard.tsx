@@ -94,9 +94,18 @@ interface LineFreightCell {
     companyCount: number;
 }
 
+interface RepresentativeStatisticsMeta {
+    totalTours?: number;
+    totalVisits?: number;
+    totalFreightCost?: number;
+    freightBasis?: string;
+    basis?: string;
+}
+
 interface RepresentativeStatisticsData {
     city: string;
     province: string;
+    visitCount?: number;
     totalVehicles: number;
     personalCount: number;
     companyCount: number;
@@ -117,6 +126,7 @@ interface RepresentativeDetailData {
     assignmentType: string;
     totalFreightCost: number;
     destinationFreightCost?: number;
+    visitCount?: number;
     assignedAt: string | null;
     destinations?: Array<{
         id: string | null;
@@ -215,6 +225,7 @@ interface TransportDashboardProps {
     onTimeRangeChange: (range: 'day' | 'month' | 'year') => void;
     onRefresh: () => void;
     representativeStats: RepresentativeStatisticsData[];
+    representativeStatsMeta: RepresentativeStatisticsMeta | null;
     representativeAvailableProvinces: string[];
     representativeAvailableVehicleTypes: string[];
     representativeSelectedProvinces: string[];
@@ -1139,6 +1150,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     onTimeRangeChange,
     onRefresh,
     representativeStats,
+    representativeStatsMeta,
     representativeAvailableProvinces,
     representativeAvailableVehicleTypes,
     representativeSelectedProvinces,
@@ -2257,6 +2269,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                             {/* Representative Statistics Table */}
                             <RepresentativeStatisticsTable
                                 stats={representativeStats}
+                                statsMeta={representativeStatsMeta}
                                 availableProvinces={representativeAvailableProvinces}
                                 availableVehicleTypes={representativeAvailableVehicleTypes}
                                 selectedProvinces={representativeSelectedProvinces}
@@ -2522,6 +2535,7 @@ const CompanyLineCell: React.FC<{ cell?: LineFreightCell }> = ({ cell }) => {
 
 const RepresentativeStatisticsTable: React.FC<{
     stats: RepresentativeStatisticsData[];
+    statsMeta: RepresentativeStatisticsMeta | null;
     availableProvinces: string[];
     availableVehicleTypes: string[];
     selectedProvinces: string[];
@@ -2540,6 +2554,7 @@ const RepresentativeStatisticsTable: React.FC<{
     onFetchRepresentativeStatistics: () => Promise<void>;
 }> = ({
     stats,
+    statsMeta,
     availableProvinces,
     availableVehicleTypes,
     selectedProvinces,
@@ -2611,10 +2626,11 @@ const RepresentativeStatisticsTable: React.FC<{
         const headers = [
             'شهر',
             'استان',
-            'تعداد تور',
+            'تور (توقف)',
+            'ویزیت',
             'شخصی',
             'شرکتی',
-            'مجموع کرایه',
+            'کرایه شهر',
             'شخصی-بستنی تعداد',
             'شخصی-بستنی کرایه',
             'شخصی-پاستوریزه تعداد',
@@ -2642,6 +2658,7 @@ const RepresentativeStatisticsTable: React.FC<{
                     stat.city,
                     stat.province,
                     stat.totalVehicles,
+                    stat.visitCount ?? 0,
                     stat.personalCount,
                     stat.companyCount,
                     stat.totalFreightCost,
@@ -2677,7 +2694,9 @@ const RepresentativeStatisticsTable: React.FC<{
         <>
             <div className="bg-white rounded-lg shadow-md p-4 mb-4">
                 <div className="mb-3 text-xs text-slate-500">
-                    مبنای گزارش: <span className="font-semibold text-slate-700">تاریخ تخصیص</span>
+                    مبنای گزارش:{' '}
+                    <span className="font-semibold text-slate-700">اعلام‌بار نهایی</span>
+                    {' · '}کرایه هر شهر جدا (مقصد) · تور چندمقصدی در جمع نهایی یک‌بار شمرده می‌شود
                 </div>
                 <div className="flex flex-wrap gap-3 items-end mb-4">
                     <div className="flex-1 min-w-[140px]">
@@ -2821,10 +2840,13 @@ const RepresentativeStatisticsTable: React.FC<{
                                             شهر
                                         </th>
                                         <th rowSpan={2} className="px-2 py-2 text-center text-slate-700 font-semibold border-l border-slate-200 align-middle whitespace-nowrap">
-                                            تعداد تور
+                                            تور (توقف)
                                         </th>
                                         <th rowSpan={2} className="px-2 py-2 text-center text-slate-700 font-semibold border-l border-slate-200 align-middle whitespace-nowrap">
-                                            مجموع کرایه
+                                            ویزیت
+                                        </th>
+                                        <th rowSpan={2} className="px-2 py-2 text-center text-slate-700 font-semibold border-l border-slate-200 align-middle whitespace-nowrap">
+                                            کرایه شهر
                                         </th>
                                         <th
                                             colSpan={3}
@@ -2876,6 +2898,11 @@ const RepresentativeStatisticsTable: React.FC<{
                                                 </div>
                                                 <div className="text-[10px] text-slate-500">
                                                     شخصی {stat.personalCount} · شرکتی {stat.companyCount}
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2 text-center border-l border-slate-100">
+                                                <div className="font-semibold text-slate-700 tabular-nums" dir="ltr">
+                                                    {stat.visitCount ?? 0}
                                                 </div>
                                             </td>
                                             <td className="px-2 py-2 text-center font-semibold text-slate-800 border-l border-slate-100 tabular-nums whitespace-nowrap" dir="ltr">
@@ -2941,15 +2968,32 @@ const RepresentativeStatisticsTable: React.FC<{
                             <div className="mt-4 p-4 bg-slate-50 rounded-lg flex justify-between items-center flex-wrap gap-3">
                                 <div className="flex gap-6 flex-wrap">
                                     <div>
-                                        <span className="text-sm text-slate-600">مجموع کرایه: </span>
+                                        <span className="text-sm text-slate-600">مجموع کرایه شهرها: </span>
                                         <span className="text-lg font-semibold text-slate-800">
-                                            {formatCurrency(filteredStats.reduce((s, r) => s + (r.totalFreightCost || 0), 0))}
+                                            {formatCurrency(
+                                                filterCity
+                                                    ? filteredStats.reduce((s, r) => s + (r.totalFreightCost || 0), 0)
+                                                    : statsMeta?.totalFreightCost ??
+                                                      filteredStats.reduce((s, r) => s + (r.totalFreightCost || 0), 0)
+                                            )}
                                         </span>
                                     </div>
                                     <div>
-                                        <span className="text-sm text-slate-600">کل تور: </span>
+                                        <span className="text-sm text-slate-600">کل تور (بدون تکرار): </span>
                                         <span className="text-lg font-semibold text-slate-800">
-                                            {filteredStats.reduce((s, r) => s + (r.totalVehicles || 0), 0)}
+                                            {filterCity
+                                                ? '—'
+                                                : statsMeta?.totalTours ??
+                                                  filteredStats.reduce((s, r) => s + (r.totalVehicles || 0), 0)}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-sm text-slate-600">کل ویزیت: </span>
+                                        <span className="text-lg font-semibold text-slate-800">
+                                            {filterCity
+                                                ? filteredStats.reduce((s, r) => s + (r.visitCount || 0), 0)
+                                                : statsMeta?.totalVisits ??
+                                                  filteredStats.reduce((s, r) => s + (r.visitCount || 0), 0)}
                                         </span>
                                     </div>
                                 </div>
@@ -2974,7 +3018,7 @@ const RepresentativeStatisticsTable: React.FC<{
                     >
                         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-slate-800">
-                                جزئیات تخصیص‌های خودرو - {selectedCity}
+                                جزئیات تورهای نهایی - {selectedCity}
                             </h3>
                             <button onClick={() => setShowDetailsModal(false)} className="text-slate-500 hover:text-slate-700">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3054,17 +3098,23 @@ const RepresentativeStatisticsTable: React.FC<{
                                                     <thead>
                                                         <tr className="border-b border-slate-300 bg-slate-50">
                                                             <th className="px-3 py-3 text-right text-slate-700 font-semibold">تاریخ اعلام</th>
-                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">تاریخ تخصیص</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">تاریخ نهایی</th>
                                                             <th className="px-3 py-3 text-right text-slate-700 font-semibold">لاین</th>
                                                             <th className="px-3 py-3 text-right text-slate-700 font-semibold">نوع تخصیص</th>
-                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">مقاصد</th>
+                                                            <th className="px-3 py-3 text-right text-slate-700 font-semibold">مقاصد / ویزیت</th>
                                                             <th className="px-3 py-3 text-right text-slate-700 font-semibold">راننده</th>
                                                             <th className="px-3 py-3 text-right text-slate-700 font-semibold">خودرو</th>
-                                                            <th className="px-3 py-3 text-center text-slate-700 font-semibold">مبلغ کرایه</th>
+                                                            <th className="px-3 py-3 text-center text-slate-700 font-semibold">کرایه این شهر</th>
+                                                            <th className="px-3 py-3 text-center text-slate-700 font-semibold">کرایه کل تور</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {pageRows.map((detail, idx) => (
+                                                        {pageRows.map((detail, idx) => {
+                                                            const visitCount =
+                                                                detail.visitCount ??
+                                                                detail.destinations?.length ??
+                                                                0;
+                                                            return (
                                                             <tr key={`${detail.id}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
                                                                 <td className="px-3 py-3 text-right">{detail.announcedAt || '-'}</td>
                                                                 <td className="px-3 py-3 text-right">{detail.assignedAt || '-'}</td>
@@ -3081,7 +3131,12 @@ const RepresentativeStatisticsTable: React.FC<{
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-3 py-3 text-right text-xs">
-                                                                    {(detail.destinations || []).map((d) => d.city).join('، ') || '-'}
+                                                                    <div className="font-medium text-slate-700">
+                                                                        {visitCount} ویزیت (یک تور)
+                                                                    </div>
+                                                                    <div className="text-slate-500">
+                                                                        {(detail.destinations || []).map((d) => d.city).join('، ') || '-'}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-3 py-3 text-right">
                                                                     <div>{detail.driver?.name || '-'}</div>
@@ -3094,11 +3149,15 @@ const RepresentativeStatisticsTable: React.FC<{
                                                                         ? `${detail.vehicle.plateNumber.part1} ${detail.vehicle.plateNumber.letter} ${detail.vehicle.plateNumber.part2} - ${detail.vehicle.plateNumber.cityCode}`
                                                                         : '-'}
                                                                 </td>
-                                                                <td className="px-3 py-3 text-center">
-                                                                    {formatCurrency(detail.destinationFreightCost || detail.totalFreightCost || 0)}
+                                                                <td className="px-3 py-3 text-center font-semibold tabular-nums" dir="ltr">
+                                                                    {formatCurrency(detail.destinationFreightCost || 0)}
+                                                                </td>
+                                                                <td className="px-3 py-3 text-center tabular-nums text-slate-600" dir="ltr">
+                                                                    {formatCurrency(detail.totalFreightCost || 0)}
                                                                 </td>
                                                             </tr>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </tbody>
                                                 </table>
                                             </div>

@@ -97,6 +97,8 @@ function isPlannerFullEditStatus(status) {
     'برگشت به اعلام‌کننده',
     'Leftover',
     'بار مانده',
+    'ChangeRequested',
+    'درخواست تغییر',
   ].includes(status);
 }
 
@@ -5960,8 +5962,10 @@ async function getRepresentativeFilterOptions(req, res) {
 
 /**
  * آمار کرایه بر اساس شهر (پخش/نماینده)
- * مبنای بازه: تاریخ تخصیص
- * خروجی: یک ردیف به ازای هر شهر با تفکیک لاین‌ها
+ * مبنا: یک تور = یک اعلام‌بار Finalized
+ * کرایه هر شهر = freight_cost همان مقصد (جدا برای هر شهر)
+ * ویزیت = توقف مقصد؛ کل تور بدون تکرار در meta.totalTours
+ * بازه تاریخ: assignment_finalized_at (در نبود، loading_date) — هم‌تراز آمار اعزام
  */
 async function getRepresentativeStatistics(req, res) {
   try {
@@ -5999,7 +6003,6 @@ async function getRepresentativeStatistics(req, res) {
       rangeEnd = jalaliUtils.parseJalaliDateString(String(endDate).replace(/-/g, '/'));
       if (rangeEnd) rangeEnd.setHours(23, 59, 59, 999);
     } else if (year) {
-      // سازگاری با پارامترهای قدیمی year/month/day
       const y = parseInt(year, 10);
       const m = month ? parseInt(month, 10) : null;
       const d = day ? parseInt(day, 10) : null;
@@ -6026,6 +6029,11 @@ async function getRepresentativeStatistics(req, res) {
         message: 'بازه تاریخ (startDate/endDate یا year/month) الزامی است.',
       });
     }
+
+    const startJalali = jalaliUtils.formatJalali(rangeStart);
+    const endJalali = jalaliUtils.formatJalali(rangeEnd);
+    const startJalaliDash = startJalali.replace(/\//g, '-');
+    const endJalaliDash = endJalali.replace(/\//g, '-');
 
     const provinceList = String(provinces || '')
       .split(',')
@@ -6066,40 +6074,20 @@ async function getRepresentativeStatistics(req, res) {
       console.warn('⚠️ [RepresentativeStatistics] Could not load vehicle types:', e?.message);
     }
 
-    const assignmentTsExpr = `
-      COALESCE(
-        (
-          SELECT MIN(da.created_at)
-          FROM dispatch_assignments da
-          WHERE da.freight_announcement_id = fa.id
-            AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-        ),
-        (
-          SELECT MIN(fah.created_at)
-          FROM freight_announcement_history fah
-          WHERE fah.freight_announcement_id = fa.id
-            AND fah.action = 'ASSIGNED'
-        ),
-        fa.assignment_finalized_at
-      )
-    `;
-
-    const statusFilter = `
-      AND fa.status NOT IN (
-        'Draft', 'PendingManagerApproval', 'Rejected',
-        'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced',
-        'پیش‌نویس', 'رد شده'
-      )
-    `;
-
     const query = `
       SELECT
-        fd.city,
         fa.id AS announcement_id,
         fa.line_type,
         fa.assignment_type,
         COALESCE(NULLIF(TRIM(fa.vehicle_type), ''), 'نامشخص') AS vehicle_type,
-        COALESCE(fd.freight_cost, 0)::float AS freight_cost,
+        COALESCE(fa.total_freight_cost, 0)::float AS total_freight_cost,
+        fa.assignment_finalized_at,
+        CAST(fa.loading_date AS TEXT) AS loading_date,
+        fd.id AS destination_id,
+        fd.city,
+        COALESCE(fd.freight_cost, 0)::float AS destination_freight_cost,
+        COALESCE(fd.sort_order, 999999) AS sort_order,
+        fd.created_at AS dest_created_at,
         LOWER(COALESCE(NULLIF(TRIM(fd.representative_type), ''), NULLIF(TRIM(fa.representative_type), ''), 'agent')) AS representative_type,
         (
           SELECT dr.province
@@ -6111,14 +6099,14 @@ async function getRepresentativeStatistics(req, res) {
             CASE WHEN TRIM(dr.city) = TRIM(fd.city) THEN 0 ELSE 1 END,
             dr.id ASC
           LIMIT 1
-        ) AS province,
-        ${assignmentTsExpr} AS assigned_at
-      FROM freight_destinations fd
-      INNER JOIN freight_announcements fa ON fd.freight_announcement_id = fa.id
-      WHERE fd.city IS NOT NULL
+        ) AS province
+      FROM freight_announcements fa
+      INNER JOIN freight_destinations fd ON fd.freight_announcement_id = fa.id
+      WHERE fa.status = 'Finalized'
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+        AND fa.assignment_type IS NOT NULL
+        AND fd.city IS NOT NULL
         AND TRIM(fd.city) <> ''
-        AND fa.assigned_driver_id IS NOT NULL
-        ${statusFilter}
     `;
 
     const { rows } = await pool.query(query);
@@ -6140,39 +6128,36 @@ async function getRepresentativeStatistics(req, res) {
       return v || 'agent';
     };
 
-    const isPersonal = (assignmentType) => String(assignmentType || '').toLowerCase() === 'personal';
+    const isPersonal = (assignmentType) => {
+      const t = String(assignmentType || '').toLowerCase();
+      return t === 'personal' || t.includes('شخص');
+    };
+
+    const isAnnInDateRange = (ann) => {
+      if (ann.assignment_finalized_at) {
+        const d = new Date(ann.assignment_finalized_at);
+        if (Number.isNaN(d.getTime())) return false;
+        return d >= rangeStart && d <= rangeEnd;
+      }
+      const ld = String(ann.loading_date || '').trim();
+      if (!ld) return false;
+      return (
+        (ld >= startJalali && ld <= endJalali) ||
+        (ld >= startJalaliDash && ld <= endJalaliDash)
+      );
+    };
 
     const provinceSetFromData = new Set(availableProvinces);
     const vehicleTypeSetFromData = new Set(availableVehicleTypes);
     const byCity = new Map();
+    const globalTourIds = new Set();
 
-    for (const row of rows) {
-      if (!row.assigned_at) continue;
-      const assignedAt = new Date(row.assigned_at);
-      if (Number.isNaN(assignedAt.getTime())) continue;
-      if (assignedAt < rangeStart || assignedAt > rangeEnd) continue;
-
-      const repType = normalizeRepType(row.representative_type);
-      if (repTypeList.length > 0 && !repTypeList.includes(repType)) continue;
-
-      const vehicleType = String(row.vehicle_type || 'نامشخص').trim() || 'نامشخص';
-      vehicleTypeSetFromData.add(vehicleType);
-      if (vehicleTypeList.length > 0 && !vehicleTypeList.includes(vehicleType)) continue;
-
-      const province = row.province || 'نامشخص';
-      provinceSetFromData.add(province);
-      if (provinceList.length > 0 && !provinceList.includes(province)) continue;
-
-      const city = String(row.city || '').trim();
-      if (!city) continue;
-
-      const lineKey = normalizeLineKey(row.line_type);
-      if (!lineKey) continue;
-
+    const ensureCity = (city, province) => {
       if (!byCity.has(city)) {
         byCity.set(city, {
           city,
-          province,
+          province: province || 'نامشخص',
+          visitCount: 0,
           announcementIds: new Set(),
           personalIds: new Set(),
           companyIds: new Set(),
@@ -6184,25 +6169,98 @@ async function getRepresentativeStatistics(req, res) {
           },
         });
       }
-
       const agg = byCity.get(city);
       if ((!agg.province || agg.province === 'نامشخص') && province) agg.province = province;
+      return agg;
+    };
 
+    // گروه‌بندی مقصدها به ازای هر اعلام‌بار
+    const byAnnouncement = new Map();
+    for (const row of rows) {
       const annId = row.announcement_id;
-      const freight = Number(row.freight_cost) || 0;
-      const personal = isPersonal(row.assignment_type);
+      if (!byAnnouncement.has(annId)) {
+        byAnnouncement.set(annId, {
+          announcement_id: annId,
+          line_type: row.line_type,
+          assignment_type: row.assignment_type,
+          vehicle_type: row.vehicle_type,
+          total_freight_cost: Number(row.total_freight_cost) || 0,
+          assignment_finalized_at: row.assignment_finalized_at,
+          loading_date: row.loading_date,
+          destinations: [],
+        });
+      }
+      byAnnouncement.get(annId).destinations.push({
+        destination_id: row.destination_id,
+        city: String(row.city || '').trim(),
+        freight_cost: Number(row.destination_freight_cost) || 0,
+        sort_order: Number(row.sort_order) || 999999,
+        dest_created_at: row.dest_created_at ? new Date(row.dest_created_at).getTime() : 0,
+        representative_type: row.representative_type,
+        province: row.province || 'نامشخص',
+      });
+    }
 
-      agg.announcementIds.add(annId);
-      if (personal) agg.personalIds.add(annId);
-      else agg.companyIds.add(annId);
-      agg.totalFreightCost += freight;
+    let globalFreightSum = 0;
+    let globalVisitCount = 0;
 
-      const line = agg.lines[lineKey];
-      if (personal) {
-        line.personalIds.add(annId);
-        line.personalFreightCost += freight;
-      } else {
-        line.companyIds.add(annId);
+    for (const ann of byAnnouncement.values()) {
+      if (!isAnnInDateRange(ann)) continue;
+
+      const lineKey = normalizeLineKey(ann.line_type);
+      if (!lineKey) continue;
+
+      const vehicleType = String(ann.vehicle_type || 'نامشخص').trim() || 'نامشخص';
+      vehicleTypeSetFromData.add(vehicleType);
+      if (vehicleTypeList.length > 0 && !vehicleTypeList.includes(vehicleType)) continue;
+
+      const destinations = ann.destinations
+        .filter((d) => d.city)
+        .sort((a, b) => {
+          if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+          return a.dest_created_at - b.dest_created_at;
+        });
+      if (destinations.length === 0) continue;
+
+      const personal = isPersonal(ann.assignment_type);
+      let countedInGlobalTour = false;
+
+      // هر مقصد: کرایه همان شهر جدا؛ ویزیت جدا؛ تور در سطح اعلام‌بار فقط یک‌بار (در meta)
+      for (const dest of destinations) {
+        const repType = normalizeRepType(dest.representative_type);
+        if (repTypeList.length > 0 && !repTypeList.includes(repType)) continue;
+
+        const province = dest.province || 'نامشخص';
+        provinceSetFromData.add(province);
+        if (provinceList.length > 0 && !provinceList.includes(province)) continue;
+
+        const destFreight = Number(dest.freight_cost) || 0;
+        const agg = ensureCity(dest.city, province);
+
+        agg.visitCount += 1;
+        globalVisitCount += 1;
+        agg.totalFreightCost += destFreight;
+        globalFreightSum += destFreight;
+
+        const alreadyOnCity = agg.announcementIds.has(ann.announcement_id);
+        if (!alreadyOnCity) {
+          agg.announcementIds.add(ann.announcement_id);
+          if (personal) agg.personalIds.add(ann.announcement_id);
+          else agg.companyIds.add(ann.announcement_id);
+
+          const line = agg.lines[lineKey];
+          if (personal) line.personalIds.add(ann.announcement_id);
+          else line.companyIds.add(ann.announcement_id);
+        }
+
+        if (personal) {
+          agg.lines[lineKey].personalFreightCost += destFreight;
+        }
+
+        if (!countedInGlobalTour) {
+          globalTourIds.add(ann.announcement_id);
+          countedInGlobalTour = true;
+        }
       }
     }
 
@@ -6210,6 +6268,8 @@ async function getRepresentativeStatistics(req, res) {
       .map((agg) => ({
         city: agg.city,
         province: agg.province || 'نامشخص',
+        visitCount: agg.visitCount,
+        // تورهایی که به این شهر رفته‌اند (در جمع ستون‌ها تکراری می‌شود؛ کل بدون تکرار در meta)
         totalVehicles: agg.announcementIds.size,
         personalCount: agg.personalIds.size,
         companyCount: agg.companyIds.size,
@@ -6232,21 +6292,36 @@ async function getRepresentativeStatistics(req, res) {
           },
         },
       }))
+      .filter((row) => row.visitCount > 0 || row.totalVehicles > 0)
       .sort((a, b) => a.city.localeCompare(b.city, 'fa'));
 
     availableProvinces = Array.from(provinceSetFromData).sort((a, b) => a.localeCompare(b, 'fa'));
     availableVehicleTypes = Array.from(vehicleTypeSetFromData).sort((a, b) => a.localeCompare(b, 'fa'));
 
-    console.log('✅ [RepresentativeStatistics] Found', statistics.length, 'cities');
+    const globalTourCount = globalTourIds.size;
+
+    console.log(
+      '✅ [RepresentativeStatistics] Found',
+      statistics.length,
+      'cities, tours=',
+      globalTourCount,
+      'visits=',
+      globalVisitCount
+    );
 
     res.json({
       rows: statistics,
       availableProvinces,
       availableVehicleTypes,
       meta: {
-        basis: 'assignment',
+        basis: 'finalized',
+        unit: 'tour',
+        freightBasis: 'destination_freight_cost',
         startDate: startDate || null,
         endDate: endDate || null,
+        totalTours: globalTourCount,
+        totalVisits: globalVisitCount,
+        totalFreightCost: Math.round(globalFreightSum),
       },
     });
   } catch (error) {
@@ -6259,8 +6334,9 @@ async function getRepresentativeStatistics(req, res) {
 }
 
 /**
- * جزئیات تخصیص‌های خودرو برای یک شهر
- * مبنای بازه: تاریخ تخصیص
+ * جزئیات تورهای نهایی برای یک شهر
+ * مبنا: اعلام‌بار Finalized؛ کرایه شهر = freight_cost مقصد؛ کرایه کل تور = total_freight_cost
+ * بازه: assignment_finalized_at (در نبود، loading_date)
  */
 async function getRepresentativeDetails(req, res) {
   try {
@@ -6332,6 +6408,11 @@ async function getRepresentativeDetails(req, res) {
       return res.status(400).json({ message: 'بازه تاریخ الزامی است.' });
     }
 
+    const startJalali = jalaliUtils.formatJalali(rangeStart);
+    const endJalali = jalaliUtils.formatJalali(rangeEnd);
+    const startJalaliDash = startJalali.replace(/\//g, '-');
+    const endJalaliDash = endJalali.replace(/\//g, '-');
+
     const params = [city];
     let paramIdx = 2;
     let lineTypeFilter = '';
@@ -6351,14 +6432,6 @@ async function getRepresentativeDetails(req, res) {
       paramIdx += 1;
     }
 
-    const statusFilter = `
-      AND fa.status NOT IN (
-        'Draft', 'PendingManagerApproval', 'Rejected',
-        'در انتظار تایید مدیر', 'ChangeRequested', 'Reannounced',
-        'پیش‌نویس', 'رد شده'
-      )
-    `;
-
     const query = `
       SELECT
         fa.id,
@@ -6367,19 +6440,7 @@ async function getRepresentativeDetails(req, res) {
         fa.created_at AS announced_at,
         fa.line_type,
         fa.assignment_type,
-        (
-          SELECT MIN(fah.created_at)
-          FROM freight_announcement_history fah
-          WHERE fah.freight_announcement_id = fa.id
-            AND fah.action = 'ASSIGNED'
-          LIMIT 1
-        ) AS assigned_at_history,
-        (
-          SELECT MIN(da.created_at)
-          FROM dispatch_assignments da
-          WHERE da.freight_announcement_id = fa.id
-            AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-        ) AS assigned_at_dispatch,
+        COALESCE(fa.total_freight_cost, 0)::float AS total_freight_cost,
         fa.assignment_finalized_at,
         COALESCE(d.id, pd.id) AS driver_id,
         COALESCE(d.name, pd.name) AS driver_name,
@@ -6396,7 +6457,9 @@ async function getRepresentativeDetails(req, res) {
         fd.id AS destination_id,
         fd.city AS destination_city,
         COALESCE(fd.freight_cost, 0) AS freight_cost,
-        LOWER(COALESCE(NULLIF(TRIM(fd.representative_type), ''), NULLIF(TRIM(fa.representative_type), ''), 'agent')) AS representative_type,
+        COALESCE(fd.sort_order, 999999) AS sort_order,
+        fd.created_at AS dest_created_at,
+        LOWER(COALESCE(NULLIF(TRIM(fd_filter.representative_type), ''), NULLIF(TRIM(fa.representative_type), ''), 'agent')) AS filter_representative_type,
         fd_filter.city AS filter_city,
         (
           SELECT dr.province
@@ -6404,11 +6467,7 @@ async function getRepresentativeDetails(req, res) {
           WHERE TRIM(dr.city) = TRIM(fd_filter.city)
           ORDER BY dr.id ASC
           LIMIT 1
-        ) AS province,
-        CASE
-          WHEN fd.city = fd_filter.city THEN COALESCE(fd.freight_cost, 0)
-          ELSE 0
-        END AS destination_specific_freight_cost
+        ) AS province
       FROM freight_announcements fa
       INNER JOIN freight_destinations fd_filter ON fd_filter.freight_announcement_id = fa.id
       INNER JOIN freight_destinations fd ON fd.freight_announcement_id = fa.id
@@ -6417,11 +6476,12 @@ async function getRepresentativeDetails(req, res) {
       LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
       LEFT JOIN personal_vehicles pv ON fa.assigned_vehicle_id = pv.id
       WHERE fd_filter.city = $1
-        AND fa.assigned_driver_id IS NOT NULL
+        AND fa.status = 'Finalized'
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+        AND fa.assignment_type IS NOT NULL
         ${repNameFilter}
         ${lineTypeFilter}
-        ${statusFilter}
-      ORDER BY fa.id, fd.created_at ASC
+      ORDER BY fa.id, COALESCE(fd.sort_order, 999999) ASC, fd.created_at ASC
     `;
 
     const { rows } = await pool.query(query, params);
@@ -6448,17 +6508,26 @@ async function getRepresentativeDetails(req, res) {
       return v || 'agent';
     };
 
+    const isAnnInDateRange = (row) => {
+      if (row.assignment_finalized_at) {
+        const d = new Date(row.assignment_finalized_at);
+        if (Number.isNaN(d.getTime())) return false;
+        return d >= rangeStart && d <= rangeEnd;
+      }
+      const ld = String(row.loading_date || '').trim();
+      if (!ld) return false;
+      return (
+        (ld >= startJalali && ld <= endJalali) ||
+        (ld >= startJalaliDash && ld <= endJalaliDash)
+      );
+    };
+
     const announcementMap = new Map();
 
     for (const row of rows) {
-      const assignedRaw =
-        row.assigned_at_dispatch || row.assigned_at_history || row.assignment_finalized_at;
-      if (!assignedRaw) continue;
-      const assignedAt = new Date(assignedRaw);
-      if (Number.isNaN(assignedAt.getTime())) continue;
-      if (assignedAt < rangeStart || assignedAt > rangeEnd) continue;
+      if (!isAnnInDateRange(row)) continue;
 
-      const repType = normalizeRepType(row.representative_type);
+      const repType = normalizeRepType(row.filter_representative_type);
       if (repTypeList.length > 0 && !repTypeList.includes(repType)) continue;
 
       const vehicleType = String(row.announcement_vehicle_type || 'نامشخص').trim() || 'نامشخص';
@@ -6469,11 +6538,13 @@ async function getRepresentativeDetails(req, res) {
 
       const annId = row.id;
       if (!announcementMap.has(annId)) {
-        let assignedAtJalali = null;
-        try {
-          assignedAtJalali = jalaliUtils.timestampToJalaliDate(assignedAt);
-        } catch (err) {
-          console.error('❌ [RepresentativeDetails] Error converting assigned_at:', err);
+        let finalizedAtJalali = null;
+        if (row.assignment_finalized_at) {
+          try {
+            finalizedAtJalali = jalaliUtils.timestampToJalaliDate(new Date(row.assignment_finalized_at));
+          } catch (err) {
+            console.error('❌ [RepresentativeDetails] Error converting finalized_at:', err);
+          }
         }
 
         let announcedAtJalali = null;
@@ -6499,9 +6570,10 @@ async function getRepresentativeDetails(req, res) {
           announcedAt: announcedAtJalali,
           lineType: row.line_type,
           assignmentType: row.assignment_type,
-          totalFreightCost: 0,
+          totalFreightCost: Math.round(Number(row.total_freight_cost) || 0),
           destinationFreightCost: 0,
-          assignedAt: assignedAtJalali,
+          visitCount: 0,
+          assignedAt: finalizedAtJalali || loadingDate,
           driver: row.driver_id
             ? {
                 id: row.driver_id,
@@ -6530,41 +6602,25 @@ async function getRepresentativeDetails(req, res) {
       const announcement = announcementMap.get(annId);
       const destCity = row.destination_city || null;
       const destCost = parseFloat(row.freight_cost) || 0;
-      const destSpecificCost = parseFloat(row.destination_specific_freight_cost) || 0;
-
-      if (destSpecificCost > 0) {
-        announcement.destinationFreightCost = destSpecificCost;
-      }
-
-      const existingDest = announcement.destinations.find((d) => d.city === destCity);
+      const existingDest = announcement.destinations.find((d) => d.id === row.destination_id);
       if (!existingDest && destCity) {
         announcement.destinations.push({
           id: row.destination_id || null,
           city: destCity,
           freightCost: destCost,
         });
-        announcement.totalFreightCost += destCost;
+        if (destCity === city) {
+          announcement.destinationFreightCost += Math.round(destCost);
+        }
       }
     }
 
-    const details = Array.from(announcementMap.values());
+    const details = Array.from(announcementMap.values()).map((detail) => {
+      detail.visitCount = detail.destinations.length;
+      return detail;
+    });
 
-    for (const detail of details) {
-      const destRows = await pool.query(
-        'SELECT id, city, freight_cost FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
-        [detail.id]
-      );
-      detail.destinations = destRows.rows.map((dest) => ({
-        id: dest.id || null,
-        city: dest.city,
-        freightCost: parseFloat(dest.freight_cost) || 0,
-      }));
-      detail.totalFreightCost = detail.destinations.reduce((sum, d) => sum + d.freightCost, 0);
-      const cityDest = detail.destinations.find((d) => d.city === city);
-      if (cityDest) detail.destinationFreightCost = cityDest.freightCost;
-    }
-
-    console.log('✅ [RepresentativeDetails] Found', details.length, 'assignments');
+    console.log('✅ [RepresentativeDetails] Found', details.length, 'tours');
     res.json(details);
   } catch (error) {
     console.error('❌ [RepresentativeDetails] Error:', error);

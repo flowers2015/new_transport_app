@@ -276,14 +276,17 @@ const canEditDairyLisCodes = (ann: FreightAnnouncement, user?: User): boolean =>
         FreightAnnouncementStatus.Rejected,
         FreightAnnouncementStatus.ReturnedToCreator,
         FreightAnnouncementStatus.Leftover,
+        FreightAnnouncementStatus.ChangeRequested,
         'Draft',
         'Rejected',
         'ReturnedToCreator',
         'Leftover',
+        'ChangeRequested',
         'پیش‌نویس',
         'رد شده',
         'برگشت به اعلام‌کننده',
         'بار مانده',
+        'درخواست تغییر',
     ]);
     if (fullEditStatuses.has(ann.status as any) || fullEditStatuses.has(statusStr)) {
         return false;

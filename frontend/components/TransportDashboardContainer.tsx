@@ -26,6 +26,7 @@ interface LineFreightCell {
 interface RepresentativeStatisticsData {
     city: string;
     province: string;
+    visitCount?: number;
     totalVehicles: number;
     personalCount: number;
     companyCount: number;
@@ -205,6 +206,13 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
     
     // Representative statistics
     const [representativeStats, setRepresentativeStats] = useState<RepresentativeStatisticsData[]>([]);
+    const [representativeStatsMeta, setRepresentativeStatsMeta] = useState<{
+        totalTours?: number;
+        totalVisits?: number;
+        totalFreightCost?: number;
+        freightBasis?: string;
+        basis?: string;
+    } | null>(null);
     const [representativeAvailableProvinces, setRepresentativeAvailableProvinces] = useState<string[]>([]);
     const [representativeAvailableVehicleTypes, setRepresentativeAvailableVehicleTypes] = useState<string[]>([]);
     const [representativeSelectedProvinces, setRepresentativeSelectedProvinces] = useState<string[]>([]);
@@ -440,6 +448,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
             const provinces = Array.isArray(data?.availableProvinces) ? data.availableProvinces : [];
             const vehicleTypes = Array.isArray(data?.availableVehicleTypes) ? data.availableVehicleTypes : [];
             setRepresentativeStats(rows);
+            setRepresentativeStatsMeta(data?.meta && typeof data.meta === 'object' ? data.meta : null);
             setRepresentativeAvailableProvinces(provinces);
             setRepresentativeAvailableVehicleTypes(vehicleTypes);
             setRepresentativeSelectedProvinces((prev) => {
@@ -660,6 +669,7 @@ const TransportDashboardContainer: React.FC<TransportDashboardContainerProps> = 
                 onTimeRangeChange={setTimeRange}
                 onRefresh={fetchStatistics}
                 representativeStats={representativeStats}
+                representativeStatsMeta={representativeStatsMeta}
                 representativeAvailableProvinces={representativeAvailableProvinces}
                 representativeAvailableVehicleTypes={representativeAvailableVehicleTypes}
                 representativeSelectedProvinces={representativeSelectedProvinces}
