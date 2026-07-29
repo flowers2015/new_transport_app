@@ -1,5 +1,12 @@
 export type CargoValueUnit = 'billion_toman' | 'million_toman' | 'million_rial' | 'rial';
 
+/**
+ * فعلاً واحد ورود ارزش بار روی میلیارد تومان قفل است.
+ * برای اجازهٔ انتخاب میلیون و … این فلگ را false کنید.
+ */
+export const CARGO_VALUE_UNIT_LOCKED = true;
+export const CARGO_VALUE_LOCKED_UNIT: CargoValueUnit = 'billion_toman';
+
 export const CARGO_VALUE_UNIT_OPTIONS: { value: CargoValueUnit; label: string; rialsPerUnit: number }[] = [
   { value: 'billion_toman', label: 'میلیارد تومان', rialsPerUnit: 10_000_000_000 },
   { value: 'million_toman', label: 'میلیون تومان', rialsPerUnit: 10_000_000 },
@@ -70,10 +77,24 @@ export function convertAmountToRials(amountStr: string, unit: CargoValueUnit): n
   return Math.round((amountHundredths * rialsPerUnit) / 100);
 }
 
+/** نمایش مقدار ذخیره‌شده به ریال در یک واحد ثابت (برای حالت قفل) */
+export function rialsToAmountInUnit(rials: number, unit: CargoValueUnit): string {
+  if (!rials || rials <= 0) return '';
+  const scaled = rials / RIALS_PER_UNIT[unit];
+  return formatAmountNumber(scaled, 2);
+}
+
 /** انتخاب بهترین واحد برای نمایش مقدار ذخیره‌شده به ریال */
 export function rialsToAmountAndUnit(rials: number): { amount: string; unit: CargoValueUnit } {
   if (!rials || rials <= 0) {
-    return { amount: '', unit: 'billion_toman' };
+    return { amount: '', unit: CARGO_VALUE_LOCKED_UNIT };
+  }
+
+  if (CARGO_VALUE_UNIT_LOCKED) {
+    return {
+      amount: rialsToAmountInUnit(rials, CARGO_VALUE_LOCKED_UNIT),
+      unit: CARGO_VALUE_LOCKED_UNIT,
+    };
   }
 
   const unitOrder: CargoValueUnit[] = ['billion_toman', 'million_toman', 'million_rial', 'rial'];
@@ -107,4 +128,8 @@ export function formatCargoValueShort(rials: number): string {
 export function formatRialsPreview(rials: number): string {
   if (!rials || rials <= 0) return '';
   return `${rials.toLocaleString('fa-IR')} ریال`;
+}
+
+export function getCargoValueUnitLabel(unit: CargoValueUnit): string {
+  return UNIT_LABEL[unit];
 }

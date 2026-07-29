@@ -368,39 +368,62 @@ export function formatDestinationRepCompactSegment(
     return typeLabel !== '-' ? typeLabel : '-';
 }
 
-/** یک خط مقصد فشرده پاستوریزه: شهر(تناژ) - نماینده - برند - LIS - محصولات - تاریخ تحویل */
+/** یک خط مقصد فشرده پاستوریزه: فقط فیلدهای پر؛ بدون خط‌تیرهٔ خالی */
 export function formatDairyCompactDestinationLine(
     ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
     dest: Destination,
     index: number
 ): string {
-    const city = (dest.city || '').trim() || '-';
+    const city = (dest.city || '').trim();
     const tonnage = dest.tonnage ? formatTonnageKgFromRaw(dest.tonnage) : '';
-    const tonnagePart = tonnage && tonnage !== '-' ? `(${tonnage})` : '';
-    const repPart = formatDestinationRepCompactSegment(ann, dest);
-    const brand = formatDestinationBrandLabel(dest);
-    const lis = dest.lisCode?.trim() || '-';
-    const products = formatDestinationProductsLabel(dest);
-    const productsPart = products !== '-' ? products : '-';
-    const deliveryDate = String(dest.deliveryDate || '').trim() || '-';
-    return `${index + 1}- ${city}${tonnagePart ? ` ${tonnagePart}` : ''} - ${repPart} - ${brand} - ${lis} - ${productsPart} - ${deliveryDate}`;
+    const cityPart =
+        city
+            ? tonnage && tonnage !== '-'
+                ? `${city} (${tonnage})`
+                : city
+            : tonnage && tonnage !== '-'
+              ? `(${tonnage})`
+              : '';
+
+    const parts = [
+        cityPart,
+        formatDestinationRepCompactSegment(ann, dest),
+        formatDestinationBrandLabel(dest),
+        (dest.lisCode || '').trim(),
+        formatDestinationProductsLabel(dest),
+        String(dest.deliveryDate || '').trim(),
+    ].filter((p) => {
+        const s = String(p || '').trim();
+        return s !== '' && s !== '-';
+    });
+
+    const body = parts.join(' · ');
+    return body ? `${index + 1}- ${body}` : `${index + 1}-`;
 }
 
-/** متن چندخطی مقاصد فشرده پاستوریزه — برای اکسل */
+/** متن چندخطی مقاصد فشرده پاستوریزه — برای اکسل (هر مقصد یک خط؛ Excel wrap) */
 export function formatDairyCompactDestinationsText(
     ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'>
 ): string {
     const destinations = ann.destinations || [];
     if (!destinations.length) return '-';
-    return destinations.map((d, i) => formatDairyCompactDestinationLine(ann, d, i)).join(' | ');
+    return destinations.map((d, i) => formatDairyCompactDestinationLine(ann, d, i)).join('\n');
 }
 
-/** ستون «مقاصد» فشرده پاستوریزه/لبنیات — خروجی اکسل بدون وابستگی به React */
+/** ستون «مقاصد» فشرده — خروجی اکسل؛ چندمقصدی زیر هم مثل UI */
 export function formatCompactDestinationsForExcel(
     ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'>
 ): string {
     const destinations = ann.destinations || [];
     if (!destinations.length) return '-';
+
+    // اگر LIS یا برند روی مقاصد باشد، همان فرمت کامل پاستوریزه
+    const looksDairyRich = destinations.some(
+        (d) => (d.lisCode || '').trim() || (d.brandType || d.brand || d.brand2 || '').toString().trim()
+    );
+    if (looksDairyRich) {
+        return formatDairyCompactDestinationsText(ann);
+    }
 
     return destinations
         .map((d) => {
@@ -409,14 +432,16 @@ export function formatCompactDestinationsForExcel(
             const tonnage = d.tonnage ? formatTonnageKgFromRaw(d.tonnage) : '';
             const deliveryDate = String((d as Destination & { deliveryDate?: string }).deliveryDate || '').trim();
             const unloadTime = (d.unloadTime || '').trim();
+            const lis = (d.lisCode || '').trim();
 
             let part = destRepType ? `(${destRepType}) ${city}` : city;
             if (tonnage && tonnage !== '-') part += ` (${tonnage})`;
+            if (lis) part += ` LIS:${lis}`;
             if (deliveryDate) part += ` ${deliveryDate}`;
             if (unloadTime) part += ` ${unloadTime}`;
             return part;
         })
-        .join('، ');
+        .join('\n');
 }
 
 /** نمایش نوع/نام نماینده در سطح اعلام (بستنی) — agent: نام، پخش/دپو: همان برچسب */

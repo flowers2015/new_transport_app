@@ -1,13 +1,118 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import FreightDashboard from './FreightDashboard';
 import { DispatchRouteSuggestion, FreightAnnouncement, FreightAnnouncementStatus, User, UserRole } from '../types';
-import { useCallback } from 'react';
 import { getApiUrl } from '../utils/apiConfig';
 import { parseFreightApiErrorMessage, isFreightIntakeLockedError, fetchFreightIntakeLocks, lineTypeToIntakeLockKey, FREIGHT_INTAKE_LOCK_MESSAGE } from '../utils/freightIntakeLock';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem } from '../utils/freightDisplay';
 
+const PLANNING_STATUS_MAP: Record<string, FreightAnnouncementStatus> = {
+    Draft: FreightAnnouncementStatus.Draft,
+    PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
+    Rejected: FreightAnnouncementStatus.Rejected,
+    PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
+    PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
+    Assigned: FreightAnnouncementStatus.Assigned,
+    InTransit: FreightAnnouncementStatus.InTransit,
+    Finalized: FreightAnnouncementStatus.Finalized,
+    Cancelled: FreightAnnouncementStatus.Cancelled,
+    ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+    Leftover: FreightAnnouncementStatus.Leftover,
+    ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
+    ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
+    Archived: FreightAnnouncementStatus.Archived,
+};
+
+/** نرمال‌سازی از API یا payload realtime — بدون refetch کامل */
+function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
+    return {
+        id: a.id,
+        announcementCode: a.announcement_code || a.announcementCode,
+        createdAt: new Date(a.created_at || a.createdAt || Date.now()),
+        loadingDate: (() => {
+            const raw = a.loading_date ?? a.loadingDate;
+            if (typeof raw === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(raw)) {
+                return raw.replace(/-/g, '/') as any;
+            }
+            return new Date(raw || Date.now());
+        })(),
+        lineType: a.line_type || a.lineType,
+        status: PLANNING_STATUS_MAP[a.status] || a.status,
+        cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
+        vehicleType: a.vehicle_type || a.vehicleType || '',
+        deliveryDate: a.delivery_date || a.deliveryDate || null,
+        notes: a.notes,
+        rejectionReason: a.rejection_reason || a.rejectionReason,
+        assignmentType: a.assignment_type || a.assignmentType,
+        assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
+        assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
+        totalFreightCost: a.total_freight_cost ?? a.totalFreightCost,
+        billOfLadingNumber: a.bill_of_lading_number ?? a.billOfLadingNumber,
+        originCity: a.origin_city || a.originCity,
+        brand: a.brand,
+        representativeType: a.representative_type || a.representativeType,
+        representativeName: a.representative_name || a.representativeName,
+        cartonCount: a.carton_count ?? a.cartonCount,
+        palletCount: a.pallet_count ?? a.palletCount,
+        loadingType: a.loading_type || a.loadingType,
+        displayPinned: !!(a.display_pinned ?? a.displayPinned),
+        displaySortOrder:
+            a.display_sort_order != null
+                ? Number(a.display_sort_order)
+                : a.displaySortOrder != null
+                  ? Number(a.displaySortOrder)
+                  : null,
+        priority: a.priority,
+        products: a.products || [],
+        platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+        creator_full_name: a.creator_full_name || a.creatorFullName,
+        creator_username: a.creator_username || a.creatorUsername,
+        creator_user_id: a.creator_user_id || a.creatorUserId,
+        destinations: Array.isArray(a.destinations)
+            ? a.destinations.map((d: any) => ({
+                  id: d.id,
+                  city: d.city,
+                  representativeName: d.representative_name || d.representativeName,
+                  tonnage:
+                      d.tonnage === null || d.tonnage === undefined || d.tonnage === ''
+                          ? d.tonnage
+                          : Math.round(Number(d.tonnage) * 100) / 100,
+                  unloadTime: d.unload_time || d.unloadTime,
+                  freightCost: d.freight_cost ?? d.freightCost,
+                  cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
+                  deliveryDate: d.delivery_date || d.deliveryDate,
+                  representativeType: d.representative_type || d.representativeType,
+                  lisCode: d.lis_code || d.lisCode,
+                  brandType: d.brand_type || d.brandType,
+                  brand: d.brand,
+                  brand2: d.brand2,
+                  products: Array.isArray(d.products)
+                      ? d.products
+                      : typeof d.products === 'string'
+                        ? (() => {
+                              try {
+                                  return JSON.parse(d.products);
+                              } catch {
+                                  return [];
+                              }
+                          })()
+                        : [],
+                  originalCreatedByUserId:
+                      d.original_created_by_user_id ||
+                      d.originalCreatedByUserId ||
+                      d.original_creator_user_id ||
+                      null,
+                  originalCreatorFullName:
+                      d.original_creator_full_name || d.originalCreatorFullName || null,
+                  originalCreatorUsername:
+                      d.original_creator_username || d.originalCreatorUsername || null,
+              }))
+            : [],
+        history: a.history || [],
+        destination_creator_names: a.destination_creator_names || a.destinationCreatorNames,
+    } as any;
+}
 const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
     const [loading, setLoading] = useState(false);
@@ -52,128 +157,9 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             const res = await fetch(getApiUrl('freight-announcements?includeLeftover=true'), { headers });
             if (!res.ok) throw new Error('Failed to fetch freight announcements');
             const raw = await res.json();
-            console.log('📦 [FreightPlanning] Fetched raw announcements count:', Array.isArray(raw)? raw.length : -1);
-            const statusMap: Record<string, FreightAnnouncementStatus> = {
-                Draft: FreightAnnouncementStatus.Draft,
-                PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
-                Rejected: FreightAnnouncementStatus.Rejected,
-                PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
-                PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
-                Assigned: FreightAnnouncementStatus.Assigned,
-                InTransit: FreightAnnouncementStatus.InTransit,
-                Finalized: FreightAnnouncementStatus.Finalized,
-                Cancelled: FreightAnnouncementStatus.Cancelled,
-                ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
-                Leftover: FreightAnnouncementStatus.Leftover,
-                ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
-                ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
-                Archived: FreightAnnouncementStatus.Archived,
-            };
-            const normalize = (a: any): FreightAnnouncement => ({
-                id: a.id,
-                announcementCode: a.announcement_code || a.announcementCode,
-                createdAt: new Date(a.created_at || a.createdAt || Date.now()),
-                                    // اگر loading_date یک رشته شمسی است (فرمت YYYY/MM/DD یا YYYY-MM-DD)، همان را نگه دار و `-` را به `/` تبدیل کن
-                    loadingDate: (() => {
-                        if (typeof a.loading_date === 'string' && /^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/.test(a.loading_date)) {
-                            const result = a.loading_date.replace(/-/g, '/');
-                            if (a.loading_date !== result) {
-                                console.log(`📅 [FreightPlanningContainer] normalize - Converted date: "${a.loading_date}" → "${result}"`);
-                            }
-                            return result as any;
-                        } else {
-                            const dateResult = new Date(a.loading_date || a.loadingDate || Date.now());
-                            console.log(`📅 [FreightPlanningContainer] normalize - Created Date object:`, {
-                                input: a.loading_date || a.loadingDate,
-                                result: dateResult.toISOString()
-                            });
-                            return dateResult;
-                        }
-                    })(),
-                lineType: a.line_type || a.lineType,
-                status: statusMap[a.status] || a.status,
-                cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
-                vehicleType: a.vehicle_type || a.vehicleType || '',
-                deliveryDate: a.delivery_date || a.deliveryDate || null, // تاریخ تحویل بار
-                notes: a.notes,
-                rejectionReason: a.rejection_reason || a.rejectionReason,
-                assignmentType: a.assignment_type || a.assignmentType,
-                assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
-                assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
-                totalFreightCost: a.total_freight_cost ?? a.totalFreightCost,
-                billOfLadingNumber: a.bill_of_lading_number ?? a.billOfLadingNumber,
-                originCity: a.origin_city || a.originCity,
-                brand: a.brand,
-                representativeType: a.representative_type || a.representativeType,
-                representativeName: a.representative_name || a.representativeName,
-                cartonCount: a.carton_count ?? a.cartonCount,
-                palletCount: a.pallet_count ?? a.palletCount,
-                loadingType: a.loading_type || a.loadingType,
-                displayPinned: !!(a.display_pinned ?? a.displayPinned),
-                displaySortOrder:
-                    a.display_sort_order != null
-                        ? Number(a.display_sort_order)
-                        : a.displaySortOrder != null
-                          ? Number(a.displaySortOrder)
-                          : null,
-                priority: a.priority,
-                products: a.products || [],
-                platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
-                // اطلاعات کارمند اعلام‌کننده
-                creator_full_name: a.creator_full_name || a.creatorFullName,
-                creator_username: a.creator_username || a.creatorUsername,
-                creator_user_id: a.creator_user_id || a.creatorUserId,
-                destinations: Array.isArray(a.destinations) ? a.destinations.map((d: any) => ({
-                    id: d.id,
-                    city: d.city,
-                    representativeName: d.representative_name || d.representativeName,
-                    tonnage:
-                        d.tonnage === null || d.tonnage === undefined || d.tonnage === ''
-                            ? d.tonnage
-                            : Math.round(Number(d.tonnage) * 100) / 100,
-                    unloadTime: d.unload_time || d.unloadTime,
-                    freightCost: d.freight_cost ?? d.freightCost,
-                    cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
-                    deliveryDate: d.delivery_date || d.deliveryDate,
-                    representativeType: d.representative_type || d.representativeType,
-                    lisCode: d.lis_code || d.lisCode,
-                    brandType: d.brand_type || d.brandType,
-                    brand: d.brand,
-                    brand2: d.brand2,
-                    products: Array.isArray(d.products)
-                        ? d.products
-                        : typeof d.products === 'string'
-                          ? (() => {
-                                try {
-                                    return JSON.parse(d.products);
-                                } catch {
-                                    return [];
-                                }
-                            })()
-                          : [],
-                    originalCreatedByUserId:
-                        d.original_created_by_user_id ||
-                        d.originalCreatedByUserId ||
-                        d.original_creator_user_id ||
-                        null,
-                    originalCreatorFullName:
-                        d.original_creator_full_name || d.originalCreatorFullName || null,
-                    originalCreatorUsername:
-                        d.original_creator_username || d.originalCreatorUsername || null,
-                })) : [],
-                history: a.history || [],
-                destination_creator_names: a.destination_creator_names || a.destinationCreatorNames,
-            } as any);
-            const normalized: FreightAnnouncement[] = Array.isArray(raw) ? raw.map(normalize) : [];
-            console.log('🧭 [FreightPlanning] Normalized announcements:', {
-                total: normalized.length,
-                byStatus: normalized.reduce((acc, ann) => {
-                    const status = ann.status || 'unknown';
-                    acc[status] = (acc[status] || 0) + 1;
-                    return acc;
-                }, {} as Record<string, number>),
-                leftoverCount: normalized.filter(a => a.status === FreightAnnouncementStatus.Leftover || a.status === 'Leftover' || a.status === 'بار مانده').length
-            });
+            const normalized: FreightAnnouncement[] = Array.isArray(raw)
+                ? raw.map(normalizePlanningAnnouncement)
+                : [];
             setAnnouncements(normalized);
         } catch (err) {
             console.error('[FreightPlanning] Failed to load announcements', err);
@@ -186,103 +172,101 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
     // Auto-refresh به عنوان fallback (فقط وقتی SSE قطع است)
     const [sseConnected, setSseConnected] = useState(false);
-    
+    const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const fetchAnnouncementsRef = useRef(fetchAnnouncements);
+    fetchAnnouncementsRef.current = fetchAnnouncements;
+    const pendingRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const fetchChangeRequestsRef = useRef<() => void>(() => {});
+
+    const scheduleDebouncedFullRefetch = useCallback(() => {
+        if (pendingRefetchTimerRef.current) clearTimeout(pendingRefetchTimerRef.current);
+        pendingRefetchTimerRef.current = setTimeout(() => {
+            pendingRefetchTimerRef.current = null;
+            fetchAnnouncementsRef.current(true).catch(() => undefined);
+        }, 1500);
+    }, []);
+
     // اتصال به Real-Time Updates (SSE)
     useRealtimeUpdates({
         onMessage: (message) => {
-            console.log('📨 [FreightPlanningContainer] Real-time message received:', message);
-            
-            if (message.type === 'announcement_update') {
-                // به‌روزرسانی اعلام بار
-                const { announcementId, updateType, data } = message;
-                
-                console.log('📨 [FreightPlanningContainer] Processing update', { announcementId, updateType, data });
-                
-                // اگر change_requested است، درخواست‌های تغییر را refresh کن
-                if (updateType === 'change_requested' || data.status === 'ChangeRequested') {
-                    console.log('🔄 [FreightPlanningContainer] Change request detected, refreshing change requests...');
-                    fetchChangeRequests();
-                }
-                
-                // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
-                if (updateType === 'finalized' || data.status === 'Finalized') {
-                    console.log('🗑️ [FreightPlanningContainer] Announcement finalized, removing from list');
-                    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
-                    return;
-                }
+            if (message.type !== 'announcement_update') return;
 
-                if (updateType === 'display_order_updated') {
-                    setAnnouncements((prev) =>
-                        prev.map((a) =>
-                            a.id === announcementId
-                                ? {
-                                      ...a,
-                                      displayPinned: !!(data.displayPinned ?? data.display_pinned ?? a.displayPinned),
-                                      displaySortOrder:
-                                          data.displaySortOrder != null
-                                              ? Number(data.displaySortOrder)
-                                              : data.display_sort_order != null
-                                                ? Number(data.display_sort_order)
-                                                : a.displaySortOrder ?? null,
-                                  }
-                                : a
-                        )
-                    );
-                    return;
-                }
-                
-                setAnnouncements(prev => {
-                    const index = prev.findIndex(a => a.id === announcementId);
-                    if (index === -1) {
-                        // اگر اعلام بار جدید است، باید fetch کنیم
-                        console.log('🔄 [FreightPlanningContainer] New announcement detected, fetching immediately...', { announcementId, updateType, data });
-                        
-                        // Invalidate cache برای freight-announcements
-                        import('../utils/apiCache').then(({ apiCache }) => {
-                            const cacheKey = `GET:${getApiUrl('freight-announcements?includeLeftover=true')}`;
-                            apiCache.invalidate(cacheKey);
-                            console.log('🗑️ [FreightPlanningContainer] Cache invalidated for new announcement');
-                        }).catch(err => {
-                            console.warn('⚠️ [FreightPlanningContainer] Failed to invalidate cache:', err);
+            const { announcementId, updateType, data } = message;
+
+            // اگر change_requested است، درخواست‌های تغییر را refresh کن
+            if (updateType === 'change_requested' || data?.status === 'ChangeRequested') {
+                fetchChangeRequestsRef.current?.();
+            }
+
+            // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
+            if (updateType === 'finalized' || data?.status === 'Finalized') {
+                setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
+                return;
+            }
+
+            if (updateType === 'display_order_updated') {
+                setAnnouncements((prev) =>
+                    prev.map((a) =>
+                        a.id === announcementId
+                            ? {
+                                  ...a,
+                                  displayPinned: !!(data.displayPinned ?? data.display_pinned ?? a.displayPinned),
+                                  displaySortOrder:
+                                      data.displaySortOrder != null
+                                          ? Number(data.displaySortOrder)
+                                          : data.display_sort_order != null
+                                            ? Number(data.display_sort_order)
+                                            : a.displaySortOrder ?? null,
+                              }
+                            : a
+                    )
+                );
+                return;
+            }
+
+            setAnnouncements((prev) => {
+                const index = prev.findIndex((a) => a.id === announcementId);
+                if (index === -1) {
+                    // بار جدید: از payload بساز تا همه کلاینت‌ها همزمان لیست کامل نکشند
+                    const hasUsablePayload =
+                        data &&
+                        (data.announcementCode ||
+                            data.announcement_code ||
+                            data.lineType ||
+                            data.line_type ||
+                            data.vehicleType ||
+                            data.vehicle_type);
+                    if (hasUsablePayload) {
+                        const incoming = normalizePlanningAnnouncement({
+                            ...data,
+                            id: announcementId || data.id,
                         });
-                        
-                        // فوراً fetch کن (بدون await - async)
-                        // با کمی تاخیر برای اطمینان از به‌روزرسانی backend
-                        const delay = (updateType === 'approved' || updateType === 'created') ? 50 : 100;
-                        setTimeout(() => {
-                            console.log(`🔄 [FreightPlanningContainer] Fetching after ${delay}ms delay for ${updateType}`);
-                            fetchAnnouncements(true).catch(err => {
-                                console.error('❌ [FreightPlanningContainer] Error fetching new announcement:', err);
-                            });
-                        }, delay);
-                        
+                        if (incoming.id && !prev.some((a) => a.id === incoming.id)) {
+                            return [incoming, ...prev];
+                        }
                         return prev;
                     }
-                    
-                    // به‌روزرسانی اعلام بار موجود
-                    console.log('✅ [FreightPlanningContainer] Updating existing announcement in list');
-                    return applyOptimisticUpdate(prev, announcementId, {
-                        status: data.status as FreightAnnouncementStatus,
-                        assignmentType: data.assignmentType,
-                        ...data
-                    });
+                    scheduleDebouncedFullRefetch();
+                    return prev;
+                }
+
+                return applyOptimisticUpdate(prev, announcementId, {
+                    status: data.status as FreightAnnouncementStatus,
+                    assignmentType: data.assignmentType,
+                    ...data,
                 });
-            }
+            });
         },
         onConnect: () => {
-            console.log('✅ [FreightPlanningContainer] Real-time connection established');
             setSseConnected(true);
-            console.log('🔄 [FreightPlanningContainer] SSE connected, auto-refresh will be disabled');
         },
         onDisconnect: () => {
-            console.log('❌ [FreightPlanningContainer] Real-time connection lost');
             setSseConnected(false);
-            console.log('🔄 [FreightPlanningContainer] SSE disconnected, auto-refresh fallback will be enabled');
         },
         onError: (error) => {
             console.error('❌ [FreightPlanningContainer] Real-time error:', error);
         },
-        enabled: !!currentUser?.id
+        enabled: !!currentUser?.id,
     });
 
     // بارگذاری اولیه
@@ -290,35 +274,33 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
         fetchAnnouncements();
     }, []); // فقط یک بار در mount
 
-    // Auto-refresh هر 10 ثانیه برای real-time updates (silent refresh - بدون loading state)
-    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const fetchAnnouncementsRef = useRef(fetchAnnouncements);
-    fetchAnnouncementsRef.current = fetchAnnouncements;
-    
+    // Fallback poll فقط وقتی SSE قطع است (قبلاً هر ۱۰ثانیه همیشه = اشباع سرور با ۱۵ کاربر)
     useEffect(() => {
-        // پاک کردن interval قبلی
         if (refreshIntervalRef.current) {
             clearInterval(refreshIntervalRef.current);
+            refreshIntervalRef.current = null;
         }
-        
-        // تنظیم interval جدید
+        if (sseConnected) return;
+
         refreshIntervalRef.current = setInterval(() => {
-            // فقط اگر صفحه visible است
             if (!document.hidden) {
-                console.log('🔄 [FreightPlanning] Auto-refresh triggered');
-                fetchAnnouncementsRef.current(true); // silent = true (بدون loading state)
+                fetchAnnouncementsRef.current(true);
             }
-        }, 10000); // 10 ثانیه برای real-time updates
-        
-        // Cleanup
+        }, 30000);
+
         return () => {
             if (refreshIntervalRef.current) {
                 clearInterval(refreshIntervalRef.current);
                 refreshIntervalRef.current = null;
             }
         };
-    }, []); // فقط یک بار در mount
+    }, [sseConnected]);
 
+    useEffect(() => {
+        return () => {
+            if (pendingRefetchTimerRef.current) clearTimeout(pendingRefetchTimerRef.current);
+        };
+    }, []);
     const searchRouteSuggestions = useCallback(async (query: string): Promise<DispatchRouteSuggestion[]> => {
         const trimmed = query.trim();
         if (!trimmed) {
@@ -654,22 +636,12 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
             setLoadingChangeRequests(false);
         }
     };
+    fetchChangeRequestsRef.current = fetchChangeRequests;
 
-    // دریافت خودکار درخواست‌های تغییر هنگام بارگذاری و بعد از هر update
+    // دریافت خودکار درخواست‌های تغییر هنگام بارگذاری
     useEffect(() => {
         fetchChangeRequests();
     }, []);
-    
-    // دریافت مجدد درخواست‌های تغییر وقتی که اعلام بار update می‌شود
-    useRealtimeUpdates({
-        onMessage: (message) => {
-            if (message.type === 'announcement_update' && message.updateType === 'change_requested') {
-                console.log('🔄 [FreightPlanningContainer] Change request detected, refreshing change requests...');
-                fetchChangeRequests();
-            }
-        },
-        enabled: !!currentUser?.id
-    });
 
     const handleApproveChangeRequest = async (requestId: string, newAnnouncements?: any[]) => {
         try {

@@ -176,20 +176,25 @@ export async function enrichAnnouncementsWithRouteMileage<T extends { destinatio
         });
     });
 
-    await Promise.all(
-        [...uniqueCities].map(async (city) => {
-            const mileage = await resolveRouteMileageFromDestinations([city]);
-            cityCache.set(normalizeCityKey(city), mileage);
-        })
-    );
+    const cities = [...uniqueCities];
+    const chunkSize = 8;
+    for (let i = 0; i < cities.length; i += chunkSize) {
+        const chunk = cities.slice(i, i + chunkSize);
+        await Promise.all(
+            chunk.map(async (city) => {
+                const mileage = await resolveRouteMileageFromDestinations([city]);
+                cityCache.set(normalizeCityKey(city), mileage);
+            })
+        );
+    }
 
     return announcements.map((ann) => {
-        const cities = (ann.destinations || []).map((d) => d.city || '').filter(Boolean);
-        if (cities.length === 0) return ann;
+        const citiesOfAnn = (ann.destinations || []).map((d) => d.city || '').filter(Boolean);
+        if (citiesOfAnn.length === 0) return ann;
 
         let approvedKm = 0;
         let approvedDays = 1;
-        cities.forEach((city) => {
+        citiesOfAnn.forEach((city) => {
             const mileage = cityCache.get(normalizeCityKey(city));
             if (mileage && mileage.approvedKm > approvedKm) {
                 approvedKm = mileage.approvedKm;

@@ -19,6 +19,14 @@ const { ensureJalaliDateColumns } = require('../services/ensureJalaliDateColumns
 const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
 const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
 
+/** یک‌بار در عمر پروسس — جلوگیری از ALTER تکراری روی هر GET/POST */
+let freightListSchemaReady = false;
+let financeDispositionSchemaReady = false;
+let hasOriginalCreatorColCache = null;
+let usersNameColumnCache = null;
+let hasIsReannouncementColCache = null;
+let destinationSortOrderColumnCache = null;
+
 function resolveActingUserId(user) {
   return user?.userId || user?.id || null;
 }
@@ -218,6 +226,9 @@ async function hasDestinationOriginalCreatorColumn(db) {
 
 async function hasDestinationSortOrderColumn(db) {
   try {
+    if (destinationSortOrderColumnCache !== null && (!db || db === pool)) {
+      return destinationSortOrderColumnCache;
+    }
     const client = db || pool;
     const colCheck = await client.query(`
       SELECT 1
@@ -227,7 +238,11 @@ async function hasDestinationSortOrderColumn(db) {
         AND column_name = 'sort_order'
       LIMIT 1
     `);
-    return (colCheck.rowCount || 0) > 0;
+    const exists = (colCheck.rowCount || 0) > 0;
+    if (!db || db === pool) {
+      destinationSortOrderColumnCache = exists;
+    }
+    return exists;
   } catch (_) {
     return false;
   }
@@ -241,7 +256,8 @@ async function ensureDestinationSortOrderColumn() {
       ALTER TABLE freight_destinations
       ADD COLUMN IF NOT EXISTS sort_order INTEGER
     `);
-    return await hasDestinationSortOrderColumn(pool);
+    destinationSortOrderColumnCache = true;
+    return true;
   } catch (err) {
     console.warn('⚠️ [freight] could not ensure sort_order column:', err.message);
     return false;
@@ -548,49 +564,59 @@ function calculateMode(values, precision = 2) {
  */
 async function getFreightAnnouncements(req, res) {
   try {
-    // بررسی و اضافه کردن ستون assignment_finalized_at به freight_announcements اگر وجود ندارد
-    try {
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
-      `);
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS awaiting_bill_of_lading_at TIMESTAMPTZ
-      `);
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS announcement_source VARCHAR(50) DEFAULT 'standard'
-      `);
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS exception_reason TEXT
-      `);
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS finance_exception_metadata_locked BOOLEAN DEFAULT FALSE
-      `);
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS display_pinned BOOLEAN DEFAULT FALSE
-      `);
-      await pool.query(`
-        ALTER TABLE freight_announcements 
-        ADD COLUMN IF NOT EXISTS display_sort_order INTEGER
-      `);
-      await ensureFinanceDispositionColumns(pool);
-    } catch (alterError) {
-      // اگر خطا داد (مثلاً جدول وجود ندارد)، لاگ کن اما ادامه بده
-      console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment/finalize columns exist:', alterError.message);
+    // بررسی و اضافه کردن ستون‌ها فقط یک‌بار در عمر پروسس
+    if (!freightListSchemaReady) {
+      try {
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
+        `);
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS awaiting_bill_of_lading_at TIMESTAMPTZ
+        `);
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS announcement_source VARCHAR(50) DEFAULT 'standard'
+        `);
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS exception_reason TEXT
+        `);
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS finance_exception_metadata_locked BOOLEAN DEFAULT FALSE
+        `);
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS display_pinned BOOLEAN DEFAULT FALSE
+        `);
+        await pool.query(`
+          ALTER TABLE freight_announcements 
+          ADD COLUMN IF NOT EXISTS display_sort_order INTEGER
+        `);
+        await ensureFinanceDispositionColumns(pool);
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_freight_destinations_announcement_id
+          ON freight_destinations (freight_announcement_id)
+        `);
+        freightListSchemaReady = true;
+      } catch (alterError) {
+        console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment/finalize columns exist:', alterError.message);
+      }
     }
     
     // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
     // ChangeRequested باید نمایش داده شود تا planner بتواند آن را ببیند و تأیید/رد کند
     // اگر includeFinalized=true باشد، Finalized و InTransit را هم شامل می‌کند (برای Freight Finance)
-    const { includeLeftover, includeFinalized, includeFinanceExceptions } = req.query;
+    // forTransportFinance=true: فقط تورهای قابل‌محاسبه مالی ترابری (سبک‌تر)
+    const { includeLeftover, includeFinalized, includeFinanceExceptions, forTransportFinance } =
+      req.query;
+    const transportFinanceMode =
+      forTransportFinance === 'true' || forTransportFinance === '1';
     
     let whereClause = "WHERE fa.status NOT IN (";
-    if (includeFinalized === 'true') {
+    if (includeFinalized === 'true' || transportFinanceMode) {
       // برای Freight Finance: فقط Reannounced, Archived, Cancelled را فیلتر کن
       whereClause += "'Reannounced', 'Archived', 'بایگانی شده', 'Cancelled'";
     } else {
@@ -601,18 +627,36 @@ async function getFreightAnnouncements(req, res) {
       whereClause += ", 'Leftover', 'ReturnedToCreator'";
     }
     // حتی در includeFinalized (مالی) این وضعیت نباید بیاید
-    if (includeFinalized === 'true') {
+    if (includeFinalized === 'true' || transportFinanceMode) {
       whereClause += ", 'ReturnedToCreator', 'Leftover'";
     }
     whereClause += ")";
+
+    let transportFinanceFilter = '';
+    if (transportFinanceMode) {
+      transportFinanceFilter = `
+        AND fa.status = 'Finalized'
+        AND fa.assigned_driver_id IS NOT NULL
+        AND fa.assigned_vehicle_id IS NOT NULL
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+        AND (
+          COALESCE(fa.announcement_source, 'standard') = 'finance_exception'
+          OR LOWER(COALESCE(fa.assignment_type, '')) IN ('company', 'شرکتی')
+        )
+      `;
+    }
     
     // تور استثنایی مالی: در کارتابل ترابری/برنامه‌ریزی مخفی؛ در مالی ترابری (includeFinalized) نمایش داده شود
     let financeExceptionFilter = '';
-    if (includeFinalized !== 'true' && includeFinanceExceptions !== 'true') {
+    if (
+      includeFinalized !== 'true' &&
+      includeFinanceExceptions !== 'true' &&
+      !transportFinanceMode
+    ) {
       financeExceptionFilter = ` AND COALESCE(fa.announcement_source, 'standard') <> 'finance_exception'`;
     }
 
-    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, includeFinalized=${includeFinalized}, includeFinanceExceptions=${includeFinanceExceptions}, whereClause=${whereClause}`);
+    console.log(`🔍 [getFreightAnnouncements] includeLeftover=${includeLeftover}, includeFinalized=${includeFinalized}, includeFinanceExceptions=${includeFinanceExceptions}, forTransportFinance=${transportFinanceMode}, whereClause=${whereClause}`);
     
     // Get user role and ID for filtering
     const userRole = req.user?.role || req.user?.userRole;
@@ -624,18 +668,22 @@ async function getFreightAnnouncements(req, res) {
     
     // کارمند/کارشناس: اعلام‌بارهای خودشان + ردیف‌هایی که مقصدشان بعد از ادغام روی اعلام‌بار دیگری رفته
     let userFilter = '';
-    let hasOriginalCreatorCol = false;
-    try {
-      const colCheck = await pool.query(`
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'freight_destinations'
-          AND column_name = 'original_created_by_user_id'
-        LIMIT 1
-      `);
-      hasOriginalCreatorCol = (colCheck.rowCount || 0) > 0;
-    } catch (_) {
-      hasOriginalCreatorCol = false;
+    let hasOriginalCreatorCol = hasOriginalCreatorColCache;
+    if (hasOriginalCreatorCol === null) {
+      try {
+        const colCheck = await pool.query(`
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_name = 'freight_destinations'
+            AND column_name = 'original_created_by_user_id'
+          LIMIT 1
+        `);
+        hasOriginalCreatorCol = (colCheck.rowCount || 0) > 0;
+        hasOriginalCreatorColCache = hasOriginalCreatorCol;
+      } catch (_) {
+        hasOriginalCreatorCol = false;
+        hasOriginalCreatorColCache = false;
+      }
     }
 
     // کارمند/کارشناس:
@@ -719,24 +767,54 @@ async function getFreightAnnouncements(req, res) {
     }
     
     // بررسی اینکه کدام ستون name در جدول users وجود دارد
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'users' 
-      AND column_name IN ('full_name', 'name')
-    `);
-    const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
-    const hasName = columnCheck.rows.some(r => r.column_name === 'name');
-    const nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+    let nameColumn = usersNameColumnCache;
+    if (!nameColumn) {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name IN ('full_name', 'name')
+      `);
+      const hasFullName = columnCheck.rows.some(r => r.column_name === 'full_name');
+      const hasName = columnCheck.rows.some(r => r.column_name === 'name');
+      nameColumn = hasFullName ? 'full_name' : (hasName ? 'name' : 'username');
+      usersNameColumnCache = nameColumn;
+    }
 
-    const reannounceColCheck = await pool.query(`
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'freight_announcements' AND column_name = 'is_reannouncement'
-    `);
-    const isReannouncementSelect = reannounceColCheck.rowCount > 0
+    let isReannouncementSelect;
+    if (hasIsReannouncementColCache === null) {
+      const reannounceColCheck = await pool.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'freight_announcements' AND column_name = 'is_reannouncement'
+      `);
+      hasIsReannouncementColCache = (reannounceColCheck.rowCount || 0) > 0;
+    }
+    isReannouncementSelect = hasIsReannouncementColCache
       ? 'COALESCE(fa.is_reannouncement, FALSE) AS is_reannouncement'
       : 'FALSE AS is_reannouncement';
-    
+
+    // در حالت مالی ترابری subquery سنگین assigned_at لازم نیست
+    const assignedAtSelect = transportFinanceMode
+      ? 'NULL::timestamptz as assigned_at'
+      : `(
+          SELECT MAX(src.ts)
+          FROM (
+            SELECT fah.created_at AS ts
+            FROM freight_announcement_history fah
+            WHERE fah.freight_announcement_id = fa.id
+              AND fah.action IN (
+                'ASSIGNED',
+                'REASSIGNED',
+                'ASSIGNED_STAGE1',
+                'ASSIGNED_STAGE2'
+              )
+            UNION ALL
+            SELECT da_src.created_at AS ts
+            FROM dispatch_assignments da_src
+            WHERE da_src.freight_announcement_id = fa.id
+              AND (da_src.is_cancelled IS NULL OR da_src.is_cancelled = FALSE)
+          ) src
+        ) as assigned_at`;
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (fa.id)
         fa.*,
@@ -762,26 +840,7 @@ async function getFreightAnnouncements(req, res) {
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
         COALESCE(fa.assignment_finalized_at, da.assignment_finalized_at) as assignment_finalized_at,
-        -- فقط خواندن: آخرین تخصیص موفق از هر دو مسیر (زنده + ثبت نوبت) — بدون تغییر منطق ذخیره
-        (
-          SELECT MAX(src.ts)
-          FROM (
-            SELECT fah.created_at AS ts
-            FROM freight_announcement_history fah
-            WHERE fah.freight_announcement_id = fa.id
-              AND fah.action IN (
-                'ASSIGNED',
-                'REASSIGNED',
-                'ASSIGNED_STAGE1',
-                'ASSIGNED_STAGE2'
-              )
-            UNION ALL
-            SELECT da_src.created_at AS ts
-            FROM dispatch_assignments da_src
-            WHERE da_src.freight_announcement_id = fa.id
-              AND (da_src.is_cancelled IS NULL OR da_src.is_cancelled = FALSE)
-          ) src
-        ) as assigned_at,
+        ${assignedAtSelect},
         -- تشخیص assignment_type: اگر driver در personal_drivers است، personal است
         CASE 
           WHEN pd.id IS NOT NULL THEN 'personal'
@@ -803,7 +862,7 @@ async function getFreightAnnouncements(req, res) {
         ORDER BY created_at DESC
         LIMIT 1
       ) da ON true
-      ${whereClause}${userFilter}${branchCityFilter}${financeExceptionFilter}
+      ${whereClause}${userFilter}${branchCityFilter}${financeExceptionFilter}${transportFinanceFilter}
       ORDER BY fa.id, fa.created_at DESC
     `);
     
@@ -822,9 +881,8 @@ async function getFreightAnnouncements(req, res) {
       userId: req.user?.id || req.user?.userId
     });
     
-    // Fetch destinations for each announcement and convert dates
+    // Fetch destinations in one query (به‌جای N+1) و تبدیل تاریخ‌ها
     await ensureDestinationSortOrderColumn();
-    const destOrderSql = 'ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC';
     const allDestinationsStats = {
       total: 0,
       pakhsh: 0,
@@ -832,11 +890,13 @@ async function getFreightAnnouncements(req, res) {
       namayandeNames: new Set(),
       sampleDestinations: []
     };
-    
-    for (let announcement of rows) {
-      let destRows;
+
+    const destByAnnId = new Map();
+    if (rows.length > 0) {
+      const annIds = rows.map((r) => r.id);
+      let destResult;
       if (hasOriginalCreatorCol) {
-        destRows = await pool.query(
+        destResult = await pool.query(
           `SELECT
              d.*,
              u_orig.id AS original_creator_user_id,
@@ -844,19 +904,33 @@ async function getFreightAnnouncements(req, res) {
              u_orig.username AS original_creator_username
            FROM freight_destinations d
            LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
-           WHERE d.freight_announcement_id = $1
-           ${destOrderSql}`,
-          [announcement.id]
+           WHERE d.freight_announcement_id = ANY($1)
+           ORDER BY d.freight_announcement_id,
+                    COALESCE(d.sort_order, 999999) ASC,
+                    d.created_at ASC`,
+          [annIds]
         );
       } else {
-        destRows = await pool.query(
-          `SELECT * FROM freight_destinations
-           WHERE freight_announcement_id = $1
-           ${destOrderSql}`,
-          [announcement.id]
+        destResult = await pool.query(
+          `SELECT *
+           FROM freight_destinations
+           WHERE freight_announcement_id = ANY($1)
+           ORDER BY freight_announcement_id,
+                    COALESCE(sort_order, 999999) ASC,
+                    created_at ASC`,
+          [annIds]
         );
       }
-      announcement.destinations = destRows.rows.map((dest) => ({
+      for (const dest of destResult.rows) {
+        const key = String(dest.freight_announcement_id);
+        if (!destByAnnId.has(key)) destByAnnId.set(key, []);
+        destByAnnId.get(key).push(dest);
+      }
+    }
+
+    for (let announcement of rows) {
+      const destRowsList = destByAnnId.get(String(announcement.id)) || [];
+      announcement.destinations = destRowsList.map((dest) => ({
         ...dest,
         tonnage: normalizeTonnageKg(dest.tonnage),
       }));
@@ -882,7 +956,7 @@ async function getFreightAnnouncements(req, res) {
       }
       
       // آمار representative_name
-      destRows.rows.forEach(dest => {
+      destRowsList.forEach(dest => {
         allDestinationsStats.total++;
         const repName = dest.representative_name || '';
         const normalizedRepName = repName === null || repName === '' ? '' : repName;
@@ -1953,9 +2027,14 @@ async function createFreightAnnouncement(req, res) {
           representativeName: d.representative_name,
           tonnage: d.tonnage,
           freightCost: d.freight_cost,
+          cargoValue: d.cargo_value != null ? Number(d.cargo_value) : 0,
           unloadTime: d.unload_time,
           deliveryDate: d.delivery_date,
-          representativeType: d.representative_type
+          representativeType: d.representative_type,
+          lisCode: d.lis_code,
+          brandType: d.brand_type,
+          brand: d.brand,
+          brand2: d.brand2,
         })),
         createdAt: created.created_at,
         id: id
@@ -8231,6 +8310,9 @@ async function ensureFinanceExceptionColumns(clientOrPool = pool) {
 }
 
 async function ensureFinanceDispositionColumns(clientOrPool = pool) {
+  if (financeDispositionSchemaReady) {
+    return;
+  }
   await ensureFinanceExceptionColumns(clientOrPool);
   await clientOrPool.query(`
     ALTER TABLE freight_announcements
@@ -8260,6 +8342,7 @@ async function ensureFinanceDispositionColumns(clientOrPool = pool) {
     ALTER TABLE dispatch_assignments
     ADD COLUMN IF NOT EXISTS cancellation_source VARCHAR(50)
   `);
+  financeDispositionSchemaReady = true;
 }
 
 /**

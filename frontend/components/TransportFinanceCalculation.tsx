@@ -998,7 +998,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const [driversRes, vehiclesRes, announcementsRes, calculationsRes] = await Promise.all([
                 fetch(getApiUrl('drivers'), { headers }),
                 fetch(getApiUrl('vehicles'), { headers }),
-                fetch(getApiUrl('freight-announcements?includeFinalized=true'), { headers }),
+                fetch(getApiUrl('freight-announcements?includeFinalized=true&forTransportFinance=1'), { headers }),
                 fetch(getApiUrl('driver-calculations?includeClosed=1'), { headers }),
             ]);
 
@@ -3038,7 +3038,15 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             setFinanceRejectDialogOpen(false);
             rejectedAnnouncementIdsRef.current.add(financeRejectTarget.announcementId);
 
-            await fetchData({ silent: true });
+            // به‌روزرسانی محلی — بدون رفرش کامل لیست (علت اصلی تأخیر ۱۰–۱۵ ثانیه)
+            const rejectedId = financeRejectTarget.announcementId;
+            setAnnouncements((prev) => prev.filter((ann: any) => ann.id !== rejectedId));
+            setSavedCalculations((prev) =>
+                prev.filter((item: any) => {
+                    const aid = item.announcement_id ?? item.announcementId;
+                    return aid !== rejectedId;
+                })
+            );
             setRefreshTrigger((t) => t + 1);
 
             if (financeRejectType === 'partial') {

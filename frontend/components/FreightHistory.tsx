@@ -1186,6 +1186,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     const row = worksheet.addRow(rowData);
                     const isEvenRow = (idx + 1) % 2 === 0;
                     const rowColor = isEvenRow ? 'FFF2F2F2' : 'FFFFFFFF';
+                    const destCount = Math.max(1, (ann.destinations || []).length);
                     
                     row.eachCell((cell: any, colNumber: number) => {
                         cell.fill = {
@@ -1199,10 +1200,15 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                             right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                         };
-                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                        const header = headers[colNumber - 1];
+                        const isDestCol = header === 'مقاصد' || header === 'مقصد';
+                        cell.alignment = {
+                            horizontal: 'right',
+                            vertical: isDestCol ? 'top' : 'middle',
+                            wrapText: isDestCol || String(cell.value || '').includes('\n'),
+                        };
                         
                         // Format numbers
-                        const header = headers[colNumber - 1];
                         const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h));
                         if (isNumericColumn && typeof cell.value === 'number') {
                             // برای اعداد بزرگ، از فرمت عددی بدون نماد علمی استفاده می‌کنیم
@@ -1215,19 +1221,25 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             }
                         }
                     });
+                    if (mode === 'compact' && destCount > 1) {
+                        row.height = Math.min(18 + destCount * 14, 90);
+                    }
                 });
                 
                 // Set column widths
                 headers.forEach((header, idx) => {
+                    if (header === 'مقاصد') {
+                        worksheet.getColumn(idx + 1).width = 55;
+                        return;
+                    }
                     let maxLength = header.length;
                     rowsToExport.forEach(ann => {
                         const value = getValueForHeader(header, ann, 0);
-                        const cellValue = String(value || '');
+                        const cellValue = String(value || '').split('\n')[0] || '';
                         maxLength = Math.max(maxLength, cellValue.length);
                     });
                     worksheet.getColumn(idx + 1).width = Math.min(Math.max(maxLength + 2, 10), 50);
-                });
-                
+                });                
                 // Set page setup for right-to-left
                 worksheet.views = [{
                     rightToLeft: true

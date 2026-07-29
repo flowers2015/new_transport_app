@@ -1500,10 +1500,32 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }
         });
         
-        // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم
+        // برای Full Dairy/Ambient، headers مقاصد را اضافه می‌کنیم (پاستوریزه: برند/LIS/محصولات هم)
         if (isFullDairyAmbientMode) {
+            const isFullDairyExport = activeLine === FreightLineType.Dairy;
             for (let i = 1; i <= 4; i++) {
-                headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                if (isFullDairyExport) {
+                    headers.push(
+                        `مقصد ${i} - نوع برند`,
+                        `مقصد ${i} - کد LIS`,
+                        `مقصد ${i} - محصولات`,
+                        `مقصد ${i} - نماینده`,
+                        `مقصد ${i} - شهر`,
+                        `مقصد ${i} - تناژ`,
+                        `مقصد ${i} - تاریخ تحویل`,
+                        `مقصد ${i} - ساعت تخلیه`,
+                        `مقصد ${i} - کرایه`
+                    );
+                } else {
+                    headers.push(
+                        `مقصد ${i} - نماینده`,
+                        `مقصد ${i} - شهر`,
+                        `مقصد ${i} - تناژ`,
+                        `مقصد ${i} - تاریخ تحویل`,
+                        `مقصد ${i} - ساعت تخلیه`,
+                        `مقصد ${i} - کرایه`
+                    );
+                }
             }
         }
         
@@ -1528,8 +1550,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     let value: any = '';
                     
                     // بررسی اینکه آیا این ستون عددی است (مثل تناژ، کرایه، ارزش بار)
-                    const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
+                    const numericHeaders = ['کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                     const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
+
+                    if (col.header === 'کل تناژ (کیلوگرم)' || col.header.includes('کل تناژ')) {
+                        const sum = sumDestinationTonnageKg(ann.destinations);
+                        row.push(sum > 0 ? sum : '');
+                        return;
+                    }
 
                     if (col.header === 'مقاصد') {
                         value =
@@ -1609,25 +1637,41 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             
             // برای Full Dairy/Ambient، مقاصد را اضافه می‌کنیم
             if (isFullDairyAmbientMode) {
+                const isFullDairyExport = activeLine === FreightLineType.Dairy;
                 for (let i = 0; i < 4; i++) {
                     const dest = ann.destinations[i];
                     if (dest) {
                         const repType = resolveDestinationRepTypeLabel(ann, dest);
-                        const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
+                        const tonnage = dest.tonnage != null && dest.tonnage !== ''
+                            ? Number(dest.tonnage)
+                            : '';
                         const deliveryDate = (dest as any).deliveryDate || '';
                         const unloadTime = dest.unloadTime || '';
-                        // برای کرایه، مقدار عددی را نگه دار (Excel خودش فرمت می‌کند)
                         const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
-                        row.push(
-                            repType,
-                            dest.city || '',
-                            tonnage,
-                            deliveryDate,
-                            unloadTime,
-                            freightCost
-                        );
+                        if (isFullDairyExport) {
+                            row.push(
+                                formatDestinationBrandLabel(dest),
+                                dest.lisCode || '',
+                                formatDestinationProductsLabel(dest),
+                                repType,
+                                dest.city || '',
+                                tonnage,
+                                deliveryDate,
+                                unloadTime,
+                                freightCost
+                            );
+                        } else {
+                            row.push(
+                                repType,
+                                dest.city || '',
+                                tonnage,
+                                deliveryDate,
+                                unloadTime,
+                                freightCost
+                            );
+                        }
                     } else {
-                        row.push('', '', '', '', '', '');
+                        row.push(...Array(isFullDairyExport ? 9 : 6).fill(''));
                     }
                 }
             }
@@ -1754,8 +1798,30 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             });
             
             if (isFullDairyAmbientMode) {
+                const isFullDairyExport = activeLine === FreightLineType.Dairy;
                 for (let i = 1; i <= 4; i++) {
-                    headers.push(`مقصد ${i} - نماینده`, `مقصد ${i} - شهر`, `مقصد ${i} - تناژ`, `مقصد ${i} - تاریخ تحویل`, `مقصد ${i} - ساعت تخلیه`, `مقصد ${i} - کرایه`);
+                    if (isFullDairyExport) {
+                        headers.push(
+                            `مقصد ${i} - نوع برند`,
+                            `مقصد ${i} - کد LIS`,
+                            `مقصد ${i} - محصولات`,
+                            `مقصد ${i} - نماینده`,
+                            `مقصد ${i} - شهر`,
+                            `مقصد ${i} - تناژ`,
+                            `مقصد ${i} - تاریخ تحویل`,
+                            `مقصد ${i} - ساعت تخلیه`,
+                            `مقصد ${i} - کرایه`
+                        );
+                    } else {
+                        headers.push(
+                            `مقصد ${i} - نماینده`,
+                            `مقصد ${i} - شهر`,
+                            `مقصد ${i} - تناژ`,
+                            `مقصد ${i} - تاریخ تحویل`,
+                            `مقصد ${i} - ساعت تخلیه`,
+                            `مقصد ${i} - کرایه`
+                        );
+                    }
                 }
             }
 
@@ -1783,11 +1849,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             
             // Helper to get value for header - استفاده از همان منطق generateExcelExport
             const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
-                const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
+                const numericHeaders = ['کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
                 const isNumericColumn = numericHeaders.some(h => header.includes(h));
                 
                 if (header === 'انتخاب') {
                     return '';
+                }
+
+                if (header === 'کل تناژ (کیلوگرم)' || header.includes('کل تناژ')) {
+                    const sum = sumDestinationTonnageKg(ann.destinations);
+                    return sum > 0 ? sum : '';
                 }
                 
                 // Handle special columns directly - اولویت با اینهاست
@@ -1817,7 +1888,9 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
                 }
                 if (header === 'مقاصد') {
-                    return formatCompactDestinationsForExcel(ann);
+                    return activeLine === FreightLineType.Dairy && mode === 'compact'
+                        ? formatDairyCompactDestinationsText(ann)
+                        : formatCompactDestinationsForExcel(ann);
                 }
                 if (header === 'مقصد') {
                     return getDestinationCitiesLabel(ann);
@@ -1847,7 +1920,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 return text;
                             }
                             return String(item || '');
-                        }).join('، ');
+                        }).join('\n');
                     } else {
                         value = String(rendered || '');
                     }
@@ -1888,17 +1961,35 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 });
                 
                 if (isFullDairyAmbientMode) {
+                    const isFullDairyExport = activeLine === FreightLineType.Dairy;
                     for (let i = 0; i < 4; i++) {
                         const dest = ann.destinations[i];
                         if (dest) {
                             const repType = resolveDestinationRepTypeLabel(ann, dest);
-                            const tonnage = dest.tonnage ? Number(dest.tonnage) : '';
+                            const tonnage =
+                                dest.tonnage != null && dest.tonnage !== ''
+                                    ? Number(dest.tonnage)
+                                    : '';
                             const deliveryDate = (dest as any).deliveryDate || '';
                             const unloadTime = dest.unloadTime || '';
                             const freightCost = dest.freightCost ? Number(dest.freightCost) : '';
-                            rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                            if (isFullDairyExport) {
+                                rowData.push(
+                                    formatDestinationBrandLabel(dest),
+                                    dest.lisCode || '',
+                                    formatDestinationProductsLabel(dest),
+                                    repType,
+                                    dest.city || '',
+                                    tonnage,
+                                    deliveryDate,
+                                    unloadTime,
+                                    freightCost
+                                );
+                            } else {
+                                rowData.push(repType, dest.city || '', tonnage, deliveryDate, unloadTime, freightCost);
+                            }
                         } else {
-                            rowData.push('', '', '', '', '', '');
+                            rowData.push(...Array(isFullDairyExport ? 9 : 6).fill(''));
                         }
                     }
                 }
@@ -1906,6 +1997,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 const row = worksheet.addRow(rowData);
                 const isEvenRow = (idx + 1) % 2 === 0;
                 const rowColor = isEvenRow ? 'FFF2F2F2' : 'FFFFFFFF';
+                const destCount = Math.max(1, (ann.destinations || []).length);
                 
                 row.eachCell((cell: any, colNumber: number) => {
                     cell.fill = {
@@ -1919,11 +2011,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
                         right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                     };
-                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                    const header = headers[colNumber - 1];
+                    const isDestCol = header === 'مقاصد' || header === 'مقصد';
+                    cell.alignment = {
+                        horizontal: 'right',
+                        vertical: isDestCol ? 'top' : 'middle',
+                        wrapText: isDestCol || String(cell.value || '').includes('\n'),
+                    };
                     
                     // Format numbers
-                    const header = headers[colNumber - 1];
-                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header.includes(h));
+                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header?.includes(h));
                     if (isNumericColumn && typeof cell.value === 'number') {
                         // برای اطمینان از نمایش صحیح اعداد بزرگ بدون نماد علمی
                         // استفاده از فرمت عددی با جداکننده هزارگان
@@ -1936,19 +2033,26 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         }
                     }
                 });
+
+                if (mode === 'compact' && destCount > 1) {
+                    row.height = Math.min(18 + destCount * 14, 90);
+                }
             });
             
             // Set column widths
             headers.forEach((header, idx) => {
                 let maxLength = header.length;
+                if (header === 'مقاصد') {
+                    worksheet.getColumn(idx + 1).width = 55;
+                    return;
+                }
                 excelExportAnnouncements.forEach(ann => {
                     const value = getValueForHeader(header, ann, 0);
-                    const cellValue = String(value || '');
+                    const cellValue = String(value || '').split('\n')[0] || '';
                     maxLength = Math.max(maxLength, cellValue.length);
                 });
                 worksheet.getColumn(idx + 1).width = Math.min(Math.max(maxLength + 2, 10), 50);
-            });
-            
+            });            
             // Set page setup for right-to-left
             worksheet.views = [{
                 rightToLeft: true
