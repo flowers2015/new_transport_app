@@ -1194,13 +1194,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 };
 
                 let byId = refreshIds();
-                if (sourceId === targetId) {
-                    logArrangement('TRANSFER skip — already on target', {
-                        destinationId: op.destinationId,
-                        target: targetId,
-                    });
-                    continue;
-                }
+                // همان اعلام‌بار: بازترتیب داخل تور است و باید با newPosition به سرور برود
                 if (!byId.has(sourceId) || !byId.has(targetId)) {
                     onRefresh?.();
                     await new Promise((r) => setTimeout(r, 400));

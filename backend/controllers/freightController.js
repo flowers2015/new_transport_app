@@ -3291,15 +3291,17 @@ async function assignPersonalDriverAndVehicle(req, res) {
       );
     }
     
-    // Update destinations if provided
+    // فقط کرایه مقصدها را به‌روز کن — DELETE+INSERT فیلدهایی مثل lis_code/brand/products را پاک می‌کرد
     if (Array.isArray(destinations) && destinations.length > 0) {
-      await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [announcementId]);
-      
       for (const dest of destinations) {
-        const destId = crypto.randomUUID();
+        const destId = dest.id || dest.destinationId;
+        if (!destId) continue;
+        const cost = dest.freightCost ?? dest.freight_cost ?? 0;
         await client.query(
-          'INSERT INTO freight_destinations (id, freight_announcement_id, city, representative_name, tonnage, freight_cost, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
-          [destId, announcementId, dest.city, dest.representativeName, dest.tonnage, dest.freightCost]
+          `UPDATE freight_destinations
+           SET freight_cost = $1
+           WHERE id = $2 AND freight_announcement_id = $3`,
+          [cost, destId, announcementId]
         );
       }
     }
@@ -3861,28 +3863,17 @@ async function assignVehicleAndDriverInternal(req, res) {
       updateValues
     );
     
-    // به‌روزرسانی مقاصد اگر ارسال شده باشند
+    // فقط کرایه مقصدها را به‌روز کن — DELETE+INSERT فیلدهایی مثل lis_code/brand/products را پاک می‌کرد
     if (Array.isArray(destinations) && destinations.length > 0) {
-      // حذف مقاصد قبلی
-      await client.query(
-        'DELETE FROM freight_destinations WHERE freight_announcement_id = $1',
-        [announcementId]
-      );
-      
-      // اضافه کردن مقاصد جدید
       for (const dest of destinations) {
-        const destId = dest.id || require('crypto').randomUUID();
+        const destId = dest.id || dest.destinationId;
+        if (!destId) continue;
+        const cost = dest.freightCost ?? dest.freight_cost ?? 0;
         await client.query(
-          'INSERT INTO freight_destinations (id, freight_announcement_id, city, tonnage, freight_cost, representative_name, representative_type, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
-          [
-            destId,
-            announcementId,
-            dest.city || '',
-            dest.tonnage || null,
-            dest.freightCost || 0,
-            dest.representativeName || null,
-            dest.representativeType || null
-          ]
+          `UPDATE freight_destinations
+           SET freight_cost = $1
+           WHERE id = $2 AND freight_announcement_id = $3`,
+          [cost, destId, announcementId]
         );
       }
     }
@@ -10199,11 +10190,16 @@ async function transferDestination(req, res) {
       destination: { id: destination.id, city: destination.city },
     });
 
-    // گرفتن مقاصد target برای تعیین موقعیت
+    // گرفتن مقاصد target برای تعیین موقعیت (مرتب‌سازی مثل لیست زنده: sort_order سپس created_at)
+    const hasSortOrder = await ensureDestinationSortOrderColumn();
+    const orderByClause = hasSortOrder
+      ? 'ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC'
+      : 'ORDER BY created_at ASC';
     const { rows: targetDestRows } = await client.query(
-      `SELECT id, city, created_at FROM freight_destinations
+      `SELECT id, city, created_at
+       FROM freight_destinations
        WHERE freight_announcement_id = $1
-       ORDER BY created_at ASC`,
+       ${orderByClause}`,
       [targetAnnouncementId]
     );
 
@@ -10219,82 +10215,29 @@ async function transferDestination(req, res) {
       }))
     });
 
-    // محاسبه created_at برای موقعیت جدید
-    let newCreatedAt;
-    const actualPosition = Math.min(newPosition, targetDestRows.length + 1);
-    
-    console.log('🔍 [transferDestination] Position calculation start:', {
-      requestedPosition: newPosition,
-      targetDestinationsCount: targetDestRows.length,
-      actualPosition
-    });
-    
-    if (targetDestRows.length === 0) {
-      // اگر مقصدی وجود ندارد، از NOW() استفاده می‌کنیم
-      newCreatedAt = new Date();
-      console.log('📅 [transferDestination] No existing destinations, using NOW():', newCreatedAt.toISOString());
-    } else if (actualPosition === 1) {
-      // اگر باید در اول قرار بگیرد، created_at را قبل از اولین مقصد قرار می‌دهیم
-      const firstCreatedAt = new Date(targetDestRows[0].created_at);
-      const firstTimestamp = firstCreatedAt.getTime();
-      // استفاده از یک بازه زمانی بزرگ‌تر برای اطمینان از قرار گرفتن در اول
-      const offsetMs = (targetDestRows.length + 1) * 1000;
-      newCreatedAt = new Date(firstTimestamp - offsetMs);
-      console.log('📅 [transferDestination] Position 1 calculation:', {
-        firstCreatedAt: firstCreatedAt.toISOString(),
-        firstTimestamp,
-        offsetMs,
-        newCreatedAt: newCreatedAt.toISOString(),
-        newTimestamp: newCreatedAt.getTime(),
-        difference: firstTimestamp - newCreatedAt.getTime()
-      });
-    } else if (actualPosition > targetDestRows.length) {
-      // اگر باید در آخر قرار بگیرد، created_at را بعد از آخرین مقصد قرار می‌دهیم
-      const lastCreatedAt = new Date(targetDestRows[targetDestRows.length - 1].created_at);
-      newCreatedAt = new Date(lastCreatedAt.getTime() + 1000); // 1 ثانیه بعد
-      console.log('📅 [transferDestination] Position last calculation:', {
-        lastCreatedAt: lastCreatedAt.toISOString(),
-        newCreatedAt: newCreatedAt.toISOString()
-      });
-    } else {
-      // اگر باید در وسط قرار بگیرد، created_at را بین مقصد قبلی و بعدی قرار می‌دهیم
-      const prevIndex = actualPosition - 2;
-      const nextIndex = actualPosition - 1;
-      const prevCreatedAt = new Date(targetDestRows[prevIndex].created_at);
-      const nextCreatedAt = new Date(targetDestRows[nextIndex].created_at);
-      const diff = nextCreatedAt.getTime() - prevCreatedAt.getTime();
-      console.log('📅 [transferDestination] Position middle calculation:', {
-        actualPosition,
-        prevIndex,
-        nextIndex,
-        prevCity: targetDestRows[prevIndex].city,
-        nextCity: targetDestRows[nextIndex].city,
-        prevCreatedAt: prevCreatedAt.toISOString(),
-        nextCreatedAt: nextCreatedAt.toISOString(),
-        diffMs: diff
-      });
-      // اگر diff خیلی کوچک است (مثلاً کمتر از 2 ثانیه)، از یک مقدار ثابت استفاده می‌کنیم
-      if (diff < 2000) {
-        newCreatedAt = new Date(prevCreatedAt.getTime() + 1000);
-        console.log('📅 [transferDestination] Using fixed offset (diff < 2000ms):', newCreatedAt.toISOString());
-      } else {
-        newCreatedAt = new Date(prevCreatedAt.getTime() + Math.floor(diff / 2));
-        console.log('📅 [transferDestination] Using half diff:', {
-          halfDiff: Math.floor(diff / 2),
-          newCreatedAt: newCreatedAt.toISOString()
-        });
-      }
-    }
+    // ترتیب نهایی: مقصد در حال جابجایی را از لیست فعلی بردار و در newPosition قرار بده
+    const others = targetDestRows.filter((d) => d.id !== destinationId);
+    const insertIdx = Math.max(0, Math.min(Number(newPosition) - 1, others.length));
+    const orderedIds = [
+      ...others.slice(0, insertIdx).map((d) => d.id),
+      destinationId,
+      ...others.slice(insertIdx).map((d) => d.id),
+    ];
+    const actualPosition = insertIdx + 1;
+
+    // created_at را هم برای سازگاری با کلاینت‌های قدیمی هم‌راستا نگه دار
+    const baseTime = Date.now();
+    const newCreatedAt = new Date(baseTime + insertIdx * 1000);
 
     console.log('📅 [transferDestination] Final position calculation:', {
       targetDestinationsCount: targetDestRows.length,
       requestedPosition: newPosition,
       actualPosition,
+      orderedIds,
       newCreatedAt: newCreatedAt.toISOString(),
-      newTimestamp: newCreatedAt.getTime()
     });
 
-    // انتقال مقصد: تغییر freight_announcement_id و created_at — اعلام‌کننده اصلی مقصد حفظ می‌شود
+    // انتقال/بازترتیب مقصد
     await client.query(
       `UPDATE freight_destinations
        SET freight_announcement_id = $1,
@@ -10306,6 +10249,16 @@ async function transferDestination(req, res) {
        WHERE id = $3`,
       [targetAnnouncementId, newCreatedAt, destinationId, sourceAnnouncementId]
     );
+
+    // شمارهٔ نمایشی همه مقصدهای هدف را یکدست کن تا Live همان ترتیب چیدمان را ببیند
+    if (hasSortOrder) {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await client.query(
+          `UPDATE freight_destinations SET sort_order = $1, created_at = $2 WHERE id = $3`,
+          [i, new Date(baseTime + i * 1000), orderedIds[i]]
+        );
+      }
+    }
 
     console.log('✅ [transferDestination] Destination transferred:', {
       destinationId,
@@ -10319,7 +10272,7 @@ async function transferDestination(req, res) {
     const { rows: finalDestRows } = await client.query(
       `SELECT id, city, created_at FROM freight_destinations
        WHERE freight_announcement_id = $1
-       ORDER BY created_at ASC`,
+       ${orderByClause}`,
       [targetAnnouncementId]
     );
 
@@ -10336,31 +10289,48 @@ async function transferDestination(req, res) {
       }))
     });
 
-    // ثبت تاریخچه برای source announcement
-    await logFreightHistory({
-      announcementId: sourceAnnouncementId,
-      userId: userId,
-      userName: userName,
-      action: 'DESTINATION_TRANSFERRED',
-      oldStatus: sourceAnn.status,
-      newStatus: sourceAnn.status,
-      description: `مقصد ${destination.city} به اعلام بار ${targetAnn.announcement_code} منتقل شد (توسط ${userName})`,
-      ipAddress: req.ip,
-      client: client
-    });
+    const isSameAnnouncementReorder = sourceAnnouncementId === targetAnnouncementId;
 
-    // ثبت تاریخچه برای target announcement
-    await logFreightHistory({
-      announcementId: targetAnnouncementId,
-      userId: userId,
-      userName: userName,
-      action: 'DESTINATION_RECEIVED',
-      oldStatus: targetAnn.status,
-      newStatus: targetAnn.status,
-      description: `مقصد ${destination.city} از اعلام بار ${sourceAnn.announcement_code} دریافت شد (موقعیت: ${actualPosition}) (توسط ${userName})`,
-      ipAddress: req.ip,
-      client: client
-    });
+    // ثبت تاریخچه
+    if (isSameAnnouncementReorder) {
+      await logFreightHistory({
+        announcementId: targetAnnouncementId,
+        userId: userId,
+        userName: userName,
+        action: 'DESTINATION_REORDERED',
+        oldStatus: targetAnn.status,
+        newStatus: targetAnn.status,
+        description: `ترتیب مقصد ${destination.city} به موقعیت ${actualPosition} تغییر کرد (توسط ${userName})`,
+        ipAddress: req.ip,
+        client: client
+      });
+    } else {
+      // ثبت تاریخچه برای source announcement
+      await logFreightHistory({
+        announcementId: sourceAnnouncementId,
+        userId: userId,
+        userName: userName,
+        action: 'DESTINATION_TRANSFERRED',
+        oldStatus: sourceAnn.status,
+        newStatus: sourceAnn.status,
+        description: `مقصد ${destination.city} به اعلام بار ${targetAnn.announcement_code} منتقل شد (توسط ${userName})`,
+        ipAddress: req.ip,
+        client: client
+      });
+
+      // ثبت تاریخچه برای target announcement
+      await logFreightHistory({
+        announcementId: targetAnnouncementId,
+        userId: userId,
+        userName: userName,
+        action: 'DESTINATION_RECEIVED',
+        oldStatus: targetAnn.status,
+        newStatus: targetAnn.status,
+        description: `مقصد ${destination.city} از اعلام بار ${sourceAnn.announcement_code} دریافت شد (موقعیت: ${actualPosition}) (توسط ${userName})`,
+        ipAddress: req.ip,
+        client: client
+      });
+    }
 
     // بررسی اینکه آیا source announcement دیگر مقصدی ندارد
     const { rows: remainingDestRows } = await client.query(
