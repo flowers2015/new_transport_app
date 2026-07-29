@@ -149,7 +149,7 @@ const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     'کل تناژ (کیلوگرم)': 'col-tonnage',
     مقاصد: 'col-destinations',
     'ارزش بار (ریال)': 'col-cargo-value',
-    'ساعت حضور': 'col-platform-time',
+    'تاریخ بارگیری': 'col-platform-time',
     'تاریخ اعلام بار': 'col-created-at',
 };
 
@@ -396,20 +396,28 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         activeLine === FreightLineType.Dairy &&
         !isPendingBillOfLadingTab(activeLine);
 
+    const isDairyOrAmbientTab =
+        activeLine === FreightLineType.Dairy || activeLine === FreightLineType.Ambient;
+
     useEffect(() => {
-        if (!isDairyCompactTable) {
+        if (!isDairyCompactTable && !isDairyOrAmbientTab) {
             setHiddenColumnHeaders(new Set());
             setColumnPickerOpen(false);
             return;
         }
-        setHiddenColumnHeaders(loadTransportLiveHiddenColumns(columnStorageKey));
+        const stored = loadTransportLiveHiddenColumns(columnStorageKey);
+        // اگر کاربر هنوز چیزی ذخیره نکرده، «تاریخ اعلام بار» پیش‌فرض مخفی باشد
+        if (stored.size === 0) {
+            stored.add('تاریخ اعلام بار');
+        }
+        setHiddenColumnHeaders(stored);
         setColumnPickerOpen(false);
-    }, [columnStorageKey, isDairyCompactTable]);
+    }, [columnStorageKey, isDairyCompactTable, isDairyOrAmbientTab]);
 
     useEffect(() => {
-        if (!isDairyCompactTable) return;
+        if (!isDairyCompactTable && !isDairyOrAmbientTab) return;
         saveTransportLiveHiddenColumns(columnStorageKey, hiddenColumnHeaders);
-    }, [columnStorageKey, hiddenColumnHeaders, isDairyCompactTable]);
+    }, [columnStorageKey, hiddenColumnHeaders, isDairyCompactTable, isDairyOrAmbientTab]);
 
     useEffect(() => {
         if (!columnPickerOpen) return;
@@ -1119,7 +1127,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col items-center gap-0.5 leading-tight">
+                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
+                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
+                    </div>
+                ) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1146,7 +1159,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col items-center gap-0.5 leading-tight">
+                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
+                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
+                    </div>
+                ) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1162,7 +1180,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col items-center gap-0.5 leading-tight">
+                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
+                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
+                    </div>
+                ) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1187,7 +1210,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
+                    <div className="flex flex-col items-center gap-0.5 leading-tight">
+                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
+                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
+                    </div>
+                ) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1204,10 +1232,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const visibleColumns = useMemo(
         () =>
-            isDairyCompactTable
+            (isDairyCompactTable || isDairyOrAmbientTab)
                 ? allColumns.filter((col) => !hiddenColumnHeaders.has(col.header))
                 : allColumns,
-        [allColumns, hiddenColumnHeaders, isDairyCompactTable]
+        [allColumns, hiddenColumnHeaders, isDairyCompactTable, isDairyOrAmbientTab]
     );
 
     const toggleColumnVisibility = useCallback((header: string) => {
@@ -2994,8 +3022,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 .transport-live-dairy-compact .col-tonnage { width: 4.5%; white-space: nowrap; vertical-align: middle; }
                 .transport-live-dairy-compact .col-destinations { width: 22%; }
                 .transport-live-dairy-compact .col-cargo-value { width: 5%; white-space: nowrap; vertical-align: middle; }
-                .transport-live-dairy-compact .col-platform-time { width: 3%; white-space: nowrap; vertical-align: middle; }
-                .transport-live-dairy-compact .col-created-at { width: 5%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-platform-time { width: 7%; white-space: nowrap; vertical-align: middle; }
+                .transport-live-dairy-compact .col-created-at { width: 6%; white-space: nowrap; vertical-align: middle; }
                 .transport-live-dairy-compact thead th {
                     background: #f8fafc;
                     font-size: 0.65rem;
