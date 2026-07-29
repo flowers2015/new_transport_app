@@ -233,7 +233,11 @@ function readTourStringField(tour: any, camel: string, snake: string): string {
 
 function resolveAssignmentDateFromAnnouncement(ann: any): string {
     if (!ann) return '';
-    const raw = ann.assigned_at ?? ann.assignedAt;
+    const raw =
+        ann.assigned_at ??
+        ann.assignedAt ??
+        ann.assignment_finalized_at ??
+        ann.assignmentFinalizedAt;
     if (!raw) return '';
     const formatted = formatBillOfLadingDateDisplay(raw);
     return formatted === '-' ? '' : formatted;

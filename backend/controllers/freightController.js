@@ -793,7 +793,8 @@ async function getFreightAnnouncements(req, res) {
       ? 'COALESCE(fa.is_reannouncement, FALSE) AS is_reannouncement'
       : 'FALSE AS is_reannouncement';
 
-    // در حالت مالی ترابری subquery سنگین assigned_at لازم نیست
+    // در حالت مالی ترابری subquery همبسته را در SELECT اصلی نمی‌گذاریم؛
+    // بعد از گرفتن لیست، assigned_at را با یک query batch پر می‌کنیم (سبک + تاریخ تخصیص درست).
     const assignedAtSelect = transportFinanceMode
       ? 'NULL::timestamptz as assigned_at'
       : `(
@@ -894,6 +895,42 @@ async function getFreightAnnouncements(req, res) {
     const destByAnnId = new Map();
     if (rows.length > 0) {
       const annIds = rows.map((r) => r.id);
+
+      // کارتابل مالی: تاریخ تخصیص را یکجا برای همان IDها بگیر (نه NULL و نه subquery همبسته)
+      if (transportFinanceMode) {
+        try {
+          const assignedRes = await pool.query(
+            `SELECT freight_announcement_id, MAX(ts) AS assigned_at
+             FROM (
+               SELECT fah.freight_announcement_id, fah.created_at AS ts
+               FROM freight_announcement_history fah
+               WHERE fah.freight_announcement_id = ANY($1)
+                 AND fah.action IN (
+                   'ASSIGNED',
+                   'REASSIGNED',
+                   'ASSIGNED_STAGE1',
+                   'ASSIGNED_STAGE2'
+                 )
+               UNION ALL
+               SELECT da_src.freight_announcement_id, da_src.created_at AS ts
+               FROM dispatch_assignments da_src
+               WHERE da_src.freight_announcement_id = ANY($1)
+                 AND (da_src.is_cancelled IS NULL OR da_src.is_cancelled = FALSE)
+             ) src
+             GROUP BY freight_announcement_id`,
+            [annIds]
+          );
+          const assignedById = new Map(
+            assignedRes.rows.map((r) => [String(r.freight_announcement_id), r.assigned_at])
+          );
+          for (const row of rows) {
+            row.assigned_at = assignedById.get(String(row.id)) || null;
+          }
+        } catch (assignedErr) {
+          console.error('❌ [getFreightAnnouncements] batch assigned_at (finance):', assignedErr.message);
+        }
+      }
+
       let destResult;
       if (hasOriginalCreatorCol) {
         destResult = await pool.query(

@@ -156,7 +156,7 @@ const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
 const renderDairyCompactDestinations = (ann: FreightAnnouncement) => {
     if (!ann.destinations?.length) return <span>-</span>;
     return (
-        <div className="dest-compact-list text-[9px] sm:text-[10px] leading-snug text-right w-full min-w-0">
+        <div className="dest-compact-list text-[10px] sm:text-[11px] leading-normal text-right w-full min-w-0">
             {ann.destinations.map((d, idx) => {
                 const products = formatDestinationProductsLabel(d);
                 return (
@@ -2723,15 +2723,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 if (isFullDairy) {
                                                     return (
                                                         <React.Fragment key={i}>
-                                                            <td className="p-2 text-center border">{formatDestinationBrandLabel(dest)}</td>
-                                                            <td className="p-2 text-center border">{dest?.lisCode || '-'}</td>
-                                                            <td className="p-2 text-center border">{formatDestinationProductsLabel(dest)}</td>
-                                                            <td className="p-2 text-center border">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
-                                                            <td className="p-2 text-center border">{dest?.city || '-'}</td>
-                                                            <td className="p-2 text-center border">{dest?.tonnage != null ? formatTonnageKg(parseNumericField(dest.tonnage)) : '-'}</td>
-                                                            <td className="p-2 text-center border">{(dest as any)?.deliveryDate || '-'}</td>
-                                                            <td className="p-2 text-center border">{dest?.unloadTime || '-'}</td>
-                                                            <td className="p-2 text-center border">{formatDestinationFreightCost(dest?.freightCost)}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{formatDestinationBrandLabel(dest)}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{dest?.lisCode || '-'}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{formatDestinationProductsLabel(dest)}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{dest ? resolveDestinationRepTypeLabel(ann, dest) : '-'}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{dest?.city || '-'}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{dest?.tonnage != null ? formatTonnageKg(parseNumericField(dest.tonnage)) : '-'}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{(dest as any)?.deliveryDate || '-'}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{dest?.unloadTime || '-'}</td>
+                                                            <td className="p-2 text-center border text-[11px] sm:text-xs">{formatDestinationFreightCost(dest?.freightCost)}</td>
                                                         </React.Fragment>
                                                     );
                                                 }
@@ -2971,6 +2971,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 .transport-live-dairy-compact .col-destinations {
                     overflow: visible;
                     vertical-align: top;
+                    font-size: 0.625rem;
+                    line-height: 1.35;
+                }
+                @media (min-width: 640px) {
+                    .transport-live-dairy-compact .col-destinations {
+                        font-size: 0.6875rem;
+                    }
                 }
                 .transport-live-dairy-compact .dairy-compact-cell {
                     display: flex;
@@ -2995,28 +3002,28 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     line-height: 1.25;
                     vertical-align: bottom;
                 }
-                .dest-compact-list { display: flex; flex-direction: column; gap: 0.2rem; width: 100%; min-width: 0; }
+                .dest-compact-list { display: flex; flex-direction: column; gap: 0.25rem; width: 100%; min-width: 0; }
                 .dest-compact-line {
                     display: flex;
-                    gap: 0.2rem;
+                    gap: 0.22rem;
                     align-items: flex-start;
-                    padding-bottom: 0.2rem;
+                    padding-bottom: 0.22rem;
                     border-bottom: 1px solid #f1f5f9;
                 }
                 .dest-compact-line:last-child { border-bottom: none; padding-bottom: 0; }
                 .dest-compact-num {
                     flex-shrink: 0;
-                    width: 0.9rem;
-                    height: 0.9rem;
+                    width: 1rem;
+                    height: 1rem;
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
                     border-radius: 9999px;
                     background: #e2e8f0;
                     color: #475569;
-                    font-size: 0.55rem;
+                    font-size: 0.6rem;
                     font-weight: 700;
-                    margin-top: 0.05rem;
+                    margin-top: 0.08rem;
                 }
                 .dest-compact-body {
                     flex: 1;
