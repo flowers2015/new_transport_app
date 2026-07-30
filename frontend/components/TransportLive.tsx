@@ -127,14 +127,29 @@ const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
     ann.destinations.map((d, idx) => {
         const destRepType = resolveDestinationRepTypeLabel(ann, d);
         const tonnage = d.tonnage ? formatTonnageKgFromRaw(d.tonnage) : '';
-        const deliveryDate = (d as Destination & { deliveryDate?: string }).deliveryDate;
+        const destLoading = String((d as Destination).loadingDate || '').trim();
+        const loadingDateLabel = destLoading
+            ? destLoading.includes('/')
+                ? destLoading
+                : formatJalali(destLoading as any)
+            : ann.loadingDate
+              ? formatJalali(ann.loadingDate)
+              : '';
+        const loadingTimeLabel = String(
+            (d as Destination).platformArrivalTime || ann.platformArrivalTime || ''
+        ).trim();
         const unloadTime = d.unloadTime;
         return (
             <span key={d.id || idx} className="inline-block">
                 {destRepType ? `(${destRepType}) ` : ''}
                 <span className="font-bold text-blue-700">{d.city}</span>
                 {tonnage ? ` (${tonnage})` : ''}
-                {deliveryDate && <span className="text-green-600 mr-1">📅{deliveryDate}</span>}
+                {loadingDateLabel && (
+                    <span className="text-green-600 mr-1">
+                        📅{loadingDateLabel}
+                        {loadingTimeLabel ? ` (ساعت ${loadingTimeLabel})` : ''}
+                    </span>
+                )}
                 {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
                 {idx < ann.destinations.length - 1 && '، '}
             </span>
@@ -149,16 +164,44 @@ const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     'کل تناژ (کیلوگرم)': 'col-tonnage',
     مقاصد: 'col-destinations',
     'ارزش بار (ریال)': 'col-cargo-value',
-    'تاریخ بارگیری': 'col-platform-time',
+    'تاریخ تحویل': 'col-platform-time',
     'تاریخ اعلام بار': 'col-created-at',
+};
+
+const renderDairyDeliveryDatesCell = (ann: FreightAnnouncement) => {
+    const dates = (ann.destinations || [])
+        .map((d) => String(d.deliveryDate || '').trim())
+        .filter(Boolean);
+    const unique = Array.from(new Set(dates));
+    if (unique.length === 0) return <span>-</span>;
+    return (
+        <div className="flex flex-col items-center gap-0.5 leading-tight">
+            {unique.map((date) => (
+                <span key={date} className="text-green-700 font-medium">{date}</span>
+            ))}
+        </div>
+    );
 };
 
 const renderDairyCompactDestinations = (ann: FreightAnnouncement) => {
     if (!ann.destinations?.length) return <span>-</span>;
+    const annLoadingFallback = ann.loadingDate ? formatJalali(ann.loadingDate) : '';
     return (
-        <div className="dest-compact-list text-[10px] sm:text-[11px] leading-normal text-right w-full min-w-0">
+        <div className="dest-compact-list text-[11px] sm:text-xs leading-normal text-right w-full min-w-0">
             {ann.destinations.map((d, idx) => {
-                const products = formatDestinationProductsLabel(d);
+                // تاریخ بارگیری و ساعت حضور از بلوک مقصد؛ با جابجایی عوض نمی‌شود
+                const destLoading = String((d as Destination).loadingDate || '').trim();
+                const loadingDateLabel = destLoading
+                    ? destLoading.includes('/')
+                        ? destLoading
+                        : formatJalali(destLoading as any)
+                    : annLoadingFallback;
+                const loadingTimeLabel = String(
+                    (d as Destination).platformArrivalTime || ann.platformArrivalTime || ''
+                ).trim();
+                const loadingPart = [loadingDateLabel, loadingTimeLabel ? `(ساعت ${loadingTimeLabel})` : '']
+                    .filter(Boolean)
+                    .join(' ');
                 return (
                     <div key={d.id || idx} className="dest-compact-line">
                         <span className="dest-compact-num">{idx + 1}</span>
@@ -173,14 +216,12 @@ const renderDairyCompactDestinations = (ann: FreightAnnouncement) => {
                             <span className="dest-compact-brand">{formatDestinationBrandLabel(d)}</span>
                             <span className="dest-compact-dot">·</span>
                             <span className="dest-compact-lis">{d.lisCode?.trim() || '-'}</span>
-                            {products !== '-' ? (
+                            {loadingPart ? (
                                 <>
                                     <span className="dest-compact-dot">·</span>
-                                    <span className="dest-compact-products">{products}</span>
+                                    <span className="dest-compact-date">{loadingPart}</span>
                                 </>
                             ) : null}
-                            <span className="dest-compact-dot">·</span>
-                            <span className="dest-compact-date">{d.deliveryDate || '-'}</span>
                         </div>
                     </div>
                 );
@@ -1127,12 +1168,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col items-center gap-0.5 leading-tight">
-                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
-                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
-                    </div>
-                ) },
+                { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1159,12 +1195,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col items-center gap-0.5 leading-tight">
-                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
-                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
-                    </div>
-                ) },
+                { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1180,12 +1211,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) => ann.originCity || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col items-center gap-0.5 leading-tight">
-                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
-                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
-                    </div>
-                ) },
+                { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -1210,12 +1236,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                { header: 'تاریخ بارگیری', render: (ann: FreightAnnouncement) => (
-                    <div className="flex flex-col items-center gap-0.5 leading-tight">
-                        <span className="text-green-700 font-medium">{ann.loadingDate ? formatJalali(ann.loadingDate) : '-'}</span>
-                        {ann.platformArrivalTime && <span className="text-orange-600">{ann.platformArrivalTime}</span>}
-                    </div>
-                ) },
+                { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
             ];
@@ -2999,12 +3020,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 .transport-live-dairy-compact .col-destinations {
                     overflow: visible;
                     vertical-align: top;
-                    font-size: 0.625rem;
-                    line-height: 1.35;
+                    font-size: 0.6875rem;
+                    line-height: 1.4;
                 }
                 @media (min-width: 640px) {
                     .transport-live-dairy-compact .col-destinations {
-                        font-size: 0.6875rem;
+                        font-size: 0.75rem;
                     }
                 }
                 .transport-live-dairy-compact .dairy-compact-cell {
@@ -3068,7 +3089,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 .dest-compact-dot { color: #cbd5e1; user-select: none; }
                 .dest-compact-rep { color: #7e22ce; }
                 .dest-compact-brand { color: #334155; }
-                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.9em; }
+                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.98em; font-weight: 700; }
                 .dest-compact-products { color: #047857; }
                 .dest-compact-date { color: #15803d; white-space: nowrap; }
              `}</style>

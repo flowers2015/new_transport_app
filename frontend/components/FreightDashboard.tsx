@@ -39,6 +39,7 @@ const PLANNING_DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     مقاصد: 'col-destinations',
     'ارزش بار (ریال)': 'col-cargo-value',
     'ساعت حضور': 'col-platform-time',
+    'تاریخ تحویل': 'col-platform-time',
     'تاریخ اعلام بار': 'col-created-at',
     توضیحات: 'col-notes',
     وضعیت: 'col-status',
@@ -55,10 +56,22 @@ const renderDairyCompactText = (text: string) => (
 /** مقاصد فشرده پاستوریزه — همان فرمت پیگیری اعلام بار زنده */
 const renderPlanningDairyCompactDestinations = (ann: FreightAnnouncement) => {
     if (!ann.destinations?.length) return <span>-</span>;
+    const annLoadingFallback = ann.loadingDate ? formatJalali(ann.loadingDate) : '';
     return (
-        <div className="dest-compact-list text-[9px] sm:text-[10px] leading-snug text-right w-full min-w-0">
+        <div className="dest-compact-list text-[10px] sm:text-[11px] leading-snug text-right w-full min-w-0">
             {ann.destinations.map((d, idx) => {
-                const products = formatDestinationProductsLabel(d);
+                const destLoading = String((d as Destination).loadingDate || '').trim();
+                const loadingDateLabel = destLoading
+                    ? destLoading.includes('/')
+                        ? destLoading
+                        : formatJalali(destLoading as any)
+                    : annLoadingFallback;
+                const loadingTimeLabel = String(
+                    (d as Destination).platformArrivalTime || ann.platformArrivalTime || ''
+                ).trim();
+                const loadingPart = [loadingDateLabel, loadingTimeLabel ? `(ساعت ${loadingTimeLabel})` : '']
+                    .filter(Boolean)
+                    .join(' ');
                 return (
                     <div key={d.id || idx} className="dest-compact-line">
                         <span className="dest-compact-num">{idx + 1}</span>
@@ -73,18 +86,31 @@ const renderPlanningDairyCompactDestinations = (ann: FreightAnnouncement) => {
                             <span className="dest-compact-brand">{formatDestinationBrandLabel(d)}</span>
                             <span className="dest-compact-dot">·</span>
                             <span className="dest-compact-lis">{d.lisCode?.trim() || '-'}</span>
-                            {products !== '-' ? (
+                            {loadingPart ? (
                                 <>
                                     <span className="dest-compact-dot">·</span>
-                                    <span className="dest-compact-products">{products}</span>
+                                    <span className="dest-compact-date">{loadingPart}</span>
                                 </>
                             ) : null}
-                            <span className="dest-compact-dot">·</span>
-                            <span className="dest-compact-date">{d.deliveryDate || '-'}</span>
                         </div>
                     </div>
                 );
             })}
+        </div>
+    );
+};
+
+const renderPlanningDairyDeliveryDatesCell = (ann: FreightAnnouncement) => {
+    const dates = (ann.destinations || [])
+        .map((d) => String(d.deliveryDate || '').trim())
+        .filter(Boolean);
+    const unique = Array.from(new Set(dates));
+    if (unique.length === 0) return <span>-</span>;
+    return (
+        <div className="flex flex-col items-center gap-0.5 leading-tight">
+            {unique.map((date) => (
+                <span key={date} className="text-green-700 font-medium">{date}</span>
+            ))}
         </div>
     );
 };
@@ -1665,10 +1691,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     ),
                 },
                 {
-                    header: 'ساعت حضور',
-                    accessor: 'platformArrivalTime',
-                    width: '80px',
-                    render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-',
+                    header: 'تاریخ تحویل',
+                    accessor: 'deliveryDate',
+                    width: '90px',
+                    render: (ann: FreightAnnouncement) => renderPlanningDairyDeliveryDatesCell(ann),
                 },
                 {
                     header: 'تاریخ اعلام بار',
@@ -2569,7 +2595,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 .planning-dairy-compact .col-destinations {
                     overflow: hidden;
                     vertical-align: top;
-                    width: 22%;
+                    width: 20%;
                 }
                 .planning-dairy-compact .dairy-compact-cell {
                     display: block;
@@ -2600,13 +2626,13 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     font-variant-numeric: tabular-nums;
                 }
                 .planning-dairy-compact .col-cargo-value {
-                    width: 8%;
+                    width: 7%;
                     font-variant-numeric: tabular-nums;
                     font-size: 0.75rem;
                 }
-                .planning-dairy-compact .col-platform-time { width: 4%; }
+                .planning-dairy-compact .col-platform-time { width: 7%; }
                 .planning-dairy-compact .col-created-at {
-                    width: 7.5%;
+                    width: 6.5%;
                     font-size: 0.72rem;
                 }
                 .planning-dairy-compact .col-notes { width: 5.5%; }
@@ -2666,9 +2692,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 .dest-compact-dot { color: #cbd5e1; user-select: none; }
                 .dest-compact-rep { color: #7e22ce; }
                 .dest-compact-brand { color: #334155; }
-                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.9em; }
-                .dest-compact-products { color: #047857; }
-                .dest-compact-date { color: #15803d; }
+                .dest-compact-lis { color: #4338ca; font-family: ui-monospace, monospace; font-size: 0.98em; font-weight: 700; }
+                .dest-compact-date { color: #15803d; white-space: nowrap; }
                 `}</style>
             )}
             
@@ -2739,7 +2764,7 @@ const AnnouncementPanel: React.FC<{
     lisCodeOnlyMode?: boolean;
     onClose: () => void;
     onSaveNew: Function;
-    onSaveEdit: (data: FreightAnnouncement) => void;
+    onSaveEdit: (data: FreightAnnouncement) => void | Promise<void>;
     routeOptions: DispatchRouteSuggestion[];
     onRouteQueryChange: (value: string) => void;
     currentUser?: User;
@@ -2775,16 +2800,59 @@ const AnnouncementPanel: React.FC<{
     const [originCity2Valid, setOriginCity2Valid] = useState(false);
     /** در ویرایش پاستوریزه (کارمند/کارشناس): فقط مقصد دیگران قفل؛ مقصد خود کاربر قابل ویرایش */
     const [lockedDestinationIds, setLockedDestinationIds] = useState<Set<string>>(new Set());
+    const currentUserId = String(currentUser?.id || '');
     const isDairyCollaboratorEditor =
         currentUser?.role === UserRole.PlanningEmployee ||
         currentUser?.role === UserRole.SalesExpert;
     const isDairyLisCodeOnlyEdit =
         Boolean(lisCodeOnlyMode && isEditMode && data?.lineType === FreightLineType.Dairy);
+    const announcementOwnerId = String(
+        (data as any)?.creator_user_id ||
+            (data as any)?.createdByUserId ||
+            (data as any)?.created_by_user_id ||
+            ''
+    );
+    const isOwnerOfEditedAnnouncement =
+        !announcementOwnerId ||
+        announcementOwnerId === currentUserId ||
+        currentUser?.role === UserRole.PlanningManager ||
+        currentUser?.role === UserRole.Admin;
+    const statusStrForEdit = String(data?.status || '');
+    // بعد از درخواست تغییر (و برگشت/رد/مانده) همه فیلدهای مشترک باید باز باشند
+    const isDairyFullSharedEditStatus =
+        new Set([
+            FreightAnnouncementStatus.Rejected,
+            FreightAnnouncementStatus.ReturnedToCreator,
+            FreightAnnouncementStatus.Leftover,
+            FreightAnnouncementStatus.ChangeRequested,
+            'Rejected',
+            'ReturnedToCreator',
+            'Leftover',
+            'ChangeRequested',
+            'رد شده',
+            'برگشت به اعلام‌کننده',
+            'بار مانده',
+            'درخواست تغییر',
+        ]).has(data?.status as any) ||
+        [
+            'Rejected',
+            'ReturnedToCreator',
+            'Leftover',
+            'ChangeRequested',
+            'رد شده',
+            'برگشت به اعلام‌کننده',
+            'بار مانده',
+            'درخواست تغییر',
+        ].includes(statusStrForEdit);
+    // قفل فیلدهای مشترک فقط برای «افزودن مقصد همکار» — در درخواست تغییر و برای مالک، همه فیلدها بازند
+    const allowFullSharedFieldEdit =
+        isDairyFullSharedEditStatus || isOwnerOfEditedAnnouncement;
     const isDairyNextDestEdit =
         isEditMode &&
         data?.lineType === FreightLineType.Dairy &&
         isDairyCollaboratorEditor &&
-        !isDairyLisCodeOnlyEdit;
+        !isDairyLisCodeOnlyEdit &&
+        !allowFullSharedFieldEdit;
     const lockSharedAnnouncementFields = isDairyNextDestEdit || isDairyLisCodeOnlyEdit;
     const isDestinationLocked = (id?: string) => {
         if (!id) return false;
@@ -2792,7 +2860,6 @@ const AnnouncementPanel: React.FC<{
         return Boolean(isDairyNextDestEdit && lockedDestinationIds.has(id));
     };
     const lockedFieldClass = 'bg-slate-100 text-slate-600 cursor-not-allowed';
-    const currentUserId = String(currentUser?.id || '');
     const resolveDestinationOwnerId = (dest: Partial<Destination>, announcement?: FreightAnnouncement | null) => {
         const fromDest = String(
             (dest as any).originalCreatedByUserId ||
@@ -3043,19 +3110,51 @@ const AnnouncementPanel: React.FC<{
                     });
                     setDestCityValid(cityValidity);
                     if (data.lineType === FreightLineType.Dairy && (isDairyCollaboratorEditor || lisCodeOnlyMode)) {
-                        if (lisCodeOnlyMode) {
+                        const statusStr = String(data.status || '');
+                        const fullUnlockStatuses = new Set([
+                            FreightAnnouncementStatus.Rejected,
+                            FreightAnnouncementStatus.ReturnedToCreator,
+                            FreightAnnouncementStatus.Leftover,
+                            FreightAnnouncementStatus.ChangeRequested,
+                            'Rejected',
+                            'ReturnedToCreator',
+                            'Leftover',
+                            'ChangeRequested',
+                            'رد شده',
+                            'برگشت به اعلام‌کننده',
+                            'بار مانده',
+                            'درخواست تغییر',
+                        ]);
+                        const isFullUnlockStatus =
+                            fullUnlockStatuses.has(data.status as any) || fullUnlockStatuses.has(statusStr as any);
+                        const ownerId = String(
+                            (data as any)?.creator_user_id ||
+                                (data as any)?.createdByUserId ||
+                                (data as any)?.created_by_user_id ||
+                                ''
+                        );
+                        const isOwnerEditor =
+                            !ownerId ||
+                            ownerId === currentUserId ||
+                            currentUser?.role === UserRole.PlanningManager ||
+                            currentUser?.role === UserRole.Admin;
+                        const unlockAll = isFullUnlockStatus || (!lisCodeOnlyMode && isOwnerEditor);
+
+                        if (lisCodeOnlyMode && !isFullUnlockStatus) {
                             const locked = new Set<string>();
                             finalDests.forEach((d) => {
                                 if (d.id) locked.add(d.id);
                             });
                             setLockedDestinationIds(locked);
+                        } else if (unlockAll) {
+                            setLockedDestinationIds(new Set());
                         } else {
                             // فقط مقصدهایی که مال کاربر دیگری است قفل می‌شوند
                             const locked = new Set<string>();
                             finalDests.forEach((d) => {
                                 if (!d.id) return;
-                                const ownerId = resolveDestinationOwnerId(d, data);
-                                if (ownerId && ownerId !== currentUserId) {
+                                const destOwnerId = resolveDestinationOwnerId(d, data);
+                                if (destOwnerId && destOwnerId !== currentUserId) {
                                     locked.add(d.id);
                                 }
                             });
@@ -3397,7 +3496,7 @@ const AnnouncementPanel: React.FC<{
             }
         }
 
-        const destinationsForSubmit =
+        const destinationsForSubmitRaw =
             lineType === FreightLineType.IceCream
                 ? []
                 : isDraft
@@ -3405,6 +3504,32 @@ const AnnouncementPanel: React.FC<{
                       ? activeDestinations
                       : preparedDestinations
                   : validDestinations;
+
+        // تاریخ بارگیری / ساعت حضور را روی هر مقصد نگه دار:
+        // اگر مقصد از ردیف دیگری آمده و مقدار متفاوت دارد، همان را حفظ کن؛ وگرنه مقدار فرم.
+        const normalizeStampDate = (v: any) =>
+            typeof v === 'string' ? v.replace(/-/g, '/').trim() : '';
+        const prevAnnLoading = isEditMode ? normalizeStampDate((data as any)?.loadingDate) : '';
+        const prevAnnPlatform = isEditMode
+            ? String((data as any)?.platformArrivalTime || '').trim()
+            : '';
+        const formPlatform = String(multiDestState.platformArrivalTime || '').trim();
+        const destinationsForSubmit =
+            lineType === FreightLineType.IceCream
+                ? destinationsForSubmitRaw
+                : destinationsForSubmitRaw.map((d) => {
+                      const destLoading = normalizeStampDate((d as any).loadingDate);
+                      const destPlatform = String((d as any).platformArrivalTime || '').trim();
+                      const keepLoading =
+                          !!destLoading && !!prevAnnLoading && destLoading !== prevAnnLoading;
+                      const keepPlatform =
+                          !!destPlatform && !!prevAnnPlatform && destPlatform !== prevAnnPlatform;
+                      return {
+                          ...d,
+                          loadingDate: keepLoading ? destLoading : jalaliDate,
+                          platformArrivalTime: keepPlatform ? destPlatform : formPlatform || undefined,
+                      };
+                  });
 
         const finalBrand = lineType === FreightLineType.IceCream && iceCreamBuilt
             ? iceCreamBuilt.brand
@@ -3497,7 +3622,7 @@ const AnnouncementPanel: React.FC<{
             
             // Only call onSaveEdit if we have a valid ID, otherwise treat as new
             if (finalData.id && finalData.id.trim() !== '') {
-                onSaveEdit(finalData);
+                void Promise.resolve(onSaveEdit(finalData)).catch(() => undefined);
             } else {
                 console.log('🔍 [FreightDashboard] No valid ID found, treating as new announcement');
                 onSaveNew(finalData, isDraft);

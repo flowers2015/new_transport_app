@@ -1024,10 +1024,10 @@ export function applyNewAnnouncementRowsToRoutes(
     return dedupeRoutesById(reapplyApprovalsFromIndex(dedupeDestinationsAcrossRoutes(attached), approvalIndex));
 }
 
-export function loadPersistedArrangement(
+export function loadPersistedArrangementWithMeta(
     userId: string,
     announcements: FreightAnnouncement[]
-): DairyArrangementRoute[] | null {
+): { routes: DairyArrangementRoute[]; savedAt: number | null } | null {
     if (!userId) return null;
     try {
         let raw = localStorage.getItem(arrangementStorageKey(userId));
@@ -1039,6 +1039,7 @@ export function loadPersistedArrangement(
         const parsed = JSON.parse(raw) as {
             routes?: DairyArrangementRoute[];
             approvalIndex?: ArrangementApprovalIndex;
+            savedAt?: number;
         };
         if (!parsed?.routes?.length) return null;
 
@@ -1050,10 +1051,20 @@ export function loadPersistedArrangement(
         const withApprovals = reapplyApprovalsFromIndex(reconciled, approvalIndex);
         // اگر بعد از reconcile چیزی نماند، null برگردان تا از اول ساخته شود
         if (!withApprovals.length) return null;
-        return dedupeRoutesById(withApprovals);
+        return {
+            routes: dedupeRoutesById(withApprovals),
+            savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : null,
+        };
     } catch {
         return null;
     }
+}
+
+export function loadPersistedArrangement(
+    userId: string,
+    announcements: FreightAnnouncement[]
+): DairyArrangementRoute[] | null {
+    return loadPersistedArrangementWithMeta(userId, announcements)?.routes || null;
 }
 
 export function savePersistedArrangement(userId: string, routes: DairyArrangementRoute[]): void {

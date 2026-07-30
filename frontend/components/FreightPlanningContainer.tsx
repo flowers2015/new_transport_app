@@ -82,6 +82,9 @@ function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
                   freightCost: d.freight_cost ?? d.freightCost,
                   cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                   deliveryDate: d.delivery_date || d.deliveryDate,
+                  loadingDate: d.loading_date || d.loadingDate || undefined,
+                  platformArrivalTime:
+                      d.platform_arrival_time || d.platformArrivalTime || undefined,
                   representativeType: d.representative_type || d.representativeType,
                   lisCode: d.lis_code || d.lisCode,
                   brandType: d.brand_type || d.brandType,
@@ -193,9 +196,29 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
 
             const { announcementId, updateType, data } = message;
 
-            // اگر change_requested است، درخواست‌های تغییر را refresh کن
-            if (updateType === 'change_requested' || data?.status === 'ChangeRequested') {
+            // اگر change_requested است، درخواست‌های تغییر و لیست اعلام‌بارها را refresh کن
+            if (updateType === 'change_requested' || data?.status === 'ChangeRequested' || data?.status === 'درخواست تغییر') {
                 fetchChangeRequestsRef.current?.();
+                // وضعیت اعلام‌بار هم باید در کارتابل برنامه‌ریزی به‌روز شود
+                setAnnouncements((prev) => {
+                    const exists = prev.some((a) => a.id === announcementId);
+                    if (!exists) {
+                        scheduleDebouncedFullRefetch();
+                        return prev;
+                    }
+                    return prev.map((a) =>
+                        a.id === announcementId
+                            ? {
+                                  ...a,
+                                  status: FreightAnnouncementStatus.ChangeRequested,
+                                  assignedDriverId: undefined,
+                                  assignedVehicleId: undefined,
+                                  assignedDriverName: undefined,
+                                  assignedVehiclePlate: undefined,
+                              }
+                            : a
+                    );
+                });
             }
 
             // اگر finalized است، فوراً از لیست حذف کن (دیگر در کارتابل نیست)
@@ -248,6 +271,24 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     }
                     scheduleDebouncedFullRefetch();
                     return prev;
+                }
+
+                // اگر payload غنی است (notes/مقاصد/ساعت)، نرمال کن و کامل جایگزین کن
+                const hasRichPayload =
+                    data &&
+                    (Array.isArray(data.destinations) ||
+                        data.notes != null ||
+                        data.platformArrivalTime != null ||
+                        data.platform_arrival_time != null ||
+                        data.cargoValue != null ||
+                        data.cargo_value != null);
+                if (hasRichPayload) {
+                    const incoming = normalizePlanningAnnouncement({
+                        ...prev[index],
+                        ...data,
+                        id: announcementId,
+                    });
+                    return prev.map((a, i) => (i === index ? { ...prev[index], ...incoming } : a));
                 }
 
                 return applyOptimisticUpdate(prev, announcementId, {
@@ -398,6 +439,22 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 await fetchAnnouncements();
                 return;
             }
+
+            // فوری در UI نشان بده تا کاربر تغییر را ببیند
+            setAnnouncements((prev) =>
+                prev.map((a) =>
+                    a.id === updated.id
+                        ? {
+                              ...a,
+                              ...updated,
+                              destinations: Array.isArray(updated.destinations)
+                                  ? updated.destinations
+                                  : a.destinations,
+                          }
+                        : a
+                )
+            );
+
             const res = await fetch(getApiUrl(`freight-announcements/${updated.id}`) ,{
                 method: 'PUT',
                 headers,
@@ -424,11 +481,20 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                 }),
             });
             if (!res.ok) throw new Error(await res.text());
-            await fetchAnnouncements();
+            const savedRaw = await res.json().catch(() => null);
+            if (savedRaw && savedRaw.id) {
+                const saved = normalizePlanningAnnouncement(savedRaw);
+                setAnnouncements((prev) =>
+                    prev.map((a) => (a.id === saved.id ? { ...a, ...saved } : a))
+                );
+            }
+            await fetchAnnouncements(true);
         } catch (e) {
             alert(parseFreightApiErrorMessage(e, 'خطا در ویرایش اعلام بار'));
             if (isFreightIntakeLockedError(e)) return;
             console.error('❌ [FreightPlanning] Update failed:', e);
+            // برگرداندن لیست از سرور در صورت خطا
+            await fetchAnnouncements(true).catch(() => undefined);
         }
     };
 

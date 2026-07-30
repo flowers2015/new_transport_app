@@ -65,6 +65,9 @@ const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
                   freightCost: d.freight_cost ?? d.freightCost,
                   cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                   deliveryDate: d.delivery_date || d.deliveryDate,
+                  loadingDate: d.loading_date || d.loadingDate || undefined,
+                  platformArrivalTime:
+                      d.platform_arrival_time || d.platformArrivalTime || undefined,
                   lisCode: d.lis_code || d.lisCode,
                   brandType: d.brand_type || d.brandType,
                   brand: d.brand,

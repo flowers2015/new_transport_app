@@ -275,7 +275,7 @@ export function getDestinationCitiesLabel(
     return cities.length > 0 ? cities.join('، ') : '-';
 }
 
-/** نام کارمند(ان) اعلام‌کننده — در صورت ادغام مقاصد کارشناسان مختلف، همه را نشان می‌دهد */
+/** نام کارمند(ان) اعلام‌کننده — بر اساس مالک واقعی هر مقصد (original_created_by)، نه فقط created_by ردیف میزبان */
 export function getAnnouncementCreatorLabel(ann: any): string {
     const names: string[] = [];
     const seen = new Set<string>();
@@ -289,21 +289,29 @@ export function getAnnouncementCreatorLabel(ann: any): string {
         }
     };
 
-    addCreator(
-        ann?.creator_full_name || ann?.creatorFullName || ann?.creator_username || ann?.creatorUsername,
-        ann?.creator_user_id || ann?.creatorUserId || ann?.created_by_user_id || ann?.createdByUserId
-    );
+    const annCreatorLabel =
+        ann?.creator_full_name || ann?.creatorFullName || ann?.creator_username || ann?.creatorUsername;
+    const annCreatorKey =
+        ann?.creator_user_id || ann?.creatorUserId || ann?.created_by_user_id || ann?.createdByUserId || annCreatorLabel;
 
-    for (const d of ann?.destinations || []) {
-        addCreator(
-            d.originalCreatorFullName ||
+    const destinations = ann?.destinations || [];
+    if (destinations.length > 0) {
+        for (const d of destinations) {
+            const destLabel =
+                d.originalCreatorFullName ||
                 d.original_creator_full_name ||
                 d.originalCreatorUsername ||
-                d.original_creator_username,
-            d.originalCreatedByUserId ||
+                d.original_creator_username ||
+                annCreatorLabel;
+            const destKey =
+                d.originalCreatedByUserId ||
                 d.original_created_by_user_id ||
-                d.original_creator_user_id
-        );
+                d.original_creator_user_id ||
+                annCreatorKey;
+            addCreator(destLabel, destKey);
+        }
+    } else {
+        addCreator(annCreatorLabel, annCreatorKey);
     }
 
     if (names.length > 0) return names.join('، ');
@@ -370,7 +378,7 @@ export function formatDestinationRepCompactSegment(
 
 /** یک خط مقصد فشرده پاستوریزه: فقط فیلدهای پر؛ بدون خط‌تیرهٔ خالی */
 export function formatDairyCompactDestinationLine(
-    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'loadingDate' | 'platformArrivalTime'>,
     dest: Destination,
     index: number
 ): string {
@@ -385,13 +393,29 @@ export function formatDairyCompactDestinationLine(
               ? `(${tonnage})`
               : '';
 
+    const destLoading = String(dest.loadingDate || '').trim();
+    const loadingDateLabel = destLoading
+        ? destLoading
+        : ann.loadingDate
+          ? formatBillOfLadingDateDisplay(ann.loadingDate)
+          : '';
+    const loadingTimeLabel = String(
+        dest.platformArrivalTime || ann.platformArrivalTime || ''
+    ).trim();
+    const loadingPart = [
+        loadingDateLabel !== '-' ? loadingDateLabel : '',
+        loadingTimeLabel ? `(ساعت ${loadingTimeLabel})` : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
     const parts = [
         cityPart,
         formatDestinationRepCompactSegment(ann, dest),
         formatDestinationBrandLabel(dest),
         (dest.lisCode || '').trim(),
         formatDestinationProductsLabel(dest),
-        String(dest.deliveryDate || '').trim(),
+        loadingPart,
     ].filter((p) => {
         const s = String(p || '').trim();
         return s !== '' && s !== '-';
@@ -403,7 +427,7 @@ export function formatDairyCompactDestinationLine(
 
 /** متن چندخطی مقاصد فشرده پاستوریزه — برای اکسل (هر مقصد یک خط؛ Excel wrap) */
 export function formatDairyCompactDestinationsText(
-    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'>
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations' | 'loadingDate' | 'platformArrivalTime'>
 ): string {
     const destinations = ann.destinations || [];
     if (!destinations.length) return '-';

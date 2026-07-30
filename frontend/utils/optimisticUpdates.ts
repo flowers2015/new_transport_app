@@ -4,7 +4,7 @@
  */
 
 import { normalizeFreightAnnouncementPatch } from './freightDisplay';
-import { FreightAnnouncement } from '../types';
+import { FreightAnnouncement, Destination } from '../types';
 
 export type TransferDestinationResult =
     | { ok: true; announcements: FreightAnnouncement[] }
@@ -73,7 +73,7 @@ export class OptimisticUpdateManager<T> {
    */
   rollbackAll(): void {
     this.updates.forEach(update => {
-      if (update.rollback) {
+      if (update?.rollback) {
         update.rollback();
       }
     });
@@ -181,6 +181,55 @@ export function createRollback<T>(
     };
 }
 
+const destCargoRaw = (d: any): number => {
+    const v = Number(d?.cargoValue ?? d?.cargo_value);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+};
+
+const sumDestCargoRaw = (dests: Destination[] = []) =>
+    dests.reduce((s, d) => s + destCargoRaw(d), 0);
+
+/** ارزش بلوک مقصد؛ اگر خالی بود از سهم اعلام‌بار پر کن */
+function stampDestinationsCargoFromAnnouncement(
+    ann: FreightAnnouncement,
+    dests: Destination[]
+): Destination[] {
+    const annCargo = Number(ann.cargoValue) || 0;
+    const existingSum = sumDestCargoRaw(dests);
+    if (existingSum > 0 || annCargo <= 0 || dests.length === 0) {
+        return dests.map((d) => ({
+            ...d,
+            cargoValue: destCargoRaw(d) || Number(d.cargoValue) || 0,
+        }));
+    }
+    if (dests.length === 1) {
+        return [{ ...dests[0], cargoValue: annCargo }];
+    }
+    const base = Math.floor(annCargo / dests.length);
+    let allocated = 0;
+    return dests.map((d, i) => {
+        const share = i === dests.length - 1 ? annCargo - allocated : base;
+        allocated += share;
+        return { ...d, cargoValue: share };
+    });
+}
+
+function resolveMovedDestCargo(
+    moved: Destination,
+    sourceAnn: FreightAnnouncement,
+    remainingDests: Destination[]
+): number {
+    const own = destCargoRaw(moved);
+    if (own > 0) return own;
+    const sourceTotal = Number(sourceAnn.cargoValue) || 0;
+    const remainingSum = sumDestCargoRaw(remainingDests);
+    if (remainingSum > 0) return Math.max(0, sourceTotal - remainingSum);
+    const totalDests = remainingDests.length + 1;
+    if (sourceTotal > 0 && totalDests === 1) return sourceTotal;
+    if (sourceTotal > 0 && totalDests > 1) return Math.floor(sourceTotal / totalDests);
+    return 0;
+}
+
 export function applyDestinationTransferToAnnouncements(
     announcements: FreightAnnouncement[],
     sourceAnnouncementId: string,
@@ -204,27 +253,69 @@ export function applyDestinationTransferToAnnouncements(
     }
 
     const sourceAnn = announcements.find((a) => a.id === sourceAnnouncementId);
+    const transferredDest = sourceAnn?.destinations.find((d) => d.id === destinationId);
+    if (!sourceAnn || !transferredDest) return announcements;
+
+    const stampedSourceDests = stampDestinationsCargoFromAnnouncement(
+        sourceAnn,
+        sourceAnn.destinations
+    );
+    const stampedMoved =
+        stampedSourceDests.find((d) => d.id === destinationId) || transferredDest;
+    const remainingOnSource = stampedSourceDests.filter((d) => d.id !== destinationId);
+    const movedCargo = resolveMovedDestCargo(stampedMoved, sourceAnn, remainingOnSource);
+    const movedDestWithCargo: Destination = {
+        ...stampedMoved,
+        cargoValue: movedCargo,
+        loadingDate:
+            String((stampedMoved as any).loadingDate || '').trim() ||
+            (typeof sourceAnn.loadingDate === 'string'
+                ? sourceAnn.loadingDate.replace(/-/g, '/')
+                : undefined),
+        platformArrivalTime:
+            String((stampedMoved as any).platformArrivalTime || '').trim() ||
+            String(sourceAnn.platformArrivalTime || '').trim() ||
+            undefined,
+    };
+
     return announcements
         .map((ann) => {
             if (ann.id === sourceAnnouncementId) {
-                const updatedDestinations = ann.destinations.filter((d) => d.id !== destinationId);
-                if (updatedDestinations.length === 0 || sourceAnnouncementDeleted) {
+                if (remainingOnSource.length === 0 || sourceAnnouncementDeleted) {
                     return null;
                 }
-                return { ...ann, destinations: updatedDestinations };
+                const remainingSum = sumDestCargoRaw(remainingOnSource);
+                return {
+                    ...ann,
+                    destinations: remainingOnSource,
+                    cargoValue:
+                        remainingSum > 0
+                            ? remainingSum
+                            : Math.max(0, (Number(ann.cargoValue) || 0) - movedCargo),
+                };
             }
             if (ann.id === targetAnnouncementId) {
-                const transferredDest = sourceAnn?.destinations.find((d) => d.id === destinationId);
-                if (transferredDest) {
-                    const newDestinations = [...ann.destinations];
-                    const existingIndex = newDestinations.findIndex((d) => d.id === destinationId);
-                    if (existingIndex >= 0) {
-                        newDestinations.splice(existingIndex, 1);
-                    }
-                    const insertIndex = Math.min(newPosition - 1, newDestinations.length);
-                    newDestinations.splice(insertIndex, 0, transferredDest);
-                    return { ...ann, destinations: newDestinations };
+                const stampedTarget = stampDestinationsCargoFromAnnouncement(
+                    ann,
+                    ann.destinations
+                );
+                const newDestinations = [...stampedTarget];
+                const existingIndex = newDestinations.findIndex((d) => d.id === destinationId);
+                if (existingIndex >= 0) {
+                    newDestinations.splice(existingIndex, 1);
                 }
+                const insertIndex = Math.min(newPosition - 1, newDestinations.length);
+                newDestinations.splice(insertIndex, 0, movedDestWithCargo);
+                const destSum = sumDestCargoRaw(newDestinations);
+                return {
+                    ...ann,
+                    destinations: newDestinations,
+                    // جمع ارزش مقصدها (هر مقصد ارزش خودش)
+                    cargoValue:
+                        destSum > 0
+                            ? destSum
+                            : (Number(ann.cargoValue) || 0) + movedCargo,
+                };
             }
             return ann;
         })
@@ -257,24 +348,49 @@ export function applySplitDestinationToAnnouncements(
     if (!sourceAnn || !moved) return announcements;
 
     const effectiveSourceId = sourceAnn.id;
+    const stampedSourceDests = stampDestinationsCargoFromAnnouncement(
+        sourceAnn,
+        sourceAnn.destinations
+    );
+    const stampedMoved =
+        stampedSourceDests.find((d) => d.id === destinationId) || moved;
+    const remainingDests = stampedSourceDests.filter((d) => d.id !== destinationId);
+    const movedCargo = resolveMovedDestCargo(stampedMoved, sourceAnn, remainingDests);
+    const remainingSum = sumDestCargoRaw(remainingDests);
+    const sourceTotal = Number(sourceAnn.cargoValue) || 0;
+
     const updatedSource: FreightAnnouncement = {
         ...sourceAnn,
-        destinations: sourceAnn.destinations.filter((d) => d.id !== destinationId),
+        destinations: remainingDests,
+        cargoValue:
+            remainingSum > 0 ? remainingSum : Math.max(0, sourceTotal - movedCargo),
     };
 
+    const destLoading = String((stampedMoved as any).loadingDate || '').trim();
+    const destPlatform = String((stampedMoved as any).platformArrivalTime || '').trim();
+    const stampedMovedFinal: Destination = {
+        ...stampedMoved,
+        cargoValue: movedCargo,
+        loadingDate: destLoading || undefined,
+        platformArrivalTime:
+            destPlatform || String(sourceAnn.platformArrivalTime || '').trim() || undefined,
+    };
     const newAnn: FreightAnnouncement = {
         ...sourceAnn,
         id: newAnnouncementId,
         announcementCode: newAnnouncementCode,
-        destinations: [{ ...moved }],
+        destinations: [stampedMovedFinal],
         vehicleType: extras?.vehicleType || sourceAnn.vehicleType,
         status: (extras?.status as FreightAnnouncement['status']) || sourceAnn.status,
+        cargoValue: movedCargo,
+        loadingDate: (destLoading || sourceAnn.loadingDate) as any,
+        notes: undefined,
+        platformArrivalTime: stampedMovedFinal.platformArrivalTime,
         assignedDriverId: undefined,
         assignedDriverName: undefined,
         assignedVehicleId: undefined,
-        assignedVehicleModel: undefined,
-        assignedVehicleBrand: undefined,
         assignedAt: undefined,
+        totalFreightCost: undefined,
     };
 
     return [
@@ -283,5 +399,3 @@ export function applySplitDestinationToAnnouncements(
         newAnn,
     ].filter((a) => (a.destinations || []).length > 0);
 }
-
-

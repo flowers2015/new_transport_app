@@ -28,11 +28,21 @@ function authHeaders(): HeadersInit {
 }
 
 export async function fetchDairyArrangementState(): Promise<DairyArrangementState | null> {
-    const res = await fetch(getApiUrl('freight-announcements/dairy-arrangement'), {
-        headers: authHeaders(),
-    });
-    if (!res.ok) return null;
-    return res.json();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+        const res = await fetch(getApiUrl('freight-announcements/dairy-arrangement'), {
+            headers: authHeaders(),
+            signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        return (await res.json()) as DairyArrangementState;
+    } catch (err) {
+        console.error('❌ [fetchDairyArrangementState]', err);
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 export async function saveDairyArrangementState(

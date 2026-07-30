@@ -279,6 +279,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             freightCost: d.freight_cost ?? d.freightCost,
                             cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                             deliveryDate: d.delivery_date || d.deliveryDate,
+                            loadingDate: d.loading_date || d.loadingDate || undefined,
+                            platformArrivalTime:
+                                d.platform_arrival_time || d.platformArrivalTime || undefined,
                             representativeType: d.representative_type || d.representativeType,
                             lisCode: d.lis_code || d.lisCode,
                             brandType: d.brand_type || d.brandType,
@@ -725,6 +728,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                         freightCost: d.freightCost ?? d.freight_cost,
                                         cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                                         deliveryDate: d.deliveryDate || d.delivery_date,
+                                        loadingDate: d.loadingDate || d.loading_date || undefined,
+                                        platformArrivalTime:
+                                            d.platformArrivalTime || d.platform_arrival_time || undefined,
                                         representativeType: d.representativeType || d.representative_type,
                                         lisCode: d.lis_code || d.lisCode,
                                         brandType: d.brand_type || d.brandType,
@@ -788,6 +794,20 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                     if (data.assignmentFinalizedAt) {
                         return prev.filter(a => a.id !== announcementId);
                     }
+
+                    // درخواست تغییر: از کارتابل ترابری خارج شود (فقط برای برنامه‌ریزی می‌ماند)
+                    const statusFromPayload =
+                        (data.status as string) ||
+                        (data as { status?: string }).status ||
+                        '';
+                    if (
+                        updateType === 'change_requested' ||
+                        statusFromPayload === FreightAnnouncementStatus.ChangeRequested ||
+                        statusFromPayload === 'ChangeRequested' ||
+                        statusFromPayload === 'درخواست تغییر'
+                    ) {
+                        return prev.filter((a) => a.id !== announcementId);
+                    }
                     
                     const existing = prev.find((a) => a.id === announcementId);
                     const assignmentPatch = pickAssignmentFieldsFromApi(data as Record<string, unknown>);
@@ -811,6 +831,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                             freightCost: d.freightCost ?? d.freight_cost,
                             cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
                             deliveryDate: d.deliveryDate || d.delivery_date,
+                            loadingDate: d.loadingDate || d.loading_date || undefined,
+                            platformArrivalTime:
+                                d.platformArrivalTime || d.platform_arrival_time || undefined,
                             representativeType: d.representativeType || d.representative_type,
                             lisCode: d.lis_code || d.lisCode,
                             brandType: d.brand_type || d.brandType,
@@ -1412,20 +1435,30 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             const returnedId = result.returnedAnnouncementId || effectiveSourceId;
 
             if (result.mode === 'whole' || returnedId === effectiveSourceId) {
-                setAnnouncements((prev) => prev.filter((a) => a.id !== effectiveSourceId));
+                const next = announcementsRef.current.filter((a) => a.id !== effectiveSourceId);
+                announcementsRef.current = next;
+                setAnnouncements(next);
             } else {
-                setAnnouncements((prev) =>
-                    prev
-                        .map((a) =>
-                            a.id === effectiveSourceId
-                                ? {
-                                      ...a,
-                                      destinations: (a.destinations || []).filter((d) => d.id !== destinationId),
-                                  }
-                                : a
-                        )
-                        .filter((a) => (a.destinations || []).length > 0)
-                );
+                const next = announcementsRef.current
+                    .map((a) => {
+                        if (a.id !== effectiveSourceId) return a;
+                        const remaining = (a.destinations || []).filter((d) => d.id !== destinationId);
+                        const remainingCargo = remaining.reduce(
+                            (sum, d) => sum + (Number(d.cargoValue) || 0),
+                            0
+                        );
+                        return {
+                            ...a,
+                            destinations: remaining,
+                            cargoValue:
+                                remainingCargo > 0
+                                    ? remainingCargo
+                                    : Math.max(0, Number(a.cargoValue || 0)),
+                        };
+                    })
+                    .filter((a) => (a.destinations || []).length > 0);
+                announcementsRef.current = next;
+                setAnnouncements(next);
             }
 
             return {
@@ -1846,6 +1879,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onChangeRequest = async (announcementId: string, body: { type: 'change' | 'split' | 'merge', targetQueue?: 'company' | 'personal', description?: string, payload?: any }) => {
+        // فوراً از کارتابل ترابری بردار؛ منتظر SSE/کش نمان
+        const previous = announcementsRef.current;
+        setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
+        announcementsRef.current = previous.filter((a) => a.id !== announcementId);
+
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(getApiUrl(`freight-announcements/${encodeURIComponent(announcementId)}/change-request`), {
@@ -1859,12 +1897,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!res.ok) {
                 const text = await res.text();
                 console.error('❌ [TransportLive] ChangeRequest API error:', text);
+                // برگرداندن به لیست در صورت خطا
+                setAnnouncements(previous);
+                announcementsRef.current = previous;
                 throw new Error(JSON.parse(text)?.message || 'خطا در ثبت درخواست تغییر');
             }
-            // Real-time update will handle the UI update
-            await fetchData(true, needsPersonalResourcesRef.current);
+            // بدون کش؛ تا وضعیت ChangeRequested از سرور همگام شود
+            await fetchData(true, needsPersonalResourcesRef.current, true);
         } catch (e: any) {
             console.error('❌ [TransportLive] Change request error:', e);
+            alert(e?.message || 'خطا در ثبت درخواست تغییر');
         }
     };
 

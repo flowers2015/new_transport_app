@@ -25,6 +25,7 @@ import {
     getMovingBlocksForDrag,
     groupRoutesByCity,
     loadPersistedArrangement,
+    loadPersistedArrangementWithMeta,
     applyNewAnnouncementRowsToRoutes,
     isRouteAssignmentLocked,
     moveBlockBetweenRoutes,
@@ -669,6 +670,9 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const suppressSaveUntilRef = useRef(0);
     const saveInFlightRef = useRef(false);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pushSharedLayoutRef = useRef<
+        ((nextRoutes: DairyArrangementRoute[], options?: { forceRetry?: boolean }) => Promise<void>) | null
+    >(null);
     const heldLockRouteIdRef = useRef<string | null>(null);
     const dropInProgressRef = useRef(false);
     const [returnTarget, setReturnTarget] = useState<{
@@ -707,6 +711,13 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
     useEffect(() => {
         if (!isOpen) {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = null;
+            }
+            if (routesRef.current.length > 0 && !saveInFlightRef.current && pushSharedLayoutRef.current) {
+                void pushSharedLayoutRef.current(routesRef.current, { forceRetry: true });
+            }
             wasOpenRef.current = false;
             syncedIdsRef.current = '';
             setUndoStack([]);
@@ -720,8 +731,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             }
             return;
         }
-        if (wasOpenRef.current) return;
 
+        let cancelled = false;
         wasOpenRef.current = true;
         const ann = announcementsRef.current;
         setDragSource(null);
@@ -730,58 +741,101 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         setCityFilter('');
         setUndoStack([]);
         setSyncLabel('در حال بارگذاری چیدمان مشترک...');
-        let cancelled = false;
+
         (async () => {
-            const shared = await fetchDairyArrangementState();
-            if (cancelled || !wasOpenRef.current) return;
-            const persisted = loadPersistedArrangement(userId, ann);
-            let initial: DairyArrangementRoute[] = [];
-            if (shared?.routes?.length) {
-                initial = reconcileRoutesWithAnnouncements(shared.routes, ann);
-                setSharedVersion(shared.version);
-                setLocks(shared.locks || {});
-                setSyncLabel(
-                    `همگام · نسخه ${shared.version}${
-                        shared.updatedByUserName ? ` · آخرین: ${shared.updatedByUserName}` : ''
-                    }`
-                );
-            } else if (persisted && persisted.length > 0) {
-                initial = persisted;
-                setSharedVersion(shared?.version ?? null);
-                setLocks(shared?.locks || {});
-                setSyncLabel('چیدمان محلی — در حال انتشار به سرور...');
-            } else {
-                initial = buildInitialRoutes(ann);
-                setSharedVersion(shared?.version ?? null);
-                setLocks(shared?.locks || {});
-                setSyncLabel('چیدمان اولیه — در حال انتشار به سرور...');
-            }
-            logArrangementRoutes('INIT', initial);
-            setRoutes(initial);
-            syncedIdsRef.current = buildDairyAnnouncementIdsKey(announcementsRef.current);
-            if (initial.length > 0) {
-                savePersistedArrangement(userId, initial);
-                const saved = await saveDairyArrangementState(initial, shared?.version ?? null);
+            try {
+                const shared = await fetchDairyArrangementState();
                 if (cancelled || !wasOpenRef.current) return;
-                if (saved.ok === true) {
-                    setSharedVersion(saved.state.version);
-                    setLocks(saved.state.locks || {});
-                    setSyncLabel(`همگام · نسخه ${saved.state.version}`);
-                } else if (saved.conflict === true && saved.state) {
-                    const remote = reconcileRoutesWithAnnouncements(
-                        saved.state.routes || [],
-                        announcementsRef.current
+
+        const persistedMeta = loadPersistedArrangementWithMeta(userId, ann);
+        const persisted = persistedMeta?.routes || null;
+        let initial: DairyArrangementRoute[] = [];
+        const persistedIsFresh =
+            persistedMeta?.savedAt != null &&
+            Date.now() - persistedMeta.savedAt < 5 * 60 * 1000;
+        const preferPersistedOverShared = !!persisted?.length && persistedIsFresh;
+
+                if (shared?.routes?.length && !preferPersistedOverShared) {
+                    initial = reconcileRoutesWithAnnouncements(shared.routes, ann);
+                    setSharedVersion(shared.version);
+                    setLocks(shared.locks || {});
+                    setSyncLabel(
+                        `همگام · نسخه ${shared.version}${
+                            shared.updatedByUserName ? ` · آخرین: ${shared.updatedByUserName}` : ''
+                        }`
                     );
-                    setRoutes(remote);
-                    setSharedVersion(saved.state.version);
-                    setLocks(saved.state.locks || {});
-                    setSyncLabel(`همگام · نسخه ${saved.state.version} (تعارض برطرف شد)`);
-                    setRemoteNotice('چیدمان از سرور جایگزین شد چون نسخه جدیدتری وجود داشت.');
+                } else if (persisted && persisted.length > 0) {
+                    initial = persisted;
+                    setSharedVersion(shared?.version ?? null);
+                    setLocks(shared?.locks || {});
+                    setSyncLabel(
+                        preferPersistedOverShared
+                            ? 'چیدمان محلی تازه‌تر — در حال انتشار به سرور...'
+                            : 'چیدمان محلی — در حال انتشار به سرور...'
+                    );
+                } else {
+                    initial = buildInitialRoutes(ann);
+                    setSharedVersion(shared?.version ?? null);
+                    setLocks(shared?.locks || {});
+                    setSyncLabel('چیدمان اولیه — در حال انتشار به سرور...');
+                }
+
+                if (cancelled || !wasOpenRef.current) return;
+                logArrangementRoutes('INIT', initial);
+                setRoutes(initial);
+                syncedIdsRef.current = buildDairyAnnouncementIdsKey(announcementsRef.current);
+
+                if (initial.length > 0) {
+                    savePersistedArrangement(userId, initial);
+                    const saved = await saveDairyArrangementState(initial, shared?.version ?? null);
+                    if (cancelled || !wasOpenRef.current) return;
+                    if (saved.ok === true) {
+                        setSharedVersion(saved.state.version);
+                        setLocks(saved.state.locks || {});
+                        setSyncLabel(`همگام · نسخه ${saved.state.version}`);
+                    } else if (saved.conflict === true && saved.state) {
+                        const remote = reconcileRoutesWithAnnouncements(
+                            saved.state.routes || [],
+                            announcementsRef.current
+                        );
+                        setRoutes(remote);
+                        setSharedVersion(saved.state.version);
+                        setLocks(saved.state.locks || {});
+                        setSyncLabel(`همگام · نسخه ${saved.state.version} (تعارض برطرف شد)`);
+                        setRemoteNotice('چیدمان از سرور جایگزین شد چون نسخه جدیدتری وجود داشت.');
+                    } else {
+                        setSyncLabel(
+                            saved.message
+                                ? `چیدمان محلی · ${saved.message}`
+                                : 'چیدمان محلی — ذخیره سرور ناموفق'
+                        );
+                    }
+                } else {
+                    setSyncLabel('اعلام بار پاستوریزه‌ای برای چیدمان یافت نشد');
+                }
+            } catch (err) {
+                console.error('❌ [DairyArrangement] init failed:', err);
+                if (cancelled || !wasOpenRef.current) return;
+                try {
+                    const fallback =
+                        loadPersistedArrangement(userId, announcementsRef.current) ||
+                        buildInitialRoutes(announcementsRef.current);
+                    setRoutes(fallback);
+                    syncedIdsRef.current = buildDairyAnnouncementIdsKey(announcementsRef.current);
+                    setSyncLabel('خطا در همگام‌سازی — چیدمان محلی بارگذاری شد');
+                    setRemoteNotice('ارتباط با سرور چیدمان برقرار نشد؛ از نسخه محلی استفاده شد.');
+                } catch (fallbackErr) {
+                    console.error('❌ [DairyArrangement] fallback init failed:', fallbackErr);
+                    setRoutes([]);
+                    setSyncLabel('خطا در بارگذاری چیدمان');
                 }
             }
         })();
+
         return () => {
             cancelled = true;
+            // wasOpenRef را اینجا false نکن — فقط با بسته شدن دیالوگ؛
+            // در غیر این صورت async نیمه‌کاره و Strict Mode با هم تداخل می‌کنند.
         };
     }, [isOpen, userId]);
 
@@ -925,6 +979,10 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         },
         [userId, isApplying]
     );
+
+    useEffect(() => {
+        pushSharedLayoutRef.current = pushSharedLayout;
+    }, [pushSharedLayout]);
 
     useEffect(() => {
         if (!isOpen || routes.length === 0) return;

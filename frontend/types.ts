@@ -653,6 +653,10 @@ export interface Destination {
     /** ارزش بار مقصد (ریال) — فقط پاستوریزه */
     cargoValue?: number;
     deliveryDate?: string; // تاریخ تحویل بار (شمسی)
+    /** تاریخ بارگیری این مقصد (بلوک مقصد؛ با جابجایی عوض نمی‌شود) */
+    loadingDate?: string;
+    /** ساعت حضور این مقصد (بلوک مقصد؛ با جابجایی عوض نمی‌شود) */
+    platformArrivalTime?: string;
     representativeType?: 'agent' | 'distributor' | 'depot' | 'distribution' | 'organizational';
     products?: string[];
     /** اعلام‌کننده اصلی این مقصد (قبل از ادغام در ردیف دیگر) */

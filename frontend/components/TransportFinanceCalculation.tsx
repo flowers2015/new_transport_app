@@ -3919,9 +3919,20 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
 
     const handleSaveInputData = async () => {
         if (!inputDialogData) return;
+
+        const billNumber = String(inputDialogData.billOfLadingNumber || '').trim();
+        const billDate = String(inputDialogData.billOfLadingDate || '').trim();
+        if (!billNumber) {
+            alert('لطفاً شماره بارنامه را وارد کنید.');
+            return;
+        }
+        if (!billDate) {
+            alert('لطفاً تاریخ صدور بارنامه را وارد کنید.');
+            return;
+        }
         
         // ⚡ بستن فوری دیالوگ برای تجربه کاربری بهتر (Optimistic UI)
-        const savedInputDialogData = { ...inputDialogData };
+        const savedInputDialogData = { ...inputDialogData, billOfLadingNumber: billNumber, billOfLadingDate: billDate };
         setShowInputDialog(false);
         setInputDialogData(null);
 
@@ -5010,7 +5021,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         placeholder="1403/01/01"
                                     />
                                             </td>
-                                            <td className="p-2 border-l border-slate-200 font-medium">شماره بارنامه</td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">شماره بارنامه *</td>
                                             <td className="p-2">
                                     <input
                                         type="text"
@@ -5021,12 +5032,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         })}
                                                     className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                         placeholder="شماره بارنامه"
+                                        required
                                     />
                                             </td>
                                         </tr>
                                         {/* ردیف 3: تاریخ صدور بارنامه، کد خودرو */}
                                         <tr className="border-b border-slate-200 hover:bg-slate-50">
-                                            <td className="p-2 border-l border-slate-200 font-medium">تاریخ صدور بارنامه</td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">تاریخ صدور بارنامه *</td>
                                             <td className="p-2 border-l border-slate-200">
                                     <input
                                         type="text"
@@ -5037,6 +5049,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         })}
                                                     className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500"
                                         placeholder="1403/01/01"
+                                        required
                                     />
                                             </td>
                                             <td className="p-2 border-l border-slate-200 font-medium">کد خودرو</td>

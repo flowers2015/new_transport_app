@@ -140,6 +140,8 @@ function mapDestRowsForRealtime(rows) {
     freightCost: d.freight_cost,
     unloadTime: d.unload_time,
     deliveryDate: d.delivery_date,
+    loadingDate: d.loading_date,
+    platformArrivalTime: d.platform_arrival_time,
     representativeType: d.representative_type,
     lisCode: d.lis_code,
     brandType: d.brand_type,
@@ -147,6 +149,7 @@ function mapDestRowsForRealtime(rows) {
     brand2: d.brand2,
     products: d.products,
     cargoValue: d.cargo_value,
+    originalCreatedByUserId: d.original_created_by_user_id,
   }));
 }
 
@@ -261,6 +264,331 @@ async function ensureDestinationSortOrderColumn() {
   } catch (err) {
     console.warn('⚠️ [freight] could not ensure sort_order column:', err.message);
     return false;
+  }
+}
+
+let destinationLoadingDateColumnCache = null;
+async function ensureDestinationLoadingDateColumn() {
+  try {
+    if (destinationLoadingDateColumnCache === true) return true;
+    const colCheck = await pool.query(`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'freight_destinations'
+        AND column_name = 'loading_date'
+      LIMIT 1
+    `);
+    if ((colCheck.rowCount || 0) > 0) {
+      destinationLoadingDateColumnCache = true;
+      return true;
+    }
+    await pool.query(`
+      ALTER TABLE freight_destinations
+      ADD COLUMN IF NOT EXISTS loading_date VARCHAR(20)
+    `);
+    destinationLoadingDateColumnCache = true;
+    return true;
+  } catch (err) {
+    console.warn('⚠️ [freight] could not ensure destination loading_date column:', err.message);
+    // false را کش نکن تا تلاش بعدی شانس داشته باشد
+    destinationLoadingDateColumnCache = null;
+    return false;
+  }
+}
+
+let destinationPlatformArrivalColumnCache = null;
+async function ensureDestinationPlatformArrivalColumn() {
+  try {
+    if (destinationPlatformArrivalColumnCache === true) return true;
+    const colCheck = await pool.query(`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'freight_destinations'
+        AND column_name = 'platform_arrival_time'
+      LIMIT 1
+    `);
+    if ((colCheck.rowCount || 0) > 0) {
+      destinationPlatformArrivalColumnCache = true;
+      return true;
+    }
+    await pool.query(`
+      ALTER TABLE freight_destinations
+      ADD COLUMN IF NOT EXISTS platform_arrival_time VARCHAR(20)
+    `);
+    destinationPlatformArrivalColumnCache = true;
+    return true;
+  } catch (err) {
+    console.warn('⚠️ [freight] could not ensure destination platform_arrival_time column:', err.message);
+    destinationPlatformArrivalColumnCache = null;
+    return false;
+  }
+}
+
+/**
+ * مشخصات بلوک مقصد (ارزش / تاریخ بارگیری / ساعت حضور) را از اعلام‌بار روی مقصدهایی که خالی‌اند بنویس.
+ * ارزش هر مقصد متعلق به همان مقصد است؛ فقط وقتی خالی است از روی اعلام‌بار پر می‌شود.
+ * فیلدهای پر از قبل دست نخورده می‌مانند تا بعد از ترکیب ردیف‌ها هر مقصد همان مقدار ثبت‌شده خودش را داشته باشد.
+ */
+async function materializeDestinationBlockFieldsFromAnnouncement(client, announcementId) {
+  if (!announcementId) return;
+
+  await ensureDestinationSortOrderColumn();
+
+  // تک‌مقصد خالی: کل ارزش ردیف متعلق به همان مقصد است
+  await client.query(
+    `UPDATE freight_destinations d
+     SET cargo_value = fa.cargo_value
+     FROM freight_announcements fa
+     WHERE d.freight_announcement_id = fa.id
+       AND fa.id = $1
+       AND (d.cargo_value IS NULL OR d.cargo_value = 0)
+       AND COALESCE(fa.cargo_value, 0) > 0
+       AND (
+         SELECT COUNT(*)::int FROM freight_destinations x
+         WHERE x.freight_announcement_id = fa.id
+       ) = 1`,
+    [announcementId]
+  );
+
+  // چند مقصد همه بدون ارزش: ارزش ردیف را بین مقصدها تقسیم کن (نه همه روی اولی)
+  const { rows: zeroCheck } = await client.query(
+    `SELECT
+       COALESCE(SUM(COALESCE(cargo_value, 0)), 0) AS cargo_sum,
+       COUNT(*)::int AS dest_count
+     FROM freight_destinations
+     WHERE freight_announcement_id = $1`,
+    [announcementId]
+  );
+  const cargoSum = Number(zeroCheck[0]?.cargo_sum) || 0;
+  const destCount = Number(zeroCheck[0]?.dest_count) || 0;
+  if (cargoSum === 0 && destCount > 1) {
+    const { rows: annRows } = await client.query(
+      `SELECT COALESCE(cargo_value, 0) AS cargo_value FROM freight_announcements WHERE id = $1`,
+      [announcementId]
+    );
+    const annCargo = Number(annRows[0]?.cargo_value) || 0;
+    if (annCargo > 0) {
+      const { rows: destIds } = await client.query(
+        `SELECT id
+         FROM freight_destinations
+         WHERE freight_announcement_id = $1
+         ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
+        [announcementId]
+      );
+      const n = destIds.length;
+      const base = Math.floor(annCargo / n);
+      let allocated = 0;
+      for (let i = 0; i < n; i++) {
+        const share = i === n - 1 ? annCargo - allocated : base;
+        allocated += share;
+        await client.query(
+          `UPDATE freight_destinations SET cargo_value = $1 WHERE id = $2`,
+          [share, destIds[i].id]
+        );
+      }
+    }
+  }
+
+  if (await ensureDestinationLoadingDateColumn()) {
+    await client.query(
+      `UPDATE freight_destinations d
+       SET loading_date = fa.loading_date
+       FROM freight_announcements fa
+       WHERE d.freight_announcement_id = fa.id
+         AND fa.id = $1
+         AND (d.loading_date IS NULL OR TRIM(COALESCE(d.loading_date, '')) = '')
+         AND fa.loading_date IS NOT NULL
+         AND TRIM(COALESCE(fa.loading_date, '')) <> ''`,
+      [announcementId]
+    );
+  }
+
+  if (await ensureDestinationPlatformArrivalColumn()) {
+    await client.query(
+      `UPDATE freight_destinations d
+       SET platform_arrival_time = fa.platform_arrival_time
+       FROM freight_announcements fa
+       WHERE d.freight_announcement_id = fa.id
+         AND fa.id = $1
+         AND (d.platform_arrival_time IS NULL OR TRIM(COALESCE(d.platform_arrival_time, '')) = '')
+         AND fa.platform_arrival_time IS NOT NULL
+         AND TRIM(COALESCE(fa.platform_arrival_time, '')) <> ''`,
+      [announcementId]
+    );
+  }
+}
+
+/**
+ * قبل از transfer/split: ارزش همان مقصد را قطعی کن.
+ * - اگر خودش دارد → همان
+ * - اگر مقصدهای ردیف خالی‌اند → اول materialize (تک‌مقصد یا تقسیم مساوی)
+ * - اگر هنوز خالی و بقیه ارزش دارند → باقی‌ماندهٔ (ann - siblings)
+ */
+async function ensureDestinationOwnCargoValue(client, destinationId) {
+  if (!destinationId) return 0;
+
+  const loadRow = async () => {
+    const { rows } = await client.query(
+      `SELECT
+         d.id,
+         d.freight_announcement_id,
+         COALESCE(d.cargo_value, 0) AS cargo_value,
+         COALESCE(fa.cargo_value, 0) AS ann_cargo,
+         (
+           SELECT COUNT(*)::int FROM freight_destinations x
+           WHERE x.freight_announcement_id = d.freight_announcement_id
+         ) AS dest_count,
+         (
+           SELECT COALESCE(SUM(COALESCE(x.cargo_value, 0)), 0)
+           FROM freight_destinations x
+           WHERE x.freight_announcement_id = d.freight_announcement_id
+             AND x.id <> d.id
+         ) AS siblings_sum
+       FROM freight_destinations d
+       JOIN freight_announcements fa ON fa.id = d.freight_announcement_id
+       WHERE d.id = $1
+       FOR UPDATE OF d`,
+      [destinationId]
+    );
+    return rows[0] || null;
+  };
+
+  let row = await loadRow();
+  if (!row) return 0;
+
+  let current = Number(row.cargo_value) || 0;
+  if (current > 0) return current;
+
+  // اول همه مقصدهای خالی ردیف را از روی اعلام‌بار پر/تقسیم کن
+  await materializeDestinationBlockFieldsFromAnnouncement(client, row.freight_announcement_id);
+  row = await loadRow();
+  if (!row) return 0;
+
+  current = Number(row.cargo_value) || 0;
+  if (current > 0) return current;
+
+  const annCargo = Number(row.ann_cargo) || 0;
+  const destCount = Number(row.dest_count) || 0;
+  const siblingsSum = Number(row.siblings_sum) || 0;
+  let resolved = 0;
+
+  if (destCount <= 1) {
+    resolved = annCargo;
+  } else if (siblingsSum > 0 && annCargo > siblingsSum) {
+    resolved = annCargo - siblingsSum;
+  }
+
+  if (resolved > 0) {
+    await client.query(
+      `UPDATE freight_destinations SET cargo_value = $1 WHERE id = $2`,
+      [resolved, destinationId]
+    );
+  }
+  return resolved;
+}
+
+/** بعد از INSERT مقصد: مقادیر بلوک ارسال‌شده از کلاینت را بنویس (بدون overwrite مقادیر موجود خالی‌نمانده) */
+async function applyDestinationBlockFieldsFromPayload(db, destinations) {
+  if (!Array.isArray(destinations) || destinations.length === 0) return;
+  const hasLoading = await ensureDestinationLoadingDateColumn();
+  const hasPlatform = await ensureDestinationPlatformArrivalColumn();
+  if (!hasLoading && !hasPlatform) return;
+
+  for (const d of destinations) {
+    const destId = d.id || d.destinationId;
+    if (!destId || typeof destId !== 'string') continue;
+    const loading = String(d.loadingDate || d.loading_date || '').trim() || null;
+    const platform = String(d.platformArrivalTime || d.platform_arrival_time || '').trim() || null;
+    if (!loading && !platform) continue;
+
+    if (hasLoading && hasPlatform) {
+      await db.query(
+        `UPDATE freight_destinations
+         SET loading_date = COALESCE($1, loading_date),
+             platform_arrival_time = COALESCE($2, platform_arrival_time)
+         WHERE id = $3`,
+        [loading, platform, destId]
+      );
+    } else if (hasLoading && loading) {
+      await db.query(
+        `UPDATE freight_destinations SET loading_date = COALESCE($1, loading_date) WHERE id = $2`,
+        [loading, destId]
+      );
+    } else if (hasPlatform && platform) {
+      await db.query(
+        `UPDATE freight_destinations SET platform_arrival_time = COALESCE($1, platform_arrival_time) WHERE id = $2`,
+        [platform, destId]
+      );
+    }
+  }
+}
+
+/** سازگاری با نام قبلی */
+async function seedDestinationCargoFromAnnouncementIfNeeded(client, announcementId) {
+  await materializeDestinationBlockFieldsFromAnnouncement(client, announcementId);
+}
+
+/**
+ * همگام‌سازی فیلدهای سطح اعلام‌بار از روی مقصدها بعد از transfer/split:
+ * - cargo_value = SUM(dest.cargo_value)  (قانون جمع/تفریق)
+ * - هرگز با جمع صفر، ارزش مثبت قبلی ردیف را پاک نکن (اول materialize کن)
+ * - created_by از مالک واقعی مقصدها
+ * - تاریخ/ساعت بلوک مقصد (delivery/loading/platform روی dest) دست نخورده می‌مانند
+ */
+async function syncAnnouncementAggregatesFromDestinations(client, announcementId) {
+  if (!announcementId) return;
+
+  const sumCargo = async () => {
+    const { rows: cargoRows } = await client.query(
+      `SELECT COALESCE(SUM(COALESCE(d.cargo_value, 0)), 0) AS cargo_sum
+       FROM freight_destinations d
+       WHERE d.freight_announcement_id = $1`,
+      [announcementId]
+    );
+    return Number(cargoRows[0]?.cargo_sum) || 0;
+  };
+
+  let cargoSum = await sumCargo();
+  if (cargoSum <= 0) {
+    await materializeDestinationBlockFieldsFromAnnouncement(client, announcementId);
+    cargoSum = await sumCargo();
+  }
+
+  if (cargoSum > 0) {
+    await client.query(
+      `UPDATE freight_announcements
+       SET cargo_value = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [cargoSum, announcementId]
+    );
+  }
+  // اگر هنوز صفر است، cargo_value قبلی اعلام‌بار را صفر نکن
+
+  // تاریخ تحویل سطح اعلام‌بار را از مقصدها نساز/عوض نکن — بلوک مقصد جدا است
+
+  const hasOrig = await hasDestinationOriginalCreatorColumn(client);
+  if (!hasOrig) return;
+
+  const { rows } = await client.query(
+    `SELECT
+       COALESCE(d.original_created_by_user_id, fa.created_by_user_id) AS creator_id,
+       COUNT(*)::int AS cnt
+     FROM freight_destinations d
+     JOIN freight_announcements fa ON fa.id = d.freight_announcement_id
+     WHERE d.freight_announcement_id = $1
+     GROUP BY COALESCE(d.original_created_by_user_id, fa.created_by_user_id)`,
+    [announcementId]
+  );
+
+  if (rows.length === 1 && rows[0].creator_id) {
+    await client.query(
+      `UPDATE freight_announcements
+       SET created_by_user_id = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [rows[0].creator_id, announcementId]
+    );
   }
 }
 
@@ -386,6 +714,14 @@ async function insertFreightDestinations(clientOrPool, announcementId, destinati
       `,
       [announcementId]
     );
+  }
+
+  // تاریخ بارگیری / ساعت حضور را از payload مقصد بنویس، سپس خالی‌ها را از اعلام‌بار پر کن
+  try {
+    await applyDestinationBlockFieldsFromPayload(db, destinations);
+    await materializeDestinationBlockFieldsFromAnnouncement(db, announcementId);
+  } catch (e) {
+    console.warn('⚠️ [insertFreightDestinations] materialize block fields:', e.message);
   }
 }
 
@@ -976,17 +1312,23 @@ async function getFreightAnnouncements(req, res) {
       const annCreatorLabel = announcement.creator_full_name || announcement.creator_username;
       const annCreatorKey =
         announcement.created_by_user_id || announcement.creator_user_id || annCreatorLabel;
-      if (annCreatorLabel && annCreatorKey && !seenCreators.has(String(annCreatorKey))) {
-        seenCreators.add(String(annCreatorKey));
-        creatorNames.push(annCreatorLabel);
-      }
+      // فقط سازندگان واقعی مقصدها (original یا fallback به اعلام‌کننده ردیف) — نه union اجباری با host
       for (const dest of announcement.destinations) {
-        const label = dest.original_creator_full_name || dest.original_creator_username;
-        const key = dest.original_created_by_user_id || dest.original_creator_user_id || label;
+        const label =
+          dest.original_creator_full_name ||
+          dest.original_creator_username ||
+          annCreatorLabel;
+        const key =
+          dest.original_created_by_user_id ||
+          dest.original_creator_user_id ||
+          annCreatorKey;
         if (label && key && !seenCreators.has(String(key))) {
           seenCreators.add(String(key));
           creatorNames.push(label);
         }
+      }
+      if (creatorNames.length === 0 && annCreatorLabel && annCreatorKey) {
+        creatorNames.push(annCreatorLabel);
       }
       if (creatorNames.length > 0) {
         announcement.destination_creator_names = creatorNames.join('، ');
@@ -1713,7 +2055,7 @@ async function updateFreightAnnouncement(req, res) {
       );
       updated.destinations = destRows.rows;
 
-      // ارسال real-time notification برای update (با مقاصد برای نمایش آنی LIS و ...)
+      // ارسال real-time notification برای update (با فیلدهای کامل تا UI فوری عوض شود)
       try {
         const realtimeService = require('../services/realtimeService');
         realtimeService.notifyAnnouncementUpdate(
@@ -1722,6 +2064,21 @@ async function updateFreightAnnouncement(req, res) {
           {
             status: updated.status,
             lineType: updated.line_type || newRecord.line_type,
+            line_type: updated.line_type || newRecord.line_type,
+            loadingDate: updated.loading_date,
+            loading_date: updated.loading_date,
+            deliveryDate: updated.delivery_date,
+            delivery_date: updated.delivery_date,
+            cargoValue: updated.cargo_value,
+            cargo_value: updated.cargo_value,
+            vehicleType: updated.vehicle_type,
+            vehicle_type: updated.vehicle_type,
+            notes: updated.notes,
+            platformArrivalTime: updated.platform_arrival_time,
+            platform_arrival_time: updated.platform_arrival_time,
+            originCity: updated.origin_city,
+            origin_city: updated.origin_city,
+            brand: updated.brand,
             destinations: mapDestRowsForRealtime(destRows.rows),
           },
           userId
@@ -2761,6 +3118,15 @@ async function returnDestinationToCreator(req, res) {
     }
 
     // چند مقصد: فقط این مقصد را جدا کن و به ReturnedToCreator بفرست
+    await materializeDestinationBlockFieldsFromAnnouncement(client, effectiveSourceId);
+    const ensuredReturnCargo = await ensureDestinationOwnCargoValue(client, destinationId);
+    const { rows: returnDestRows } = await client.query(
+      `SELECT cargo_value, loading_date, delivery_date, platform_arrival_time
+       FROM freight_destinations
+       WHERE id = $1`,
+      [destinationId]
+    );
+    const returnDest = returnDestRows[0] || {};
     const crypto = require('crypto');
     const newId = crypto.randomUUID();
     const annCode = `ANN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -2782,13 +3148,13 @@ async function returnDestinationToCreator(req, res) {
       [
         newId,
         annCode,
-        sourceAnn.loading_date,
-        sourceAnn.delivery_date || null,
+        returnDest.loading_date || sourceAnn.loading_date,
+        returnDest.delivery_date || sourceAnn.delivery_date || null,
         sourceAnn.line_type,
         newStatus,
-        sourceAnn.cargo_value || 0,
+        Number(returnDest.cargo_value) || ensuredReturnCargo || 0,
         sourceAnn.vehicle_type || 'ده چرخ',
-        sourceAnn.platform_arrival_time || null,
+        returnDest.platform_arrival_time || sourceAnn.platform_arrival_time || null,
         sourceAnn.carton_count || null,
         sourceAnn.pallet_count || null,
         sourceAnn.loading_type || null,
@@ -2825,6 +3191,9 @@ async function returnDestinationToCreator(req, res) {
        WHERE id = $2`,
       [newId, destinationId, returnCreatorId]
     );
+
+    await syncAnnouncementAggregatesFromDestinations(client, effectiveSourceId);
+    await syncAnnouncementAggregatesFromDestinations(client, newId);
 
     await logFreightHistory({
       announcementId: effectiveSourceId,
@@ -9637,6 +10006,32 @@ async function createChangeRequest(req, res) {
     });
 
     await client.query('COMMIT');
+
+    try {
+      const realtimeService = require('../services/realtimeService');
+      const actorId = currentUserId || actingUserId || req.user?.id || null;
+      realtimeService.notifyAnnouncementUpdate(
+        announcementId,
+        'change_requested',
+        {
+          status: 'ChangeRequested',
+          requestId,
+          requestType: type,
+          targetQueue: targetQueue || null,
+          assignedDriverId: null,
+          assignedVehicleId: null,
+        },
+        actorId
+      );
+      realtimeService.notifyGeneralUpdate(
+        'change_requested',
+        { announcementId, requestId, requestType: type },
+        actorId
+      );
+    } catch (realtimeError) {
+      console.error('❌ [createChangeRequest] realtime error:', realtimeError);
+    }
+
     return res.status(201).json({ id: requestId, status: 'requested' });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -10116,11 +10511,16 @@ async function transferDestination(req, res) {
 
   const client = await pool.connect();
   try {
+    // DDL باید قبل از BEGIN باشد تا تراکنش ستون جدید را ببیند
+    await ensureDestinationLoadingDateColumn();
+    await ensureDestinationPlatformArrivalColumn();
+
     await client.query('BEGIN');
 
     // بررسی target announcement اول (ثابت است)
     const { rows: targetRows } = await client.query(
-      `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      `SELECT id, announcement_code, status, notes, platform_arrival_time, cargo_value, created_by_user_id
+       FROM freight_announcements WHERE id = $1 FOR UPDATE`,
       [targetAnnouncementId]
     );
     if (targetRows.length === 0) {
@@ -10173,7 +10573,8 @@ async function transferDestination(req, res) {
     }
 
     const { rows: sourceRows } = await client.query(
-      `SELECT id, announcement_code, status FROM freight_announcements WHERE id = $1 FOR UPDATE`,
+      `SELECT id, announcement_code, status, notes, platform_arrival_time, cargo_value, created_by_user_id
+       FROM freight_announcements WHERE id = $1 FOR UPDATE`,
       [effectiveSourceId]
     );
     if (sourceRows.length === 0) {
@@ -10237,7 +10638,18 @@ async function transferDestination(req, res) {
       newCreatedAt: newCreatedAt.toISOString(),
     });
 
-    // انتقال/بازترتیب مقصد
+    const isSameAnnouncementReorder = sourceAnnouncementId === targetAnnouncementId;
+
+    // قبل از جابجایی: ارزش و تاریخ بارگیری/ساعت را روی بلوک مقصدها materialize کن
+    // خود فیلدهای بلوک (cargo_value / delivery_date / loading_date / platform) هنگام UPDATE عوض نمی‌شوند
+    if (!isSameAnnouncementReorder) {
+      await materializeDestinationBlockFieldsFromAnnouncement(client, sourceAnnouncementId);
+      await materializeDestinationBlockFieldsFromAnnouncement(client, targetAnnouncementId);
+      // ارزش همین مقصدِ در حال انتقال را قطعی کن (حتی اگر قبلاً 0 بوده)
+      await ensureDestinationOwnCargoValue(client, destinationId);
+    }
+
+    // انتقال/بازترتیب مقصد — فقط مالک ردیف و ترتیب؛ مشخصات بلوک دست نخورده
     await client.query(
       `UPDATE freight_destinations
        SET freight_announcement_id = $1,
@@ -10288,8 +10700,6 @@ async function transferDestination(req, res) {
         isTransferred: d.id === destinationId
       }))
     });
-
-    const isSameAnnouncementReorder = sourceAnnouncementId === targetAnnouncementId;
 
     // ثبت تاریخچه
     if (isSameAnnouncementReorder) {
@@ -10347,6 +10757,9 @@ async function transferDestination(req, res) {
         targetAnnouncementId,
         targetAnnouncementCode: targetAnn.announcement_code
       });
+
+      // قبل از حذف مبدا: ساعت حضور را روی خود مقصدها نگه داشته‌ایم؛ سطح اعلام‌بار هدف را از مبدا overwrite نکن
+      // (هر مقصد ساعت/تاریخ خودش را دارد؛ کپی سطح ردیف باعث یکسان‌شدن نمایش همه مقصدها می‌شود)
       
       // 1. دریافت همه تاریخچه‌های source قبل از حذف
       const { rows: sourceHistoryRows } = await client.query(
@@ -10417,6 +10830,14 @@ async function transferDestination(req, res) {
       );
       
       console.log('✅ [transferDestination] Source announcement deleted after transferring all history to target');
+    } else if (!isSameAnnouncementReorder) {
+      // مبدا هنوز مقصد دارد: ارزش بار و created_by را با مقصدهای باقی‌مانده هم‌راستا کن
+      // توضیحات و ساعت حضور مبدا دست‌نخورده می‌مانند (متعلق به ردیف مبدا هستند)
+      await syncAnnouncementAggregatesFromDestinations(client, sourceAnnouncementId);
+    }
+
+    if (!isSameAnnouncementReorder) {
+      await syncAnnouncementAggregatesFromDestinations(client, targetAnnouncementId);
     }
 
     await client.query('COMMIT');
@@ -10536,12 +10957,26 @@ async function splitDestinationToNewAnnouncement(req, res) {
 
   const client = await pool.connect();
   try {
+    // DDL باید قبل از BEGIN باشد تا تراکنش ستون جدید را ببیند
+    const hasDestLoading = await ensureDestinationLoadingDateColumn();
+    const hasDestPlatform = await ensureDestinationPlatformArrivalColumn();
+
     await client.query('BEGIN');
 
     // اول مالک واقعی مقصد را از روی destinationId پیدا کن
     // (ممکن است فرانت اشتباهاً id ردیف میزبان را بفرستد)
+    const destOwnerSelectCols = [
+      'id',
+      'city',
+      'freight_announcement_id',
+      'cargo_value',
+      'delivery_date',
+      'original_created_by_user_id',
+    ];
+    if (hasDestLoading) destOwnerSelectCols.push('loading_date');
+    if (hasDestPlatform) destOwnerSelectCols.push('platform_arrival_time');
     const { rows: destOwnerRows } = await client.query(
-      `SELECT id, city, freight_announcement_id
+      `SELECT ${destOwnerSelectCols.join(', ')}
        FROM freight_destinations
        WHERE id = $1
        FOR UPDATE`,
@@ -10570,7 +11005,15 @@ async function splitDestinationToNewAnnouncement(req, res) {
       return res.status(404).json({ message: 'اعلام بار مبدا یافت نشد.' });
     }
     const sourceAnn = sourceRows[0];
-    const destination = { id: destOwnerRows[0].id, city: destOwnerRows[0].city };
+    const destination = {
+      id: destOwnerRows[0].id,
+      city: destOwnerRows[0].city,
+      cargo_value: destOwnerRows[0].cargo_value,
+      delivery_date: destOwnerRows[0].delivery_date,
+      loading_date: hasDestLoading ? destOwnerRows[0].loading_date : null,
+      platform_arrival_time: hasDestPlatform ? destOwnerRows[0].platform_arrival_time : null,
+      original_created_by_user_id: destOwnerRows[0].original_created_by_user_id,
+    };
 
     const { rows: countRows } = await client.query(
       `SELECT COUNT(*)::int AS count FROM freight_destinations WHERE freight_announcement_id = $1`,
@@ -10581,6 +11024,35 @@ async function splitDestinationToNewAnnouncement(req, res) {
       return res.status(400).json({
         message: 'این مقصد تنها مقصد اعلام‌بار است؛ نیازی به جداسازی نیست.',
       });
+    }
+
+    await materializeDestinationBlockFieldsFromAnnouncement(client, effectiveSourceId);
+    // ارزش همین مقصد را قبل از جداسازی قطعی کن تا ردیف جدید صفر نشود
+    const ensuredCargo = await ensureDestinationOwnCargoValue(client, destinationId);
+    // بعد از materialize دوباره بلوک مقصد را بخوان — مشخصات نباید از میزبان کپی شوند
+    const destBlockSelectCols = [
+      'cargo_value',
+      'delivery_date',
+      'original_created_by_user_id',
+    ];
+    if (hasDestLoading) destBlockSelectCols.push('loading_date');
+    if (hasDestPlatform) destBlockSelectCols.push('platform_arrival_time');
+    const { rows: destBlockRows } = await client.query(
+      `SELECT ${destBlockSelectCols.join(', ')}
+       FROM freight_destinations WHERE id = $1`,
+      [destinationId]
+    );
+    if (destBlockRows[0]) {
+      destination.cargo_value = destBlockRows[0].cargo_value;
+      destination.delivery_date = destBlockRows[0].delivery_date;
+      if (hasDestLoading) destination.loading_date = destBlockRows[0].loading_date;
+      if (hasDestPlatform) {
+        destination.platform_arrival_time = destBlockRows[0].platform_arrival_time;
+      }
+      destination.original_created_by_user_id = destBlockRows[0].original_created_by_user_id;
+    }
+    if (!(Number(destination.cargo_value) > 0) && ensuredCargo > 0) {
+      destination.cargo_value = ensuredCargo;
     }
 
     const crypto = require('crypto');
@@ -10596,6 +11068,14 @@ async function splitDestinationToNewAnnouncement(req, res) {
     );
     const newStatus = keepPending ? sourceAnn.status : pendingStatus;
     const vehicleType = requestedVehicleType || sourceAnn.vehicle_type || 'ده چرخ';
+    const newCargoValue = Number(destination.cargo_value) || 0;
+    const newCreatedBy =
+      destination.original_created_by_user_id || sourceAnn.created_by_user_id || userId || null;
+    // تاریخ بارگیری ردیف جدید = تاریخ بلوک مقصد (نه تاریخ میزبان مگر fallback)
+    const newLoadingDate = destination.loading_date || sourceAnn.loading_date;
+    // ساعت حضور ردیف جدید از بلوک مقصد (نه میزبان)
+    const newPlatformArrival =
+      destination.platform_arrival_time || null;
 
     await client.query(
       `INSERT INTO freight_announcements (
@@ -10614,15 +11094,15 @@ async function splitDestinationToNewAnnouncement(req, res) {
       [
         newId,
         annCode,
-        sourceAnn.loading_date,
-        sourceAnn.delivery_date || null,
+        newLoadingDate,
+        null, // تاریخ تحویل اعلام‌بار از بلوک مقصدهاست؛ از میزبان کپی نکن
         sourceAnn.line_type,
         newStatus,
-        sourceAnn.cargo_value || 0,
+        newCargoValue,
         vehicleType,
         assignmentType,
-        null,
-        sourceAnn.platform_arrival_time || null,
+        null, // کرایه کل میزبان را کپی نکن
+        newPlatformArrival,
         sourceAnn.carton_count || null,
         sourceAnn.pallet_count || null,
         sourceAnn.loading_type || null,
@@ -10632,17 +11112,35 @@ async function splitDestinationToNewAnnouncement(req, res) {
         sourceAnn.representative_name || null,
         sourceAnn.priority || null,
         sourceAnn.products || '[]',
-        sourceAnn.notes || null,
-        sourceAnn.created_by_user_id || userId || null,
+        null, // توضیحات میزبان را روی ردیف جداشده کپی نکن
+        newCreatedBy,
       ]
     );
 
-    await client.query(
-      `UPDATE freight_destinations
-       SET freight_announcement_id = $1, created_at = NOW()
-       WHERE id = $2`,
-      [newId, destinationId]
-    );
+    const hasSortOrderOnSplit = await ensureDestinationSortOrderColumn();
+    if (hasSortOrderOnSplit) {
+      await client.query(
+        `UPDATE freight_destinations
+         SET freight_announcement_id = $1,
+             original_created_by_user_id = COALESCE(original_created_by_user_id, $3),
+             created_at = NOW(),
+             sort_order = 0
+         WHERE id = $2`,
+        [newId, destinationId, newCreatedBy]
+      );
+    } else {
+      await client.query(
+        `UPDATE freight_destinations
+         SET freight_announcement_id = $1,
+             original_created_by_user_id = COALESCE(original_created_by_user_id, $3),
+             created_at = NOW()
+         WHERE id = $2`,
+        [newId, destinationId, newCreatedBy]
+      );
+    }
+
+    await syncAnnouncementAggregatesFromDestinations(client, effectiveSourceId);
+    await syncAnnouncementAggregatesFromDestinations(client, newId);
 
     await logFreightHistory({
       announcementId: effectiveSourceId,
