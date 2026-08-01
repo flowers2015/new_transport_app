@@ -54,6 +54,7 @@ const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
                 ? a.products
                 : [],
         platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+        announcementWeekDay: a.announcement_week_day || a.announcementWeekDay || undefined,
         destinations: Array.isArray(a.destinations)
             ? a.destinations.map((d: any) => ({
                   id: d.id,

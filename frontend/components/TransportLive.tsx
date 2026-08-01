@@ -59,6 +59,11 @@ import {
     buildTariffFreightColumns,
     canPersonalCancelCarrierRefer,
     isPersonalTransportViewerRole,
+    ANNOUNCEMENT_WEEK_DAYS,
+    ANNOUNCEMENT_WEEK_DAY_UNASSIGNED,
+    getAnnouncementWeekDay,
+    dairyWeekDayTabLabel,
+    type DairyWeekDayTab,
 } from '../utils/freightDisplay';
 import {
     shouldShowVehicleCodeColumn,
@@ -156,12 +161,19 @@ const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
         );
     });
 
+/** ستون مقاصد فشرده پاستوریزه — شامل تاریخ/ساعت بارگیری هر مقصد */
+const DAIRY_DESTINATIONS_HEADER = 'مقاصد و تایم بارگیری';
+
+const isDairyDestinationsColumn = (header: string) =>
+    header === DAIRY_DESTINATIONS_HEADER || header === 'مقاصد';
+
 const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     ردیف: 'col-row',
     'کارمند اعلام‌کننده': 'col-creator',
     'نوع خودرو': 'col-vehicle-type',
     'مبدا بارگیری': 'col-origin',
     'کل تناژ (کیلوگرم)': 'col-tonnage',
+    [DAIRY_DESTINATIONS_HEADER]: 'col-destinations',
     مقاصد: 'col-destinations',
     'ارزش بار (ریال)': 'col-cargo-value',
     'تاریخ تحویل': 'col-platform-time',
@@ -418,6 +430,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [baleReportOpen, setBaleReportOpen] = useState(false);
     const [dairyArrangementOpen, setDairyArrangementOpen] = useState(false);
+    const [dairyWeekDayTab, setDairyWeekDayTab] = useState<DairyWeekDayTab | null>(null);
     const isTransportUser = isTransportRole(currentUser.role);
     const isCompanyTransportUser =
         currentUser.role === UserRole.TransportationUser || currentUser.role === 'transport_user';
@@ -428,14 +441,21 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     );
 
     const columnStorageKey = useMemo(
-        () => transportLiveColumnStorageKey(currentUser.id, activeLine, viewMode),
-        [currentUser.id, activeLine, viewMode]
+        () =>
+            transportLiveColumnStorageKey(
+                currentUser.id,
+                activeLine,
+                viewMode,
+                isPendingBillOfLadingTab(activeLine) ? pendingSubLine : undefined
+            ),
+        [currentUser.id, activeLine, viewMode, pendingSubLine]
     );
 
     const isDairyCompactTable =
-        viewMode === 'compact' &&
-        activeLine === FreightLineType.Dairy &&
-        !isPendingBillOfLadingTab(activeLine);
+        (viewMode === 'compact' &&
+            activeLine === FreightLineType.Dairy &&
+            !isPendingBillOfLadingTab(activeLine)) ||
+        (isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy);
 
     const isDairyOrAmbientTab =
         activeLine === FreightLineType.Dairy || activeLine === FreightLineType.Ambient;
@@ -447,6 +467,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             return;
         }
         const stored = loadTransportLiveHiddenColumns(columnStorageKey);
+        // مهاجرت نام قدیمی ستون مقاصد
+        if (stored.has('مقاصد')) {
+            stored.delete('مقاصد');
+            stored.add(DAIRY_DESTINATIONS_HEADER);
+        }
         // اگر کاربر هنوز چیزی ذخیره نکرده، «تاریخ اعلام بار» پیش‌فرض مخفی باشد
         if (stored.size === 0) {
             stored.add('تاریخ اعلام بار');
@@ -945,12 +970,71 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         return list;
     }, [liveAnnouncements, activeLine, pendingBolAnnouncements, pendingSubLine, pendingDayOffset, pendingDayTabs]);
 
+    const dairyWeekDayTabs = useMemo(() => {
+        if (activeLine !== FreightLineType.Dairy || isPendingBillOfLadingTab(activeLine)) {
+            return [] as DairyWeekDayTab[];
+        }
+        const dairyList = liveAnnouncements.filter(
+            (a) => matchesFreightLine(a, FreightLineType.Dairy) && !isPendingBillOfLading(a)
+        );
+        const present = new Set<DairyWeekDayTab>();
+        let hasUnassigned = false;
+        dairyList.forEach((ann) => {
+            const day = getAnnouncementWeekDay(ann);
+            if (day) present.add(day);
+            else hasUnassigned = true;
+        });
+        const ordered = ANNOUNCEMENT_WEEK_DAYS.filter((d) => present.has(d));
+        if (hasUnassigned) ordered.push(ANNOUNCEMENT_WEEK_DAY_UNASSIGNED);
+        return ordered;
+    }, [liveAnnouncements, activeLine]);
+
+    const dairyWeekDayCounts = useMemo(() => {
+        const counts = {} as Record<string, number>;
+        if (activeLine !== FreightLineType.Dairy || isPendingBillOfLadingTab(activeLine)) return counts;
+        liveAnnouncements
+            .filter((a) => matchesFreightLine(a, FreightLineType.Dairy) && !isPendingBillOfLading(a))
+            .forEach((ann) => {
+                const day = getAnnouncementWeekDay(ann) || ANNOUNCEMENT_WEEK_DAY_UNASSIGNED;
+                counts[day] = (counts[day] || 0) + 1;
+            });
+        return counts;
+    }, [liveAnnouncements, activeLine]);
+
+    useEffect(() => {
+        if (activeLine !== FreightLineType.Dairy || isPendingBillOfLadingTab(activeLine)) {
+            setDairyWeekDayTab(null);
+            return;
+        }
+        if (dairyWeekDayTabs.length === 0) {
+            setDairyWeekDayTab(null);
+            return;
+        }
+        if (!dairyWeekDayTab || !dairyWeekDayTabs.includes(dairyWeekDayTab)) {
+            setDairyWeekDayTab(dairyWeekDayTabs[0]);
+        }
+    }, [activeLine, dairyWeekDayTabs, dairyWeekDayTab]);
+
+    const dairyDayFilteredAnnouncements = useMemo(() => {
+        if (activeLine !== FreightLineType.Dairy || isPendingBillOfLadingTab(activeLine)) {
+            return filteredAnnouncements;
+        }
+        if (!dairyWeekDayTab || dairyWeekDayTabs.length === 0) {
+            return filteredAnnouncements;
+        }
+        return filteredAnnouncements.filter((ann) => {
+            const day = getAnnouncementWeekDay(ann);
+            if (dairyWeekDayTab === ANNOUNCEMENT_WEEK_DAY_UNASSIGNED) return !day;
+            return day === dairyWeekDayTab;
+        });
+    }, [filteredAnnouncements, activeLine, dairyWeekDayTab, dairyWeekDayTabs]);
+
     const dairyArrangementAnnouncements = useMemo(() => {
         if (activeLine !== FreightLineType.Dairy || isPendingBillOfLadingTab(activeLine)) {
             return [];
         }
-        return filteredAnnouncements.filter(isDairyAnnouncementForArrangement);
-    }, [activeLine, filteredAnnouncements]);
+        return dairyDayFilteredAnnouncements.filter(isDairyAnnouncementForArrangement);
+    }, [activeLine, dairyDayFilteredAnnouncements]);
 
     const canFinalizeCurrentTab = useMemo(() => {
         if (currentUser.role === 'ادمین' || currentUser.role === 'Admin') return true;
@@ -998,7 +1082,6 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             return newSet;
         });
     };
-
 
     const buildVisibleColumns = useCallback((columnMode: 'compact' | 'full') => {
         const lineForColumns = isPendingBillOfLadingTab(activeLine)
@@ -1070,10 +1153,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) =>
                         renderDairyCompactText(ann.originCity || '-') },
                     { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
-                    { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
+                    { header: DAIRY_DESTINATIONS_HEADER, render: (ann: FreightAnnouncement) =>
                         withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
                     { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
-                    { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                    { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                     { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 ];
                 return [...base, ...extraCols];
@@ -1165,7 +1248,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'مبدا بارگیری', render: (ann: FreightAnnouncement) =>
                     renderDairyCompactText(ann.originCity || '-') },
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
-                { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
+                { header: DAIRY_DESTINATIONS_HEADER, render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
@@ -1278,7 +1361,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     );
 
     const displayAnnouncements = useMemo(() => {
-        const ordered = applyTransportLiveDisplayOrder(filteredAnnouncements, {
+        const ordered = applyTransportLiveDisplayOrder(dairyDayFilteredAnnouncements, {
             activeLine,
             role: currentUser.role,
             iceCreamViewMode: isTransportUser ? iceCreamViewMode : 'planning',
@@ -1295,7 +1378,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             columns: visibleColumns,
         });
     }, [
-        filteredAnnouncements,
+        dairyDayFilteredAnnouncements,
         activeLine,
         currentUser.role,
         isTransportUser,
@@ -1316,14 +1399,14 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             isTransportUser &&
             iceCreamViewMode === 'my' &&
             hideReferred;
-        return matchVisibleMyView ? displayAnnouncements : filteredAnnouncements;
+        return matchVisibleMyView ? displayAnnouncements : dairyDayFilteredAnnouncements;
     }, [
         activeLine,
         isTransportUser,
         iceCreamViewMode,
         hideReferred,
         displayAnnouncements,
-        filteredAnnouncements,
+        dairyDayFilteredAnnouncements,
     ]);
 
     const handleSort = useCallback((header: string) => {
@@ -1520,14 +1603,19 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
     const generateExcelExport = (mode: 'compact' | 'full', XLSX: typeof import('xlsx')) => {
         const applyDairyHiddenColumns =
-            activeLine === FreightLineType.Dairy &&
-            !isPendingBillOfLadingTab(activeLine) &&
-            mode === 'compact';
+            mode === 'compact' &&
+            ((activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine)) ||
+                (isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy));
         const hiddenForMode = applyDairyHiddenColumns
             ? mode === viewMode
                 ? hiddenColumnHeaders
                 : loadTransportLiveHiddenColumns(
-                      transportLiveColumnStorageKey(currentUser.id, activeLine, mode)
+                      transportLiveColumnStorageKey(
+                          currentUser.id,
+                          activeLine,
+                          mode,
+                          isPendingBillOfLadingTab(activeLine) ? pendingSubLine : undefined
+                      )
                   )
             : new Set<string>();
         const visibleCols = resolveExportColumns(mode).filter((col) => !hiddenForMode.has(col.header));
@@ -1608,9 +1696,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         return;
                     }
 
-                    if (col.header === 'مقاصد') {
+                    if (isDairyDestinationsColumn(col.header)) {
                         value =
-                            activeLine === FreightLineType.Dairy && mode === 'compact'
+                            (activeLine === FreightLineType.Dairy ||
+                                (isPendingBillOfLadingTab(activeLine) &&
+                                    pendingSubLine === FreightLineType.Dairy)) &&
+                            mode === 'compact'
                                 ? formatDairyCompactDestinationsText(ann)
                                 : formatCompactDestinationsForExcel(ann);
                         row.push(value);
@@ -1936,8 +2027,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     const value = ann.cargoValue || 0;
                     return typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d]/g, '')) || 0;
                 }
-                if (header === 'مقاصد') {
-                    return activeLine === FreightLineType.Dairy && mode === 'compact'
+                if (isDairyDestinationsColumn(header)) {
+                    return (activeLine === FreightLineType.Dairy ||
+                        (isPendingBillOfLadingTab(activeLine) &&
+                            pendingSubLine === FreightLineType.Dairy)) &&
+                        mode === 'compact'
                         ? formatDairyCompactDestinationsText(ann)
                         : formatCompactDestinationsForExcel(ann);
                 }
@@ -2061,7 +2155,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                     };
                     const header = headers[colNumber - 1];
-                    const isDestCol = header === 'مقاصد' || header === 'مقصد';
+                    const isDestCol = isDairyDestinationsColumn(header) || header === 'مقصد';
                     cell.alignment = {
                         horizontal: 'right',
                         vertical: isDestCol ? 'top' : 'middle',
@@ -2091,7 +2185,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             // Set column widths
             headers.forEach((header, idx) => {
                 let maxLength = header.length;
-                if (header === 'مقاصد') {
+                if (isDairyDestinationsColumn(header)) {
                     worksheet.getColumn(idx + 1).width = 55;
                     return;
                 }
@@ -2131,8 +2225,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     return (
         <div className="w-full max-w-full min-w-0 space-y-4">
             <div className="bg-white p-3 sm:p-4 rounded-xl shadow-md w-full max-w-full min-w-0 overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
-                    <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                {/* هدر ثابت: مشترک‌ها در ردیف‌های رزرو‌شده؛ مختص تب جدا تا پرش افقی/عمودی کم شود */}
+                <div className="mb-3 space-y-2">
+                    {/* ردیف ۱ — عنوان و اکشن‌های ثابت بالای صفحه */}
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
                         <h2 className="text-xl font-bold text-slate-800 flex items-center whitespace-nowrap shrink-0">
                             <TruckIcon className="w-6 h-6 ml-2 text-sky-600" />
                             پیگیری اعلام بار زنده و تخصیص
@@ -2164,21 +2260,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 )}
                             </button>
                         )}
-                        {canPerformActions && !isCarrierUser && activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine) && (
-                            <button
-                                type="button"
-                                onClick={() => setDairyArrangementOpen(true)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs hover:bg-indigo-700 transition-colors shrink-0"
-                                title="چیدمان مسیر پاستوریزه — نمای تمام‌صفحه برای گروه‌بندی مقاصد و مسیرها"
-                            >
-                                چیدمان مسیر
-                                {dairyArrangementAnnouncements.length > 0 && (
-                                    <span className="bg-white/20 rounded px-1.5">
-                                        {dairyArrangementAnnouncements.length.toLocaleString('fa-IR')}
-                                    </span>
-                                )}
-                            </button>
-                        )}
+                    </div>
+
+                    {/* ردیف ۲ — تب خطوط + قفل (جای قفل/هشدار همیشه رزرو) */}
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 min-h-[40px]">
                         <div className="flex items-center p-1 bg-slate-100 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0">
                             {!isCarrierUser && (
                             <button
@@ -2202,38 +2287,44 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 </button>
                             ))}
                         </div>
-                        {isTransportUser &&
-                            !isCarrierUser &&
-                            !isPendingBillOfLadingTab(activeLine) &&
-                            onToggleIntakeLock && (
-                            <button
-                                type="button"
-                                disabled={intakeLockBusy}
-                                onClick={() => onToggleIntakeLock(activeLine as FreightLineType)}
-                                className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-black border transition-colors whitespace-nowrap disabled:opacity-50 ${
-                                    Boolean(intakeLocks[activeLine as FreightLineType])
-                                        ? 'bg-red-50 text-red-700 border-red-500 hover:bg-red-100'
-                                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                                }`}
-                                title={
-                                    Boolean(intakeLocks[activeLine as FreightLineType])
-                                        ? 'پذیرش اعلام‌بار جدید برای این تب بسته است'
-                                        : 'پذیرش اعلام‌بار جدید برای این تب باز است'
-                                }
-                            >
-                                {Boolean(intakeLocks[activeLine as FreightLineType])
-                                    ? 'باز کردن اعلام‌بار جدید'
-                                    : 'قفل اعلام‌بار جدید'}
-                            </button>
-                        )}
-                        {Boolean(intakeLocks[activeLine as FreightLineType]) &&
-                            !isPendingBillOfLadingTab(activeLine) && (
-                            <span className="shrink-0 text-[11px] font-bold text-red-700 bg-red-50 border border-red-300 rounded px-2 py-1">
-                                پذیرش اعلام‌بار جدید این تب بسته است
-                            </span>
-                        )}
+                        <div className="flex items-center gap-2 justify-end min-w-[13.5rem] shrink-0 min-h-[32px]">
+                            {isTransportUser &&
+                                !isCarrierUser &&
+                                !isPendingBillOfLadingTab(activeLine) &&
+                                onToggleIntakeLock && (
+                                <button
+                                    type="button"
+                                    disabled={intakeLockBusy}
+                                    onClick={() => onToggleIntakeLock(activeLine as FreightLineType)}
+                                    className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-black border transition-colors whitespace-nowrap disabled:opacity-50 ${
+                                        Boolean(intakeLocks[activeLine as FreightLineType])
+                                            ? 'bg-red-50 text-red-700 border-red-500 hover:bg-red-100'
+                                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                                    }`}
+                                    title={
+                                        Boolean(intakeLocks[activeLine as FreightLineType])
+                                            ? 'پذیرش اعلام‌بار جدید برای این تب بسته است'
+                                            : 'پذیرش اعلام‌بار جدید برای این تب باز است'
+                                    }
+                                >
+                                    {Boolean(intakeLocks[activeLine as FreightLineType])
+                                        ? 'باز کردن اعلام‌بار جدید'
+                                        : 'قفل اعلام‌بار جدید'}
+                                </button>
+                            )}
+                            {Boolean(intakeLocks[activeLine as FreightLineType]) &&
+                                !isPendingBillOfLadingTab(activeLine) && (
+                                <span className="shrink-0 text-[11px] font-bold text-red-700 bg-red-50 border border-red-300 rounded px-2 py-1">
+                                    پذیرش اعلام‌بار جدید این تب بسته است
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ردیف ۳ — زیر‌تب مختص خط (جای خالی ثابت تا بقیه نپرد) */}
+                    <div className="min-h-[44px] flex flex-col justify-center gap-2">
                         {isPendingBillOfLadingTab(activeLine) && (
-                            <div className="flex flex-col gap-2 w-full mt-2">
+                            <div className="flex flex-col gap-2 w-full">
                                 <div className="flex items-center p-1 bg-amber-50 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0 border border-amber-200">
                                     {Object.values(FreightLineType).map((line) => (
                                         <button
@@ -2272,8 +2363,146 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 )}
                             </div>
                         )}
+                        {activeLine === FreightLineType.Dairy &&
+                            !isPendingBillOfLadingTab(activeLine) &&
+                            dairyWeekDayTabs.length > 0 && (
+                            <div className="flex items-center p-1 bg-sky-50 rounded-lg flex-nowrap gap-1 overflow-x-auto min-w-0 border border-sky-200 w-full">
+                                {dairyWeekDayTabs.map((day) => (
+                                    <button
+                                        key={`dairy-week-${day}`}
+                                        type="button"
+                                        aria-pressed={dairyWeekDayTab === day}
+                                        onClick={() => setDairyWeekDayTab(day)}
+                                        className={`shrink-0 px-2.5 py-1 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${
+                                            dairyWeekDayTab === day
+                                                ? 'bg-sky-700 text-white shadow'
+                                                : 'text-sky-900 hover:bg-sky-100'
+                                        }`}
+                                        title={`اعلام بار روز ${dairyWeekDayTabLabel(day)}`}
+                                    >
+                                        {dairyWeekDayTabLabel(day)} (
+                                        {(dairyWeekDayCounts[day] || 0).toLocaleString('fa-IR')})
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
+
+                    {/* ردیف ۴ — ابزار مشترک جدول (همیشه در یک جای ثابت) */}
+                    <div className="flex flex-wrap items-center gap-2 min-h-[36px]">
+                        <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین">
+                            <BookOpenIcon className="w-5 h-5 text-slate-600"/>
+                        </button>
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={() => downloadExcel('compact')} 
+                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                title="خروجی اکسل - حالت فشرده"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                اکسل فشرده
+                            </button>
+                            <button 
+                                onClick={() => downloadExcel('full')} 
+                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
+                                title="خروجی اکسل - حالت کامل"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                اکسل کامل
+                            </button>
+                        </div>
+                        <div className="relative min-w-[5.5rem] min-h-[28px]" ref={columnPickerRef}>
+                            {isDairyCompactTable && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setColumnPickerOpen((o) => !o)}
+                                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border ${
+                                            hiddenColumnHeaders.size > 0
+                                                ? 'border-sky-400 bg-sky-50 text-sky-800'
+                                                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                        title="نمایش یا پنهان کردن ستون‌ها — تنظیمات در مرورگر ذخیره می‌شود"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        ستون‌ها
+                                        {hiddenColumnHeaders.size > 0 && (
+                                            <span className="bg-sky-600 text-white rounded-full px-1 min-w-[1rem] text-[10px]">
+                                                {hiddenColumnHeaders.size.toLocaleString('fa-IR')}
+                                            </span>
+                                        )}
+                                    </button>
+                                    {columnPickerOpen && (
+                                        <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-2 text-right">
+                                            <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
+                                                <span className="text-xs font-semibold text-slate-700">ستون‌های جدول</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={resetColumnVisibility}
+                                                    className="text-[10px] text-sky-700 hover:underline"
+                                                >
+                                                    همه
+                                                </button>
+                                            </div>
+                                            {allColumns.map((col) => (
+                                                <label
+                                                    key={col.header}
+                                                    className="flex items-center gap-2 py-1 px-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!hiddenColumnHeaders.has(col.header)}
+                                                        onChange={() => toggleColumnVisibility(col.header)}
+                                                    />
+                                                    <span>{col.header}</span>
+                                                </label>
+                                            ))}
+                                            <p className="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                                                انتخاب شما برای این تب و حالت نمایش ذخیره می‌شود.
+                                            </p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsSummaryOpen(true)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                            title="خلاصه تعداد اعلام‌بار / تخصیص بر اساس ردیف‌های قابل‌مشاهده"
+                        >
+                            خلاصه
+                        </button>
+                        <div className="flex items-center p-1 bg-slate-200 rounded-lg">
+                            <button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button>
+                            <button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button>
+                        </div>
+                    </div>
+
+                    {/* ردیف ۵ — اکشن‌های مختص تب / انتخاب‌ها */}
+                    <div className="flex flex-wrap items-center gap-2 min-h-[36px]">
+                        {canPerformActions && !isCarrierUser && activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine) && (
+                            <button
+                                type="button"
+                                onClick={() => setDairyArrangementOpen(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs hover:bg-indigo-700 transition-colors shrink-0"
+                                title="چیدمان مسیر پاستوریزه — نمای تمام‌صفحه برای گروه‌بندی مقاصد و مسیرها"
+                            >
+                                چیدمان مسیر
+                                {dairyArrangementAnnouncements.length > 0 && (
+                                    <span className="bg-white/20 rounded px-1.5">
+                                        {dairyArrangementAnnouncements.length.toLocaleString('fa-IR')}
+                                    </span>
+                                )}
+                            </button>
+                        )}
                         {canPerformActions && !isCarrierUser && selectedIds.size > 0 && (
                             <button
                                 onClick={() => void handleBulkForward()}
@@ -2301,13 +2530,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 اتمام ({selectedIds.size})
                             </button>
                         )}
-                        {canPerformActions && filteredAnnouncements.length > 0 && canFinalizeCurrentTab && (
+                        {canPerformActions && dairyDayFilteredAnnouncements.length > 0 && canFinalizeCurrentTab && (
                             <button 
                                 onClick={() => {
                                     let idsToFinalize: string[];
                                     
                                     if (selectedIds.size > 0) {
-                                        const filteredIds = filteredAnnouncements
+                                        const filteredIds = dairyDayFilteredAnnouncements
                                             .filter(a => selectedIds.has(a.id))
                                             .map(a => a.id);
                                         
@@ -2318,7 +2547,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         
                                         idsToFinalize = filteredIds;
                                     } else {
-                                        idsToFinalize = filteredAnnouncements.map(a => a.id);
+                                        idsToFinalize = dairyDayFilteredAnnouncements.map(a => a.id);
                                     }
                                     
                                     handleFinalizeClick(idsToFinalize);
@@ -2327,156 +2556,69 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 title={
                                     selectedIds.size > 0 
                                         ? `اتمام تخصیص برای ${selectedIds.size} اعلام بار انتخاب شده`
-                                        : `اتمام تخصیص برای تمام ${filteredAnnouncements.length} اعلام بار این تب`
+                                        : `اتمام تخصیص برای تمام ${dairyDayFilteredAnnouncements.length} اعلام بار این تب`
                                 }
                             >
                                 <CheckCircleIcon className="w-4 h-4" />
-                                اتمام تخصیص {selectedIds.size > 0 ? `(${selectedIds.size} انتخاب شده)` : `(${filteredAnnouncements.length})`}
+                                اتمام تخصیص {selectedIds.size > 0 ? `(${selectedIds.size} انتخاب شده)` : `(${dairyDayFilteredAnnouncements.length})`}
                             </button>
                         )}
-                        <div className="flex items-center p-1 bg-slate-200 rounded-lg">
-                            <button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button>
-                            <button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => setIsSummaryOpen(true)}
-                            className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                            title="خلاصه تعداد اعلام‌بار / تخصیص بر اساس ردیف‌های قابل‌مشاهده"
-                        >
-                            خلاصه
-                        </button>
-                        {isDairyCompactTable && (
-                            <div className="relative" ref={columnPickerRef}>
-                                <button
-                                    type="button"
-                                    onClick={() => setColumnPickerOpen((o) => !o)}
-                                    className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border ${
-                                        hiddenColumnHeaders.size > 0
-                                            ? 'border-sky-400 bg-sky-50 text-sky-800'
-                                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                                    }`}
-                                    title="نمایش یا پنهان کردن ستون‌ها — تنظیمات در مرورگر ذخیره می‌شود"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    ستون‌ها
-                                    {hiddenColumnHeaders.size > 0 && (
-                                        <span className="bg-sky-600 text-white rounded-full px-1 min-w-[1rem] text-[10px]">
-                                            {hiddenColumnHeaders.size.toLocaleString('fa-IR')}
-                                        </span>
-                                    )}
-                                </button>
-                                {columnPickerOpen && (
-                                    <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-2 text-right">
-                                        <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
-                                            <span className="text-xs font-semibold text-slate-700">ستون‌های جدول</span>
-                                            <button
-                                                type="button"
-                                                onClick={resetColumnVisibility}
-                                                className="text-[10px] text-sky-700 hover:underline"
-                                            >
-                                                همه
-                                            </button>
-                                        </div>
-                                        {allColumns.map((col) => (
-                                            <label
-                                                key={col.header}
-                                                className="flex items-center gap-2 py-1 px-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700"
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={!hiddenColumnHeaders.has(col.header)}
-                                                    onChange={() => toggleColumnVisibility(col.header)}
-                                                />
-                                                <span>{col.header}</span>
-                                            </label>
-                                        ))}
-                                        <p className="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
-                                            انتخاب شما برای این تب و حالت نمایش ذخیره می‌شود.
-                                        </p>
-                                    </div>
+                        {isTransportUser && activeLine === FreightLineType.IceCream && !isPendingBillOfLadingTab(activeLine) && (
+                            <>
+                                <div className="flex items-center p-0.5 bg-slate-100 rounded-lg text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIceCreamViewMode('my')}
+                                        className={`px-2.5 py-1 rounded-md ${iceCreamViewMode === 'my' ? 'bg-white shadow font-semibold' : 'text-slate-600'}`}
+                                    >
+                                        نمای من
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIceCreamViewMode('planning')}
+                                        className={`px-2.5 py-1 rounded-md ${iceCreamViewMode === 'planning' ? 'bg-white shadow font-semibold' : 'text-slate-600'}`}
+                                    >
+                                        نمای برنامه‌ریزی
+                                    </button>
+                                </div>
+                                {iceCreamViewMode === 'my' && (
+                                    <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={hideReferred}
+                                            onChange={(e) => setHideReferred(e.target.checked)}
+                                        />
+                                        پنهان کردن ارجاع‌شده‌ها
+                                    </label>
                                 )}
-                            </div>
+                            </>
                         )}
-                        <div className="flex items-center gap-1">
-                            <button 
-                                onClick={() => downloadExcel('compact')} 
-                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
-                                title="خروجی اکسل - حالت فشرده"
+                    </div>
+
+                    {/* ردیف ۶ — جستجو و فیلتر (ثابت) */}
+                    <div className="flex flex-wrap items-center gap-2 px-1">
+                        <input
+                            type="search"
+                            value={quickSearch}
+                            onChange={(e) => setQuickSearch(e.target.value)}
+                            placeholder="جستجوی سریع در همه ستون‌ها..."
+                            className="border border-slate-300 rounded-md px-3 py-1.5 text-sm min-w-[220px] flex-1 max-w-md"
+                        />
+                        {activeFilterCount > 0 && (
+                            <button
+                                type="button"
+                                onClick={clearAllFilters}
+                                className="px-3 py-1.5 text-xs rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                اکسل فشرده
+                                پاک کردن فیلترها ({activeFilterCount.toLocaleString('fa-IR')})
                             </button>
-                            <button 
-                                onClick={() => downloadExcel('full')} 
-                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 transition-colors"
-                                title="خروجی اکسل - حالت کامل"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                اکسل کامل
-                            </button>
-                        </div>
-                        <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
+                        )}
+                        <span className="text-xs text-slate-500 mr-auto">
+                            {displayAnnouncements.length.toLocaleString('fa-IR')} / {dairyDayFilteredAnnouncements.length.toLocaleString('fa-IR')} ردیف
+                        </span>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
-                    <input
-                        type="search"
-                        value={quickSearch}
-                        onChange={(e) => setQuickSearch(e.target.value)}
-                        placeholder="جستجوی سریع در همه ستون‌ها..."
-                        className="border border-slate-300 rounded-md px-3 py-1.5 text-sm min-w-[220px] flex-1 max-w-md"
-                    />
-                    {activeFilterCount > 0 && (
-                        <button
-                            type="button"
-                            onClick={clearAllFilters}
-                            className="px-3 py-1.5 text-xs rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-                        >
-                            پاک کردن فیلترها ({activeFilterCount.toLocaleString('fa-IR')})
-                        </button>
-                    )}
-                    {isTransportUser && activeLine === FreightLineType.IceCream && !isPendingBillOfLadingTab(activeLine) && (
-                        <>
-                            <div className="flex items-center p-0.5 bg-slate-100 rounded-lg text-xs">
-                                <button
-                                    type="button"
-                                    onClick={() => setIceCreamViewMode('my')}
-                                    className={`px-2.5 py-1 rounded-md ${iceCreamViewMode === 'my' ? 'bg-white shadow font-semibold' : 'text-slate-600'}`}
-                                >
-                                    نمای من
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setIceCreamViewMode('planning')}
-                                    className={`px-2.5 py-1 rounded-md ${iceCreamViewMode === 'planning' ? 'bg-white shadow font-semibold' : 'text-slate-600'}`}
-                                >
-                                    نمای برنامه‌ریزی
-                                </button>
-                            </div>
-                            {iceCreamViewMode === 'my' && (
-                                <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={hideReferred}
-                                        onChange={(e) => setHideReferred(e.target.checked)}
-                                    />
-                                    پنهان کردن ارجاع‌شده‌ها
-                                </label>
-                            )}
-                        </>
-                    )}
-                    <span className="text-xs text-slate-500 mr-auto">
-                        {displayAnnouncements.length.toLocaleString('fa-IR')} / {filteredAnnouncements.length.toLocaleString('fa-IR')} ردیف
-                    </span>
-                </div>
+
                 <div
                     className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${isDairyCompactTable ? ' transport-live-dairy-compact-wrap' : ''}`}
                     data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
@@ -2593,10 +2735,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         }
                                         className="p-8 text-center text-slate-500"
                                     >
-                                        {filteredAnnouncements.length === 0
+                                        {dairyDayFilteredAnnouncements.length === 0
                                             ? isPendingBillOfLadingTab(activeLine)
                                                 ? `موردی برای «${pendingSubLine}» در انتظار بارنامه نیست.`
-                                                : 'موردی یافت نشد.'
+                                                : activeLine === FreightLineType.Dairy && dairyWeekDayTab
+                                                  ? `موردی برای اعلام بار «${dairyWeekDayTabLabel(dairyWeekDayTab)}» نیست.`
+                                                  : 'موردی یافت نشد.'
                                             : 'هیچ ردیفی با فیلترهای فعلی مطابقت ندارد.'}
                                     </td>
                                 </tr>
@@ -2936,9 +3080,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
              )}
              {dairyArrangementOpen && (
              <DairyRouteArrangementDialog
+                key={`dairy-arr-${dairyWeekDayTab || 'none'}`}
                 isOpen={dairyArrangementOpen}
                 onClose={() => setDairyArrangementOpen(false)}
                 announcements={dairyArrangementAnnouncements}
+                arrangementWeekDay={dairyWeekDayTab}
                 userId={currentUser.id}
                 userName={
                     currentUser.username && currentUser.name
@@ -3041,7 +3187,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 .transport-live-dairy-compact .col-vehicle-type { width: 4%; white-space: nowrap; vertical-align: middle; }
                 .transport-live-dairy-compact .col-origin { width: 5.5%; vertical-align: middle; }
                 .transport-live-dairy-compact .col-tonnage { width: 4.5%; white-space: nowrap; vertical-align: middle; }
-                .transport-live-dairy-compact .col-destinations { width: 22%; }
+                .transport-live-dairy-compact .col-destinations { width: 26%; min-width: 12rem; }
                 .transport-live-dairy-compact .col-cargo-value { width: 5%; white-space: nowrap; vertical-align: middle; }
                 .transport-live-dairy-compact .col-platform-time { width: 7%; white-space: nowrap; vertical-align: middle; }
                 .transport-live-dairy-compact .col-created-at { width: 6%; white-space: nowrap; vertical-align: middle; }

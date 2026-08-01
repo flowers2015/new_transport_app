@@ -97,9 +97,14 @@ const COLUMN_STORAGE_PREFIX = 'transport-live-columns-v1';
 export function transportLiveColumnStorageKey(
     userId: string,
     activeLine: TransportLiveTab,
-    viewMode: 'compact' | 'full'
+    viewMode: 'compact' | 'full',
+    pendingSubLine?: FreightLineType
 ): string {
-    return `${COLUMN_STORAGE_PREFIX}:${userId}:${activeLine}:${viewMode}`;
+    const linePart =
+        activeLine === '__pending_bill_of_lading__' && pendingSubLine
+            ? `${activeLine}:${pendingSubLine}`
+            : String(activeLine);
+    return `${COLUMN_STORAGE_PREFIX}:${userId}:${linePart}:${viewMode}`;
 }
 
 export function loadTransportLiveHiddenColumns(key: string): Set<string> {

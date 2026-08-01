@@ -1,8 +1,43 @@
 const pool = require('../db');
 const realtimeService = require('../services/realtimeService');
 
-const STATE_ID = 'Dairy';
+const DEFAULT_STATE_ID = 'Dairy';
 const LOCK_TTL_MS = 90 * 1000;
+
+const WEEK_DAYS = [
+  'شنبه',
+  'یکشنبه',
+  'دوشنبه',
+  'سه‌شنبه',
+  'چهارشنبه',
+  'پنج‌شنبه',
+  'جمعه',
+];
+
+function normalizeWeekDay(value) {
+  let raw = String(value ?? '')
+    .trim()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک');
+  if (raw === 'سه شنبه') raw = 'سه‌شنبه';
+  if (raw === 'پنج شنبه') raw = 'پنج‌شنبه';
+  if (raw === '__unassigned__') return '__unassigned__';
+  return WEEK_DAYS.includes(raw) ? raw : '';
+}
+
+/** state id جدا برای هر شیت اعلام‌بار روز */
+function resolveStateId(req) {
+  const raw =
+    req.query?.weekDay ||
+    req.query?.week_day ||
+    req.body?.weekDay ||
+    req.body?.week_day ||
+    '';
+  const day = normalizeWeekDay(raw);
+  if (day === '__unassigned__') return 'Dairy:__unassigned__';
+  if (day) return `Dairy:${day}`;
+  return DEFAULT_STATE_ID;
+}
 
 function resolveUser(req) {
   const userId = req.user?.userId || req.user?.id || null;
@@ -25,19 +60,19 @@ function pruneExpiredLocks(locks) {
   return next;
 }
 
-async function readState(client) {
+async function readState(client, stateId = DEFAULT_STATE_ID) {
   const db = client || pool;
   const { rows } = await db.query(
     `SELECT id, routes_json, locks_json, version, updated_by_user_id, updated_by_user_name, updated_at
      FROM dairy_arrangement_state WHERE id = $1`,
-    [STATE_ID]
+    [stateId]
   );
   if (!rows[0]) {
     await db.query(
       `INSERT INTO dairy_arrangement_state (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
-      [STATE_ID]
+      [stateId]
     );
-    return readState(db);
+    return readState(db, stateId);
   }
   const row = rows[0];
   const locks = pruneExpiredLocks(row.locks_json || {});
@@ -61,14 +96,15 @@ function broadcast(updateType, data, excludeUserId) {
 }
 
 /**
- * GET /freight-announcements/dairy-arrangement
+ * GET /freight-announcements/dairy-arrangement?weekDay=شنبه
  */
 async function getDairyArrangement(req, res) {
   try {
-    const state = await readState();
+    const stateId = resolveStateId(req);
+    const state = await readState(pool, stateId);
     await pool.query(
       `UPDATE dairy_arrangement_state SET locks_json = $1::jsonb WHERE id = $2`,
-      [JSON.stringify(state.locks), STATE_ID]
+      [JSON.stringify(state.locks), stateId]
     );
     return res.json(state);
   } catch (error) {
@@ -79,12 +115,13 @@ async function getDairyArrangement(req, res) {
 
 /**
  * PUT /freight-announcements/dairy-arrangement
- * body: { routes, baseVersion?, actorLabel? }
+ * body: { routes, baseVersion?, weekDay? }
  */
 async function saveDairyArrangement(req, res) {
   const { userId, userName } = resolveUser(req);
   const routes = req.body?.routes;
   const baseVersion = req.body?.baseVersion != null ? Number(req.body.baseVersion) : null;
+  const stateId = resolveStateId(req);
 
   if (!Array.isArray(routes)) {
     return res.status(400).json({ message: 'routes باید آرایه باشد.' });
@@ -93,9 +130,14 @@ async function saveDairyArrangement(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // ensure row exists
+    await client.query(
+      `INSERT INTO dairy_arrangement_state (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+      [stateId]
+    );
     const { rows } = await client.query(
       `SELECT version, locks_json FROM dairy_arrangement_state WHERE id = $1 FOR UPDATE`,
-      [STATE_ID]
+      [stateId]
     );
     if (!rows[0]) {
       await client.query('ROLLBACK');
@@ -105,7 +147,7 @@ async function saveDairyArrangement(req, res) {
     const currentVersion = Number(rows[0].version) || 1;
     if (baseVersion != null && baseVersion !== currentVersion) {
       await client.query('ROLLBACK');
-      const latest = await readState();
+      const latest = await readState(pool, stateId);
       return res.status(409).json({
         message: 'چیدمان توسط کاربر دیگری به‌روز شده است.',
         conflict: true,
@@ -124,12 +166,12 @@ async function saveDairyArrangement(req, res) {
            updated_by_user_name = $5,
            updated_at = NOW()
        WHERE id = $6`,
-      [JSON.stringify(routes), JSON.stringify(locks), nextVersion, userId, userName, STATE_ID]
+      [JSON.stringify(routes), JSON.stringify(locks), nextVersion, userId, userName, stateId]
     );
     await client.query('COMMIT');
 
     const state = {
-      id: STATE_ID,
+      id: stateId,
       routes,
       locks,
       version: nextVersion,
@@ -141,6 +183,7 @@ async function saveDairyArrangement(req, res) {
     broadcast(
       'dairy_arrangement_layout',
       {
+        id: stateId,
         version: state.version,
         routes: state.routes,
         locks: state.locks,
@@ -163,12 +206,13 @@ async function saveDairyArrangement(req, res) {
 
 /**
  * POST /freight-announcements/dairy-arrangement/locks
- * body: { routeId, action: 'acquire' | 'release' | 'heartbeat' }
+ * body: { routeId, action: 'acquire' | 'release' | 'heartbeat', weekDay? }
  */
 async function updateDairyArrangementLock(req, res) {
   const { userId, userName } = resolveUser(req);
   const routeId = String(req.body?.routeId || '').trim();
   const action = String(req.body?.action || '').trim();
+  const stateId = resolveStateId(req);
 
   if (!routeId || !['acquire', 'release', 'heartbeat'].includes(action)) {
     return res.status(400).json({ message: 'routeId و action معتبر الزامی است.' });
@@ -180,9 +224,13 @@ async function updateDairyArrangementLock(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO dairy_arrangement_state (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+      [stateId]
+    );
     const { rows } = await client.query(
       `SELECT locks_json, version FROM dairy_arrangement_state WHERE id = $1 FOR UPDATE`,
-      [STATE_ID]
+      [stateId]
     );
     if (!rows[0]) {
       await client.query('ROLLBACK');
@@ -228,13 +276,14 @@ async function updateDairyArrangementLock(req, res) {
 
     await client.query(
       `UPDATE dairy_arrangement_state SET locks_json = $1::jsonb, updated_at = NOW() WHERE id = $2`,
-      [JSON.stringify(locks), STATE_ID]
+      [JSON.stringify(locks), stateId]
     );
     await client.query('COMMIT');
 
     broadcast(
       'dairy_arrangement_locks',
       {
+        id: stateId,
         locks,
         routeId,
         action,

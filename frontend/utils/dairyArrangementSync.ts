@@ -27,14 +27,24 @@ function authHeaders(): HeadersInit {
     };
 }
 
-export async function fetchDairyArrangementState(): Promise<DairyArrangementState | null> {
+function weekDayQuery(weekDay?: string | null): string {
+    const day = String(weekDay || '').trim();
+    return day ? `?weekDay=${encodeURIComponent(day)}` : '';
+}
+
+export async function fetchDairyArrangementState(
+    weekDay?: string | null
+): Promise<DairyArrangementState | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
-        const res = await fetch(getApiUrl('freight-announcements/dairy-arrangement'), {
-            headers: authHeaders(),
-            signal: controller.signal,
-        });
+        const res = await fetch(
+            getApiUrl(`freight-announcements/dairy-arrangement${weekDayQuery(weekDay)}`),
+            {
+                headers: authHeaders(),
+                signal: controller.signal,
+            }
+        );
         if (!res.ok) return null;
         return (await res.json()) as DairyArrangementState;
     } catch (err) {
@@ -47,7 +57,8 @@ export async function fetchDairyArrangementState(): Promise<DairyArrangementStat
 
 export async function saveDairyArrangementState(
     routes: DairyArrangementRoute[],
-    baseVersion: number | null
+    baseVersion: number | null,
+    weekDay?: string | null
 ): Promise<
     | { ok: true; state: DairyArrangementState }
     | { ok: false; conflict: true; state: DairyArrangementState; message?: string }
@@ -56,7 +67,7 @@ export async function saveDairyArrangementState(
     const res = await fetch(getApiUrl('freight-announcements/dairy-arrangement'), {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify({ routes, baseVersion }),
+        body: JSON.stringify({ routes, baseVersion, weekDay: weekDay || undefined }),
     });
     const body = await res.json().catch(() => ({}));
     if (res.status === 409) {
@@ -75,12 +86,13 @@ export async function saveDairyArrangementState(
 
 export async function updateDairyArrangementLockApi(
     routeId: string,
-    action: 'acquire' | 'release' | 'heartbeat'
+    action: 'acquire' | 'release' | 'heartbeat',
+    weekDay?: string | null
 ): Promise<{ ok: boolean; locks?: Record<string, ArrangementLock>; lock?: ArrangementLock | null; message?: string }> {
     const res = await fetch(getApiUrl('freight-announcements/dairy-arrangement/locks'), {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ routeId, action }),
+        body: JSON.stringify({ routeId, action, weekDay: weekDay || undefined }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {

@@ -720,6 +720,10 @@ export interface FreightAnnouncement {
     priority?: 'low' | 'normal' | 'high';
     products?: string[];
     platformArrivalTime?: string;
+    /**
+     * اعلام بار روز (شیت عملیاتی پاستوریزه: شنبه…جمعه) — جدا از تاریخ بارگیری
+     */
+    announcementWeekDay?: string;
     /** ترتیب نمایشی بستنی — سنجاق و جابجایی دستی */
     displayPinned?: boolean;
     displaySortOrder?: number | null;

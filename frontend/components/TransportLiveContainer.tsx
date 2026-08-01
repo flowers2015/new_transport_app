@@ -269,6 +269,7 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                         priority: a.priority,
                         products: a.products || [],
                         platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+                        announcementWeekDay: a.announcement_week_day || a.announcementWeekDay || undefined,
                         deliveryDate: a.delivery_date || a.deliveryDate,
                         destinations: Array.isArray(a.destinations) ? a.destinations.map((d: any) => ({
                             id: d.id,
@@ -718,6 +719,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                     priority: data.priority || null,
                                     products: Array.isArray(data.products) ? data.products : (data.products ? [data.products] : []),
                                     platformArrivalTime: data.platformArrivalTime || data.platform_arrival_time || null,
+                                    announcementWeekDay:
+                                        data.announcementWeekDay || data.announcement_week_day || undefined,
                                     deliveryDate: data.deliveryDate || data.delivery_date || null,
                                     destinations: Array.isArray(data.destinations) ? data.destinations.map((d: any) => ({
                                         id: d.id,

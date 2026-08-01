@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDestinationRepCompactSegment, formatTonnageKgFromRaw, formatTotalTonnageFromDestinations } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDestinationRepCompactSegment, formatTonnageKgFromRaw, formatTotalTonnageFromDestinations, ANNOUNCEMENT_WEEK_DAYS, normalizeAnnouncementWeekDay, normalizeTonnageKg, sanitizeNumericInputString } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -225,8 +225,8 @@ const prepareDestinationForSubmit = (
     const rawTonnage = d.tonnage;
     let tonnage: number | undefined;
     if (rawTonnage !== null && rawTonnage !== undefined && rawTonnage !== '') {
-        const n = Number(rawTonnage);
-        tonnage = Number.isFinite(n) ? Math.round(n * 100) / 100 : undefined;
+        const n = normalizeTonnageKg(rawTonnage);
+        tonnage = n > 0 ? n : undefined;
     }
     return {
         ...d,
@@ -2773,7 +2773,14 @@ const AnnouncementPanel: React.FC<{
 }> = ({ isOpen, data, lisCodeOnlyMode = false, onClose, onSaveNew, onSaveEdit, routeOptions, onRouteQueryChange, currentUser, allowedLineTypes = [], initialLineType }) => {
     const isEditMode = !!(data && data.id);
     
-    const initialCommonState = { loadingDate: '', deliveryDate: '', cargoValue: 0, vehicleType: '', notes: '' };
+    const initialCommonState = {
+        loadingDate: '',
+        deliveryDate: '',
+        cargoValue: 0,
+        vehicleType: '',
+        notes: '',
+        announcementWeekDay: '' as string,
+    };
     const initialIceCreamState = { originCity: '', brand: 'میهن', cartonCount: '', palletCount: '', priority: 'normal' as 'low'|'normal'|'high', products: [] as string[] };
     const initialMultiDestState = { platformArrivalTime: '' };
     const initialDestinations = [createInitialDairyDestination()];
@@ -2888,7 +2895,11 @@ const AnnouncementPanel: React.FC<{
         // Don't reset loadingDate to preserve the selected date
         // Don't reset platformArrivalTime to preserve the selected time
         setLockedDestinationIds(new Set());
-        setCommonState(prev => ({ ...initialCommonState, loadingDate: prev.loadingDate }));
+        setCommonState(prev => ({
+            ...initialCommonState,
+            loadingDate: prev.loadingDate,
+            announcementWeekDay: prev.announcementWeekDay,
+        }));
         setIceCreamState(initialIceCreamState);
         setIceCreamRouteType('single');
         setIceCreamLegs([createInitialIceCreamLeg(), createInitialIceCreamLeg()]);
@@ -2994,6 +3005,9 @@ const AnnouncementPanel: React.FC<{
                     cargoValue: Number(data.cargoValue) || 0,
                     vehicleType: data.vehicleType,
                     notes: data.notes || '',
+                    announcementWeekDay: normalizeAnnouncementWeekDay(
+                        (data as any).announcementWeekDay || (data as any).announcement_week_day
+                    ),
                 });
                 
                 // بارگذاری داده‌های دو جا بارگیری از data (اگر وجود داشته باشد)
@@ -3082,7 +3096,7 @@ const AnnouncementPanel: React.FC<{
                                   tonnage:
                                       d.tonnage === null || d.tonnage === undefined || d.tonnage === ''
                                           ? d.tonnage
-                                          : Math.round(Number(d.tonnage) * 100) / 100,
+                                          : normalizeTonnageKg(d.tonnage),
                                   representativeType: d.representativeType || ('agent' as const),
                                   brandType: d.brandType || (data.lineType === FreightLineType.Dairy ? 'single' : undefined),
                                   brand: d.brand || (data.lineType === FreightLineType.Dairy && index === 0 ? data.brand || 'میهن' : d.brand),
@@ -3358,6 +3372,10 @@ const AnnouncementPanel: React.FC<{
             return;
         }
         if (!commonState.loadingDate) { alert('تاریخ بارگیری الزامی است.'); return; }
+        if (lineType === FreightLineType.Dairy && !normalizeAnnouncementWeekDay(commonState.announcementWeekDay)) {
+            alert('انتخاب «اعلام بار روز» برای پاستوریزه الزامی است.');
+            return;
+        }
 
         // Use the string directly instead of converting to Date
         // This will avoid the conversion issues
@@ -3589,7 +3607,11 @@ const AnnouncementPanel: React.FC<{
                 notes: commonState.notes, 
                 originCity: finalOriginCity,
                 brand: finalBrand as any,
-                platformArrivalTime: multiDestState.platformArrivalTime, 
+                platformArrivalTime: multiDestState.platformArrivalTime,
+                announcementWeekDay:
+                    lineType === FreightLineType.Dairy
+                        ? normalizeAnnouncementWeekDay(commonState.announcementWeekDay)
+                        : undefined,
                 destinations: destinationsForSubmit as Destination[],
                 loadingType: loadingLocationState.loadingType,
                 originCity1: resolvedOriginCity1,
@@ -3756,6 +3778,33 @@ const AnnouncementPanel: React.FC<{
                     <fieldset className="p-3 border rounded-lg bg-white">
                         <legend className="font-semibold px-1 text-sm">اطلاعات مشترک</legend>
                             <div className="grid grid-cols-3 gap-3">
+                            {lineType === FreightLineType.Dairy && (
+                                <RequiredField
+                                    label="اعلام بار روز*"
+                                    hint="شیت عملیاتی — مثلاً یکشنبه از ظهر یکشنبه تا ظهر دوشنبه"
+                                >
+                                    <select
+                                        value={commonState.announcementWeekDay || ''}
+                                        disabled={lockSharedAnnouncementFields}
+                                        onChange={(e) => {
+                                            if (lockSharedAnnouncementFields) return;
+                                            setCommonState((s) => ({
+                                                ...s,
+                                                announcementWeekDay: e.target.value,
+                                            }));
+                                        }}
+                                        className={`input-style mt-1${lockSharedAnnouncementFields ? ` ${lockedFieldClass}` : ''}`}
+                                        required
+                                    >
+                                        <option value="">انتخاب کنید</option>
+                                        {ANNOUNCEMENT_WEEK_DAYS.map((day) => (
+                                            <option key={day} value={day}>
+                                                {day}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </RequiredField>
+                            )}
                             <RequiredField label="تاریخ بارگیری (جلالی)*" hint="فرمت: 1404/09/18">
                                 <input 
                                     type="text" 
@@ -4588,30 +4637,25 @@ const AnnouncementPanel: React.FC<{
                                             )}
                                             <RequiredField label="تناژ (کیلوگرم)*">
                                                 <input
-                                                    type="number"
+                                                    type="text"
+                                                    inputMode="numeric"
                                                     value={
                                                         dest.tonnage === null || dest.tonnage === undefined || dest.tonnage === ''
                                                             ? ''
-                                                            : String(Math.round(Number(dest.tonnage) * 100) / 100)
+                                                            : String(normalizeTonnageKg(dest.tonnage) || '')
                                                     }
                                                     onChange={e => {
-                                                        const cleaned = e.target.value.replace(/[^\d.]/g, '');
-                                                        if (cleaned === '' || cleaned === '.') {
+                                                        const cleaned = sanitizeNumericInputString(e.target.value);
+                                                        if (cleaned === '') {
                                                             handleDestinationChange(dest.id!, 'tonnage', '' as any);
                                                             return;
                                                         }
-                                                        const n = Number(cleaned);
-                                                        if (!Number.isFinite(n)) return;
-                                                        handleDestinationChange(
-                                                            dest.id!,
-                                                            'tonnage',
-                                                            Math.round(n * 100) / 100
-                                                        );
+                                                        const n = normalizeTonnageKg(cleaned);
+                                                        if (n <= 0) return;
+                                                        handleDestinationChange(dest.id!, 'tonnage', n);
                                                     }}
                                                     className={`input-style w-full${destLocked ? ` ${lockedFieldClass}` : ''}`}
                                                     required
-                                                    min="0"
-                                                    step="1"
                                                     disabled={destLocked}
                                                     readOnly={destLocked}
                                                 />

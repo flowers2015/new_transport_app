@@ -207,6 +207,7 @@ async function runStartupMigrations() {
     { name: 'destination_original_creator', fn: require('./migrations/add_destination_original_creator') },
     { name: 'destination_cargo_value', fn: require('./migrations/add_destination_cargo_value') },
     { name: 'destination_block_fields', fn: require('./migrations/add_destination_block_fields') },
+    { name: 'announcement_week_day', fn: require('./migrations/add_announcement_week_day') },
     { name: 'dairy_arrangement_state', fn: require('./migrations/create_dairy_arrangement_state') },
     { name: 'freight_intake_locks', fn: require('./migrations/create_freight_intake_locks') },
   ];

@@ -5,7 +5,7 @@ import { getApiUrl } from '../utils/apiConfig';
 import { parseFreightApiErrorMessage, isFreightIntakeLockedError, fetchFreightIntakeLocks, lineTypeToIntakeLockKey, FREIGHT_INTAKE_LOCK_MESSAGE } from '../utils/freightIntakeLock';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
-import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem } from '../utils/freightDisplay';
+import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem, normalizeTonnageKg } from '../utils/freightDisplay';
 
 const PLANNING_STATUS_MAP: Record<string, FreightAnnouncementStatus> = {
     Draft: FreightAnnouncementStatus.Draft,
@@ -66,6 +66,7 @@ function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
         priority: a.priority,
         products: a.products || [],
         platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
+        announcementWeekDay: a.announcement_week_day || a.announcementWeekDay || undefined,
         creator_full_name: a.creator_full_name || a.creatorFullName,
         creator_username: a.creator_username || a.creatorUsername,
         creator_user_id: a.creator_user_id || a.creatorUserId,
@@ -77,7 +78,7 @@ function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
                   tonnage:
                       d.tonnage === null || d.tonnage === undefined || d.tonnage === ''
                           ? d.tonnage
-                          : Math.round(Number(d.tonnage) * 100) / 100,
+                          : normalizeTonnageKg(d.tonnage),
                   unloadTime: d.unload_time || d.unloadTime,
                   freightCost: d.freight_cost ?? d.freightCost,
                   cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
@@ -427,6 +428,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     priority: updated.priority,
                     products: updated.products,
                     platformArrivalTime: (updated as any).platformArrivalTime,
+                    announcementWeekDay: (updated as any).announcementWeekDay,
                     destinations: updated.destinations,
                     isDraft: updated.status === FreightAnnouncementStatus.Draft,
                 } as any;
@@ -475,6 +477,7 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     priority: updated.priority,
                     products: updated.products,
                     platformArrivalTime: (updated as any).platformArrivalTime,
+                    announcementWeekDay: (updated as any).announcementWeekDay,
                     status: updated.status,
                     destinations: updated.destinations,
                     lisCodeOnly: !!(updated as any).lisCodeOnly,

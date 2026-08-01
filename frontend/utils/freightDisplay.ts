@@ -257,6 +257,50 @@ export function localizeExcelValue(value: unknown): string | number {
     return raw;
 }
 
+/** روزهای اعلام‌بار پاستوریزه (شیت عملیاتی؛ جدا از تاریخ بارگیری) */
+export const ANNOUNCEMENT_WEEK_DAYS = [
+    'شنبه',
+    'یکشنبه',
+    'دوشنبه',
+    'سه‌شنبه',
+    'چهارشنبه',
+    'پنج‌شنبه',
+    'جمعه',
+] as const;
+
+export type AnnouncementWeekDay = (typeof ANNOUNCEMENT_WEEK_DAYS)[number];
+
+/** زیرتب برای اعلام‌بارهای قدیمی بدون «اعلام بار روز» */
+export const ANNOUNCEMENT_WEEK_DAY_UNASSIGNED = '__unassigned__' as const;
+export type DairyWeekDayTab = AnnouncementWeekDay | typeof ANNOUNCEMENT_WEEK_DAY_UNASSIGNED;
+
+export function normalizeAnnouncementWeekDay(value: unknown): AnnouncementWeekDay | '' {
+    let raw = String(value ?? '')
+        .trim()
+        .replace(/ي/g, 'ی')
+        .replace(/ك/g, 'ک');
+    if (raw === 'سه شنبه') raw = 'سه‌شنبه';
+    if (raw === 'پنج شنبه') raw = 'پنج‌شنبه';
+    return (ANNOUNCEMENT_WEEK_DAYS as readonly string[]).includes(raw)
+        ? (raw as AnnouncementWeekDay)
+        : '';
+}
+
+export function getAnnouncementWeekDay(ann: { announcementWeekDay?: string | null } | null | undefined): AnnouncementWeekDay | '' {
+    return normalizeAnnouncementWeekDay(ann?.announcementWeekDay);
+}
+
+export function dairyWeekDayTabLabel(tab: DairyWeekDayTab): string {
+    return tab === ANNOUNCEMENT_WEEK_DAY_UNASSIGNED ? 'بدون روز' : tab;
+}
+
+export function dairyArrangementStateId(weekDay: DairyWeekDayTab | '' | null | undefined): string {
+    const day = normalizeAnnouncementWeekDay(weekDay);
+    if (day) return `Dairy:${day}`;
+    if (weekDay === ANNOUNCEMENT_WEEK_DAY_UNASSIGNED) return 'Dairy:__unassigned__';
+    return 'Dairy';
+}
+
 /** تب مجزا برای تخصیص شخصی بدون شماره بارنامه */
 export const PENDING_BILL_OF_LADING_TAB = '__pending_bill_of_lading__' as const;
 export type TransportLiveTab = FreightLineType | typeof PENDING_BILL_OF_LADING_TAB;
@@ -1261,25 +1305,43 @@ export function formatPersianGroupedNumber(value: number, maxDecimals = 0): stri
     return toPersianDigits(combined);
 }
 
-/** نرمال‌سازی تناژ کیلوگرم — مطابق DECIMAL(10,2)، بدون خطای float برای اعداد صحیح */
+/** نرمال‌سازی تناژ کیلوگرم — بدون خطای float (۱۸۰۰۰→۱۷۹۹۸) */
 export function normalizeTonnageKg(value: unknown): number {
     if (value === null || value === undefined || value === '') return 0;
-    if (typeof value === 'string') {
-        const s = value.trim().replace(/٬/g, '').replace(/,/g, '');
-        if (/^\d+$/.test(s)) return parseInt(s, 10);
-        const decMatch = /^(\d+)\.(\d{1,2})$/.exec(s);
-        if (decMatch) {
-            const whole = parseInt(decMatch[1], 10);
-            const frac = parseInt(decMatch[2].padEnd(2, '0').slice(0, 2), 10);
-            return whole + frac / 100;
-        }
+    if (typeof value === 'number') {
+        if (!Number.isFinite(value) || value <= 0) return 0;
+        const nearest = Math.round(value);
+        if (Math.abs(value - nearest) < 1e-6) return nearest;
+        return Math.round(value * 100) / 100;
     }
-    const n = parseNumericField(value);
+    let s = String(value).trim();
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    persianDigits.forEach((p, i) => {
+        s = s.split(p).join(String(i));
+    });
+    arabicDigits.forEach((p, i) => {
+        s = s.split(p).join(String(i));
+    });
+    s = s.replace(/٬/g, '').replace(/،/g, '').replace(/\s/g, '');
+    if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {
+        s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+        s = s.replace(/,/g, '');
+    }
+    s = s.replace(/٫/g, '.');
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    const decMatch = /^(\d+)\.(\d{1,2})$/.exec(s);
+    if (decMatch) {
+        const whole = parseInt(decMatch[1], 10);
+        const frac = parseInt(decMatch[2].padEnd(2, '0').slice(0, 2), 10);
+        return whole + frac / 100;
+    }
+    const n = parseFloat(s);
     if (!Number.isFinite(n) || n <= 0) return 0;
-    const rounded = Math.round(n * 100 + Number.EPSILON) / 100;
-    const asInt = Math.round(rounded);
-    if (Math.abs(rounded - asInt) < 1e-9) return asInt;
-    return rounded;
+    const nearest = Math.round(n);
+    if (Math.abs(n - nearest) < 1e-6) return nearest;
+    return Math.round(n * 100) / 100;
 }
 
 /** نمایش تناژ از مقدار خام API/فرم — همان عدد ثبت‌شده */

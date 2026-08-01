@@ -94,6 +94,43 @@ function isDairyLineTypeValue(lineType) {
   return lineType === 'Dairy' || lineType === 'پاستوریزه';
 }
 
+/** شیت عملیاتی پاستوریزه — جدا از تاریخ بارگیری */
+const ANNOUNCEMENT_WEEK_DAYS = [
+  'شنبه',
+  'یکشنبه',
+  'دوشنبه',
+  'سه‌شنبه',
+  'چهارشنبه',
+  'پنج‌شنبه',
+  'جمعه',
+];
+
+function normalizeAnnouncementWeekDay(value) {
+  let raw = String(value ?? '')
+    .trim()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک');
+  if (raw === 'سه شنبه') raw = 'سه‌شنبه';
+  if (raw === 'پنج شنبه') raw = 'پنج‌شنبه';
+  return ANNOUNCEMENT_WEEK_DAYS.includes(raw) ? raw : '';
+}
+
+function resolveAnnouncementWeekDayForLine(lineType, value, { required = false } = {}) {
+  const normalized = normalizeAnnouncementWeekDay(value);
+  if (isDairyLineTypeValue(lineType)) {
+    if (!normalized) {
+      if (required) {
+        const err = new Error('برای پاستوریزه انتخاب «اعلام بار روز» الزامی است.');
+        err.statusCode = 400;
+        throw err;
+      }
+      return null;
+    }
+    return normalized;
+  }
+  return normalized || null;
+}
+
 /** وضعیت‌هایی که کارمند/کارشناس هنوز ویرایش کامل دارند */
 function isPlannerFullEditStatus(status) {
   return [
@@ -592,11 +629,50 @@ async function syncAnnouncementAggregatesFromDestinations(client, announcementId
   }
 }
 
-/** تناژ را به ۲ رقم اعشار پایدار می‌کند تا float مثل 2999.98 نشود */
+/** تناژ کیلوگرم — ذخیره/پارس بدون خطای float (مثل 18000→17998) */
 function normalizeTonnageKg(value) {
   if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) return null;
+    // عدد صحیح یا بسیار نزدیک به صحیح
+    const nearest = Math.round(value);
+    if (Math.abs(value - nearest) < 1e-6) return nearest;
+    // دو رقم اعشار از طریق سنت صحیح
+    const cents = Math.round(value * 100);
+    return cents / 100;
+  }
+  let s = String(value).trim()
+    .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/٬/g, '')
+    .replace(/،/g, '')
+    .replace(/\s/g, '');
+  // هزارگان اروپایی: 18.000 → 18000
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else {
+    s = s.replace(/,/g, '');
+  }
+  s = s.replace(/٫/g, '.');
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  const m = /^(\d+)\.(\d+)$/.exec(s);
+  if (m) {
+    const whole = parseInt(m[1], 10);
+    const fracRaw = m[2];
+    if (fracRaw.length <= 2) {
+      const frac = parseInt(fracRaw.padEnd(2, '0').slice(0, 2), 10);
+      return whole + frac / 100;
+    }
+    // بیش از ۲ رقم → رُند به ۲ رقم از روی سنت
+    const cents = Math.round(parseFloat(`${m[1]}.${fracRaw}`) * 100);
+    if (!Number.isFinite(cents)) return null;
+    return cents / 100;
+  }
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return null;
+  const nearest = Math.round(n);
+  if (Math.abs(n - nearest) < 1e-6) return nearest;
   return Math.round(n * 100) / 100;
 }
 
@@ -1525,6 +1601,7 @@ async function updateFreightAnnouncement(req, res) {
       priority,
       products,
       platformArrivalTime,
+      announcementWeekDay,
       // فیلدهای تخصیص و مالی (برای ویرایش توسط admin)
       totalFreightCost,
       billOfLadingNumber,
@@ -1537,6 +1614,11 @@ async function updateFreightAnnouncement(req, res) {
       vehiclePlate,
       assignmentType,
     } = req.body || {};
+
+    const weekDayInput =
+      announcementWeekDay !== undefined && announcementWeekDay !== null && announcementWeekDay !== ''
+        ? announcementWeekDay
+        : req.body?.announcement_week_day;
 
     // ستون ترتیب مقصد را قبل از تراکنش بساز (تا با ROLLBACK حذف نشود)
     await ensureDestinationSortOrderColumn();
@@ -1768,6 +1850,20 @@ async function updateFreightAnnouncement(req, res) {
       
       // فیلدهای پاستوریزه و لبنیات
       if (platformArrivalTime !== undefined) { fields.push(`platform_arrival_time = $${idx++}`); values.push(platformArrivalTime); }
+      if (announcementWeekDay !== undefined || req.body?.announcement_week_day !== undefined) {
+        try {
+          const weekDayValue = resolveAnnouncementWeekDayForLine(
+            lineType || oldRecord.line_type,
+            weekDayInput,
+            { required: isDairyLineTypeValue(lineType || oldRecord.line_type) }
+          );
+          fields.push(`announcement_week_day = $${idx++}`);
+          values.push(weekDayValue);
+        } catch (weekErr) {
+          await client.query('ROLLBACK');
+          return res.status(weekErr.statusCode || 400).json({ message: weekErr.message });
+        }
+      }
       
       // فیلدهای تخصیص و مالی (برای ویرایش توسط admin)
       if (totalFreightCost !== undefined) { fields.push(`total_freight_cost = $${idx++}`); values.push(totalFreightCost); }
@@ -1851,7 +1947,7 @@ async function updateFreightAnnouncement(req, res) {
       const fieldsToTrack = [
         'loading_date', 'line_type', 'cargo_value', 'vehicle_type', 'notes', 'status',
         'origin_city', 'brand', 'representative_type', 'representative_name', 
-        'carton_count', 'pallet_count', 'loading_type', 'priority', 'products', 'platform_arrival_time', 'total_freight_cost',
+        'carton_count', 'pallet_count', 'loading_type', 'priority', 'products', 'platform_arrival_time', 'announcement_week_day', 'total_freight_cost',
         'bill_of_lading_number', 'assigned_driver_id', 'assigned_driver_name', 
         'assigned_driver_employee_id', 'assigned_vehicle_id', 'assigned_vehicle_model',
         'assigned_vehicle_brand', 'vehicle_plate', 'assignment_type'
@@ -2076,6 +2172,8 @@ async function updateFreightAnnouncement(req, res) {
             notes: updated.notes,
             platformArrivalTime: updated.platform_arrival_time,
             platform_arrival_time: updated.platform_arrival_time,
+            announcementWeekDay: updated.announcement_week_day,
+            announcement_week_day: updated.announcement_week_day,
             originCity: updated.origin_city,
             origin_city: updated.origin_city,
             brand: updated.brand,
@@ -2134,12 +2232,27 @@ async function createFreightAnnouncement(req, res) {
       priority,
       products,
       platformArrivalTime,
+      announcementWeekDay,
       destinations = [],
       isDraft,
     } = req.body || {};
 
     if (!loadingDate || !lineType || !vehicleType) {
       return res.status(400).json({ message: 'loadingDate, lineType and vehicleType are required.' });
+    }
+
+    const weekDayInput =
+      announcementWeekDay !== undefined && announcementWeekDay !== null && announcementWeekDay !== ''
+        ? announcementWeekDay
+        : req.body?.announcement_week_day;
+
+    let resolvedWeekDay = null;
+    try {
+      resolvedWeekDay = resolveAnnouncementWeekDayForLine(lineType, weekDayInput, {
+        required: isDairyLineTypeValue(lineType),
+      });
+    } catch (weekErr) {
+      return res.status(weekErr.statusCode || 400).json({ message: weekErr.message });
     }
 
     let normalizedLoadingDate;
@@ -2201,15 +2314,15 @@ async function createFreightAnnouncement(req, res) {
       INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
         vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
-        total_freight_cost, platform_arrival_time, carton_count, pallet_count, loading_type,
+        total_freight_cost, platform_arrival_time, announcement_week_day, carton_count, pallet_count, loading_type,
         created_at, updated_at,
         origin_city, brand, representative_type, representative_name, priority, products, notes,
         created_by_user_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, NULL, NULL,
-        $10, $11, $12, $13, $14, NOW(), NOW(),
-        $15, $16, $17, $18, $19, $20, $21, $22
+        $10, $11, $12, $13, $14, $15, NOW(), NOW(),
+        $16, $17, $18, $19, $20, $21, $22, $23
       )
     `;
 
@@ -2235,6 +2348,7 @@ async function createFreightAnnouncement(req, res) {
       createAssignmentType, // کارشناس فروش: personal/company؛ بقیه: رفتار قبلی (representativeType)
       totalFreightCost || null,
       platformArrivalTime || null,
+      resolvedWeekDay,
       cartonCount || null,
       palletCount || null,
       loadingType || null,
@@ -2306,6 +2420,7 @@ async function createFreightAnnouncement(req, res) {
     created.priority = priority || null;
     created.products = Array.isArray(products) ? products : [];
     created.platform_arrival_time = platformArrivalTime || null;
+    created.announcement_week_day = resolvedWeekDay;
     created.notes = notes || null;
 
     // ثبت رویداد CREATED در تاریخچه - فرمت: "username - name - role"
@@ -2412,6 +2527,8 @@ async function createFreightAnnouncement(req, res) {
         priority: priority,
         products: products,
         platformArrivalTime: platformArrivalTime,
+        announcementWeekDay: resolvedWeekDay,
+        announcement_week_day: resolvedWeekDay,
         cargoValue: cargoValue || 0,
         loadingDate: normalizedLoadingDate,
         deliveryDate: deliveryDate || null,
@@ -3135,15 +3252,15 @@ async function returnDestinationToCreator(req, res) {
       `INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
         vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
-        total_freight_cost, platform_arrival_time, carton_count, pallet_count, loading_type,
+        total_freight_cost, platform_arrival_time, announcement_week_day, carton_count, pallet_count, loading_type,
         created_at, updated_at,
         origin_city, brand, representative_type, representative_name, priority, products, notes,
         created_by_user_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, NULL, NULL, NULL,
-        NULL, $9, $10, $11, $12, NOW(), NOW(),
-        $13, $14, $15, $16, $17, $18, $19, $20
+        NULL, $9, $10, $11, $12, $13, NOW(), NOW(),
+        $14, $15, $16, $17, $18, $19, $20, $21
       )`,
       [
         newId,
@@ -3155,6 +3272,7 @@ async function returnDestinationToCreator(req, res) {
         Number(returnDest.cargo_value) || ensuredReturnCargo || 0,
         sourceAnn.vehicle_type || 'ده چرخ',
         returnDest.platform_arrival_time || sourceAnn.platform_arrival_time || null,
+        sourceAnn.announcement_week_day || null,
         sourceAnn.carton_count || null,
         sourceAnn.pallet_count || null,
         sourceAnn.loading_type || null,
@@ -11081,15 +11199,15 @@ async function splitDestinationToNewAnnouncement(req, res) {
       `INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
         vehicle_type, assignment_type, assigned_driver_id, assigned_vehicle_id,
-        total_freight_cost, platform_arrival_time, carton_count, pallet_count, loading_type,
+        total_freight_cost, platform_arrival_time, announcement_week_day, carton_count, pallet_count, loading_type,
         created_at, updated_at,
         origin_city, brand, representative_type, representative_name, priority, products, notes,
         created_by_user_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, NULL, NULL,
-        $10, $11, $12, $13, $14, NOW(), NOW(),
-        $15, $16, $17, $18, $19, $20, $21, $22
+        $10, $11, $12, $13, $14, $15, NOW(), NOW(),
+        $16, $17, $18, $19, $20, $21, $22, $23
       )`,
       [
         newId,
@@ -11103,6 +11221,7 @@ async function splitDestinationToNewAnnouncement(req, res) {
         assignmentType,
         null, // کرایه کل میزبان را کپی نکن
         newPlatformArrival,
+        sourceAnn.announcement_week_day || null,
         sourceAnn.carton_count || null,
         sourceAnn.pallet_count || null,
         sourceAnn.loading_type || null,

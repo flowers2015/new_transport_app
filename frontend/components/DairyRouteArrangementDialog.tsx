@@ -61,6 +61,7 @@ import {
     saveDairyArrangementState,
     updateDairyArrangementLockApi,
 } from '../utils/dairyArrangementSync';
+import { dairyArrangementStateId } from '../utils/freightDisplay';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import DairyRouteSuggestionDialog from './DairyRouteSuggestionDialog';
 import {
@@ -78,6 +79,8 @@ type Props = {
     userId: string;
     /** نام نمایشی برای قفل ردیف */
     userName?: string;
+    /** شیت اعلام‌بار روز — چیدمان جدا per روز */
+    arrangementWeekDay?: string | null;
     onTransferDestination: (
         sourceAnnouncementId: string,
         destinationId: string,
@@ -639,6 +642,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     announcements,
     userId,
     userName,
+    arrangementWeekDay = null,
     onTransferDestination,
     onSplitDestinationToNew,
     onChangeVehicleType,
@@ -646,6 +650,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     onReturnToCreator,
     onReturnDestinationToCreator,
 }) => {
+    const arrangementWeekDayRef = useRef(arrangementWeekDay);
+    arrangementWeekDayRef.current = arrangementWeekDay;
     const [routes, setRoutes] = useState<DairyArrangementRoute[]>([]);
     const routesRef = useRef<DairyArrangementRoute[]>([]);
     const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
@@ -726,7 +732,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             setSharedVersion(null);
             setLocks({});
             if (heldLockRouteIdRef.current) {
-                void updateDairyArrangementLockApi(heldLockRouteIdRef.current, 'release');
+                void updateDairyArrangementLockApi(heldLockRouteIdRef.current, 'release', arrangementWeekDayRef.current);
                 heldLockRouteIdRef.current = null;
             }
             return;
@@ -744,7 +750,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
         (async () => {
             try {
-                const shared = await fetchDairyArrangementState();
+                const shared = await fetchDairyArrangementState(arrangementWeekDayRef.current);
                 if (cancelled || !wasOpenRef.current) return;
 
         const persistedMeta = loadPersistedArrangementWithMeta(userId, ann);
@@ -787,7 +793,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
 
                 if (initial.length > 0) {
                     savePersistedArrangement(userId, initial);
-                    const saved = await saveDairyArrangementState(initial, shared?.version ?? null);
+                    const saved = await saveDairyArrangementState(initial, shared?.version ?? null, arrangementWeekDayRef.current);
                     if (cancelled || !wasOpenRef.current) return;
                     if (saved.ok === true) {
                         setSharedVersion(saved.state.version);
@@ -914,7 +920,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             beginRemoteApply();
             try {
                 onRefresh?.();
-                const shared = await fetchDairyArrangementState();
+                const shared = await fetchDairyArrangementState(arrangementWeekDayRef.current);
                 if (shared) {
                     applyRemoteArrangementState(
                         shared,
@@ -945,14 +951,14 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             saveInFlightRef.current = true;
             try {
                 let baseVersion = sharedVersionRef.current;
-                let result = await saveDairyArrangementState(nextRoutes, baseVersion);
+                let result = await saveDairyArrangementState(nextRoutes, baseVersion, arrangementWeekDayRef.current);
                 // تعارض نسخه: یک‌بار با نسخهٔ تازه دوباره ذخیره کن و چیدمان محلی را نگه دار
                 // (اعمال چیدمان قدیمی سرور باعث برگرداندن کارت به ردیف قبلی می‌شد)
                 if (result.ok === false && result.conflict === true && result.state) {
                     baseVersion = Number(result.state.version);
                     sharedVersionRef.current = baseVersion;
                     setSharedVersion(baseVersion);
-                    result = await saveDairyArrangementState(nextRoutes, baseVersion);
+                    result = await saveDairyArrangementState(nextRoutes, baseVersion, arrangementWeekDayRef.current);
                 }
                 if (result.ok === true) {
                     sharedVersionRef.current = result.state.version;
@@ -1006,6 +1012,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             if (message.type === 'general_update') {
                 if (message.updateType === 'dairy_arrangement_layout') {
                     const data = message.data || {};
+                    const expectedId = dairyArrangementStateId(arrangementWeekDayRef.current);
+                    if (data.id && String(data.id) !== expectedId) return;
                     if (data.updatedByUserId && String(data.updatedByUserId) === String(userId)) return;
                     if (dropInProgressRef.current || isApplying || applyingRemoteRef.current) {
                         suppressSaveUntilRef.current = Date.now() + 500;
@@ -1027,6 +1035,8 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
                 }
                 if (message.updateType === 'dairy_arrangement_locks') {
                     const data = message.data || {};
+                    const expectedId = dairyArrangementStateId(arrangementWeekDayRef.current);
+                    if (data.id && String(data.id) !== expectedId) return;
                     if (data.actorUserId && String(data.actorUserId) === String(userId)) return;
                     if (data.locks) setLocks(data.locks);
                     return;
@@ -1073,7 +1083,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         const timer = setInterval(() => {
             void (async () => {
                 if (dropInProgressRef.current || isApplying || applyingRemoteRef.current) return;
-                const shared = await fetchDairyArrangementState();
+                const shared = await fetchDairyArrangementState(arrangementWeekDayRef.current);
                 if (!shared) return;
                 if (
                     sharedVersionRef.current != null &&
@@ -1105,7 +1115,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
             alert(`این ردیف توسط «${existing.userName}» در حال ویرایش است.`);
             return false;
         }
-        const result = await updateDairyArrangementLockApi(routeId, 'acquire');
+        const result = await updateDairyArrangementLockApi(routeId, 'acquire', arrangementWeekDayRef.current);
         if (!result.ok) {
             if (result.locks) setLocks(result.locks);
             alert(result.message || 'قفل ردیف ممکن نیست.');
@@ -1119,7 +1129,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
     const releaseRouteLock = useCallback(async (routeId?: string | null) => {
         const id = routeId || heldLockRouteIdRef.current;
         if (!id) return;
-        const result = await updateDairyArrangementLockApi(id, 'release');
+        const result = await updateDairyArrangementLockApi(id, 'release', arrangementWeekDayRef.current);
         if (result.locks) setLocks(result.locks);
         if (heldLockRouteIdRef.current === id) heldLockRouteIdRef.current = null;
     }, []);
@@ -1142,7 +1152,7 @@ const DairyRouteArrangementDialog: React.FC<Props> = ({
         const timer = setInterval(() => {
             const id = heldLockRouteIdRef.current;
             if (!id) return;
-            void updateDairyArrangementLockApi(id, 'heartbeat').then((r) => {
+            void updateDairyArrangementLockApi(id, 'heartbeat', arrangementWeekDayRef.current).then((r) => {
                 if (r.locks) setLocks(r.locks);
                 if (!r.ok) heldLockRouteIdRef.current = null;
             });
