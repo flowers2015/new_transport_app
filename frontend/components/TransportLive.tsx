@@ -89,6 +89,12 @@ import {
     type SortDirection,
 } from '../utils/transportLiveFilters';
 import { getApiUrl } from '../utils/apiConfig';
+import {
+    buildExcelFileName,
+    DAIRY_FULL_EXCEL_STYLE,
+    downloadStyledExcel,
+    type ExcelCellValue,
+} from '../utils/excelExport';
 import { TruckIcon } from './icons/CarIcon';
 import { SwitchHorizontalIcon } from './icons/SwitchHorizontalIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -655,7 +661,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     ), []);
 
     const renderVehicleTypeCell = useCallback((ann: FreightAnnouncement) => {
-        if (isCarrierUser) {
+        // فقط ترابری مجاز به تغییر نوع خودرو است؛ بیننده و نقش‌های مشاهده‌ای فقط متن می‌بینند
+        if (isCarrierUser || !canPerformActions || currentUser.role === UserRole.Viewer) {
             return <span>{ann.vehicleType || '-'}</span>;
         }
         if (!isDairyOrAmbientLine(ann)) {
@@ -698,7 +705,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 {ann.vehicleType || '-'}
             </span>
         );
-    }, [isCarrierUser, isDairyOrAmbientLine, editingVehicleTypeId, onChangeVehicleType, activeLine]);
+    }, [isCarrierUser, canPerformActions, currentUser.role, isDairyOrAmbientLine, editingVehicleTypeId, onChangeVehicleType, activeLine]);
     
     // Memoize columnsConfig to prevent unnecessary recalculations
     const columnsConfig = useCallback((viewMode: 'compact' | 'full') => {
@@ -1600,8 +1607,104 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         [buildVisibleColumns]
     );
 
+    /** اکسل کامل پاستوریزه — فقط ستون‌های توافق‌شده + استایل نمونه */
+    const buildDairyFullExcelPayload = () => {
+        const headers: string[] = [];
+        for (let i = 1; i <= 4; i++) {
+            headers.push(
+                `مقصد ${i} - نماینده`,
+                `مقصد ${i} - شهر`,
+                `مقصد ${i} - تناژ`,
+                `مقصد ${i} - نوع برند`,
+                `مقصد ${i} - کد LIS`
+            );
+        }
+        headers.push(
+            'پلاک خودرو',
+            'کد خودرو',
+            'شماره بارنامه',
+            'تماس راننده',
+            'نام راننده',
+            'نوع خودرو',
+            'کل تناژ (کیلوگرم)',
+            'تاریخ اعلام بار',
+            'ارزش بار (ریال)',
+            'کرایه کل (ریال)',
+            'کرایه تعرفه (ریال)',
+            'توضیحات',
+            'کارمند اعلام‌کننده'
+        );
+
+        const dash = (v: string) => {
+            const t = (v || '').trim();
+            return !t || t === '—' || t === '-' ? '' : t;
+        };
+
+        const rows: ExcelCellValue[][] = excelExportAnnouncements.map((ann) => {
+            const row: ExcelCellValue[] = [];
+            for (let i = 0; i < 4; i++) {
+                const dest = ann.destinations?.[i];
+                if (dest) {
+                    const tonnage =
+                        dest.tonnage != null && dest.tonnage !== ''
+                            ? Number(dest.tonnage)
+                            : '';
+                    row.push(
+                        resolveDestinationRepTypeLabel(ann, dest),
+                        dest.city || '',
+                        Number.isFinite(tonnage as number) ? (tonnage as number) : '',
+                        formatDestinationBrandLabel(dest),
+                        dest.lisCode || ''
+                    );
+                } else {
+                    row.push('', '', '', '', '');
+                }
+            }
+            const tonnageSum = sumDestinationTonnageKg(ann.destinations);
+            row.push(
+                dash(getAssignedVehiclePlate(ann, vehicles, props.personalVehicles)),
+                dash(getAssignedVehicleCode(ann, vehicles)),
+                dash((ann.billOfLadingNumber || '').toString()),
+                dash(getAssignedDriverContact(ann, drivers, props.personalDrivers)),
+                dash(getAssignedDriverDisplayName(ann, drivers, props.personalDrivers)),
+                dash((ann.vehicleType || '').toString()),
+                tonnageSum > 0 ? tonnageSum : '',
+                formatJalaliDateTime(ann.createdAt) || '',
+                Number(ann.cargoValue) > 0 ? Number(ann.cargoValue) : '',
+                Number(ann.totalFreightCost) > 0 ? Number(ann.totalFreightCost) : '',
+                Number(ann.tariffFreightCost) > 0 ? Number(ann.tariffFreightCost) : '',
+                ann.notes || '',
+                getAnnouncementCreatorLabel(ann) || ''
+            );
+            return row;
+        });
+
+        return { headers, rows };
+    };
+
     // Function to generate Excel export - دقیقاً مطابق جدول frontend با فرمت
     const generateExcelExport = (mode: 'compact' | 'full', XLSX: typeof import('xlsx')) => {
+        // پاستوریزه کامل: همان ستون‌های ثابت خروجی استایل‌دار
+        if (
+            mode === 'full' &&
+            activeLine === FreightLineType.Dairy &&
+            !isPendingBillOfLadingTab(activeLine)
+        ) {
+            const { headers: dairyHeaders, rows: dairyRows } = buildDairyFullExcelPayload();
+            const headers = ['ردیف', ...dairyHeaders];
+            const wsData: any[][] = [
+                headers,
+                ...dairyRows.map((row, idx) => [idx + 1, ...row]),
+            ];
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            ws['!cols'] = headers.map((header) => ({
+                wch: Math.min(Math.max(header.length + 2, 10), 50),
+            }));
+            XLSX.utils.book_append_sheet(wb, ws, 'اعلام بار');
+            return wb;
+        }
+
         const applyDairyHiddenColumns =
             mode === 'compact' &&
             ((activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine)) ||
@@ -1910,8 +2013,30 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 ? 'پاستوریزه'
                 : 'لبنیات-فروتلند';
         const modeName = mode === 'compact' ? 'فشرده' : 'کامل';
-        const dateStr = new Date().toISOString().split('T')[0];
-        const fileName = `پیگیری_اعلام_بار_${lineTypeName}_${modeName}_${dateStr}.xlsx`;
+        const fileName = buildExcelFileName('پیگیری_اعلام_بار', lineTypeName, modeName);
+
+        // پاستوریزه + اکسل کامل: ستون‌های ثابت و استایل نمونه
+        if (
+            mode === 'full' &&
+            activeLine === FreightLineType.Dairy &&
+            !isPendingBillOfLadingTab(activeLine)
+        ) {
+            try {
+                const { headers, rows } = buildDairyFullExcelPayload();
+                await downloadStyledExcel({
+                    sheetName: 'اعلام بار',
+                    fileName,
+                    headers,
+                    rows,
+                    includeRowNumber: true,
+                    ...DAIRY_FULL_EXCEL_STYLE,
+                    numericColumnMatchers: ['تناژ', 'کرایه', 'ارزش', 'ریال', 'کیلو'],
+                });
+                return;
+            } catch (error) {
+                console.error('Error creating Dairy full Excel:', error);
+            }
+        }
         
         // Excel فقط هنگام دانلود لود می‌شود (نه در ورود اول صفحه)
         try {

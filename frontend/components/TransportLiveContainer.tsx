@@ -1832,6 +1832,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onChangeVehicleType = async (announcementId: string, vehicleType: string): Promise<boolean> => {
+        if (currentUser?.role === UserRole.Viewer) {
+            alert('نقش بیننده مجاز به تغییر نوع خودرو نیست.');
+            return false;
+        }
         console.log('🔄 [TransportLive] Change Vehicle Type Request:', {
             announcementId,
             vehicleType,

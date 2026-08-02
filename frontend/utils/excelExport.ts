@@ -4,8 +4,12 @@ import { localizeExcelValue } from './freightDisplay';
 const HEADER_FILL = 'FF4472C4';
 const HEADER_FONT = 'FFFFFFFF';
 const ZEBRA_FILL = 'FFF2F2F2';
+/** ردیف زوج نمونه اکسل (آبی خیلی روشن) */
+const ZEBRA_FILL_LIGHT_BLUE = 'FFDDEBF7';
 
 export type ExcelCellValue = string | number | boolean | null | undefined;
+
+export type ExcelBorderWeight = 'thin' | 'medium';
 
 export interface StyledExcelExportOptions {
     sheetName: string;
@@ -15,6 +19,11 @@ export interface StyledExcelExportOptions {
     numericColumnMatchers?: string[];
     /** ستون ردیف در ابتدای جدول — پیش‌فرض true */
     includeRowNumber?: boolean;
+    /** رنگ پس‌زمینه ردیف‌های فرد (۱، ۳، …) — پیش‌فرض خاکستری روشن */
+    zebraFill?: string;
+    /** ضخامت کادر — برای خروجی‌های رسمی medium */
+    borderStyle?: ExcelBorderWeight;
+    borderColor?: string;
 }
 
 const ROW_HEADER = 'ردیف';
@@ -24,7 +33,7 @@ function isNumericHeader(header: string, matchers: string[]): boolean {
 }
 
 function normalizeCellValue(value: ExcelCellValue, asNumeric: boolean): string | number {
-    if (value === null || value === undefined || value === '') return asNumeric ? 0 : '';
+    if (value === null || value === undefined || value === '') return '';
     if (typeof value === 'number' && !Number.isNaN(value)) return value;
     const str = String(value).replace(/[^\d.-]/g, '');
     if (asNumeric && str !== '' && !Number.isNaN(Number(str))) {
@@ -65,29 +74,44 @@ export interface StyledExcelWorkbookOptions {
     numericColumnMatchers?: string[];
 }
 
+type SheetStyleOpts = {
+    zebraFill?: string;
+    borderStyle?: ExcelBorderWeight;
+    borderColor?: string;
+};
+
+function cellBorder(style: ExcelBorderWeight, color: string) {
+    const edge = { style, color: { argb: color } };
+    return { top: edge, bottom: edge, left: edge, right: edge };
+}
+
 function applyStyledSheet(
     workbook: ExcelJS.Workbook,
     sheetOpts: StyledExcelSheet,
-    matchers: string[]
+    matchers: string[],
+    styleOpts: SheetStyleOpts = {}
 ): void {
     const includeRowNumber = sheetOpts.includeRowNumber !== false;
     const { headers, rows } = withRowNumberColumn(sheetOpts.headers, sheetOpts.rows, includeRowNumber);
+    const zebraFill = styleOpts.zebraFill || ZEBRA_FILL;
+    const borderStyle = styleOpts.borderStyle || 'thin';
+    const borderColor = styleOpts.borderColor || (borderStyle === 'medium' ? 'FF000000' : 'FFE0E0E0');
+    const dataBorder = cellBorder(borderStyle, borderColor);
+    const headerBorder = cellBorder(borderStyle === 'medium' ? 'medium' : 'thin', 'FF000000');
 
     const worksheet = workbook.addWorksheet(sheetOpts.sheetName);
     worksheet.views = [{ rightToLeft: true }];
 
     const headerRow = worksheet.addRow(headers);
-    headerRow.eachCell(cell => {
+    headerRow.height = 22;
+    for (let colNumber = 1; colNumber <= headers.length; colNumber++) {
+        const cell = headerRow.getCell(colNumber);
+        if (headers[colNumber - 1] != null) cell.value = headers[colNumber - 1];
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
         cell.font = { bold: true, color: { argb: HEADER_FONT }, size: 11 };
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-        cell.border = {
-            top: { style: 'thin', color: { argb: 'FF000000' } },
-            bottom: { style: 'thin', color: { argb: 'FF000000' } },
-            left: { style: 'thin', color: { argb: 'FF000000' } },
-            right: { style: 'thin', color: { argb: 'FF000000' } },
-        };
-    });
+        cell.border = headerBorder;
+    }
 
     rows.forEach((row, rowIndex) => {
         const excelRow = worksheet.addRow(
@@ -95,20 +119,16 @@ function applyStyledSheet(
                 normalizeCellValue(cell, isNumericHeader(headers[colIndex] || '', matchers))
             )
         );
-        const fill = rowIndex % 2 === 0 ? ZEBRA_FILL : 'FFFFFFFF';
-        excelRow.eachCell((cell, colNumber) => {
+        const fill = rowIndex % 2 === 0 ? zebraFill : 'FFFFFFFF';
+        for (let colNumber = 1; colNumber <= headers.length; colNumber++) {
+            const cell = excelRow.getCell(colNumber);
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
             cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            cell.border = {
-                top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-            };
+            cell.border = dataBorder;
             if (typeof cell.value === 'number') {
                 cell.numFmt = '#,##0';
             }
-        });
+        }
     });
 
     worksheet.columns.forEach((col, i) => {
@@ -157,7 +177,16 @@ export async function downloadStyledExcel(opts: StyledExcelExportOptions): Promi
         'کیلو',
     ];
 
-    applyStyledSheet(workbook, { sheetName: opts.sheetName, headers, rows, includeRowNumber: false }, matchers);
+    applyStyledSheet(
+        workbook,
+        { sheetName: opts.sheetName, headers, rows, includeRowNumber: false },
+        matchers,
+        {
+            zebraFill: opts.zebraFill,
+            borderStyle: opts.borderStyle,
+            borderColor: opts.borderColor,
+        }
+    );
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
@@ -170,6 +199,13 @@ export async function downloadStyledExcel(opts: StyledExcelExportOptions): Promi
     link.click();
     URL.revokeObjectURL(url);
 }
+
+/** استایل نمونه اکسل پاستوریزه: هدر آبی، ردیف آبی روشن، کادر مشکی پررنگ */
+export const DAIRY_FULL_EXCEL_STYLE = {
+    zebraFill: ZEBRA_FILL_LIGHT_BLUE,
+    borderStyle: 'medium' as ExcelBorderWeight,
+    borderColor: 'FF000000',
+};
 
 export function buildExcelFileName(prefix: string, suffix: string, mode?: string): string {
     const dateStr = new Date().toISOString().split('T')[0];
