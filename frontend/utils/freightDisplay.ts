@@ -71,7 +71,11 @@ export function formatAnnouncementDestinationProductsLabel(
     return ordered.length > 0 ? ordered.join('، ') : '-';
 }
 
-/** ادغام مقاصد پس از refresh — فقط متادیتای فیلدهای خالی از state قبلی پر می‌شود؛ بدون تکرار ردیف */
+/**
+ * ادغام مقاصد پس از refresh.
+ * هویت مقصد فقط با id یکتای دیتابیس است — شهر/تناژ/LIS یکسان ≠ یک مقصد.
+ * fuzzy فقط وقتی id نیست (دادهٔ ناقص/قدیمی) استفاده می‌شود.
+ */
 export function mergeAnnouncementDestinations(
     previous?: Destination[] | null,
     incoming?: Destination[] | null
@@ -79,10 +83,9 @@ export function mergeAnnouncementDestinations(
     if (!incoming?.length) return previous || [];
     if (!previous?.length) return dedupeDestinationsById(incoming);
 
-    const prevById = new Map(previous.filter((d) => d.id).map((d) => [d.id, d]));
-    const prevByKey = new Map<string, Destination>();
+    const prevById = new Map<string, Destination>();
     for (const p of previous) {
-        prevByKey.set(destinationMergeKey(p), p);
+        if (p.id) prevById.set(p.id, p);
     }
     const usedPrevIds = new Set<string>();
 
@@ -103,29 +106,36 @@ export function mergeAnnouncementDestinations(
             brandType: next.brandType || prev.brandType,
             products: nextProducts.length > 0 ? nextProducts : prevProducts,
             deliveryDate: next.deliveryDate || prev.deliveryDate,
+            loadingDate: next.loadingDate || prev.loadingDate,
+            platformArrivalTime: next.platformArrivalTime || prev.platformArrivalTime,
             unloadTime: next.unloadTime || prev.unloadTime,
             tonnage: next.tonnage ?? prev.tonnage,
             freightCost: next.freightCost ?? prev.freightCost,
+            cargoValue: next.cargoValue ?? prev.cargoValue,
+            originalCreatedByUserId: next.originalCreatedByUserId || prev.originalCreatedByUserId,
+            originalCreatorFullName: next.originalCreatorFullName || prev.originalCreatorFullName,
+            originalCreatorUsername: next.originalCreatorUsername || prev.originalCreatorUsername,
         };
     };
 
     const resolvePrevious = (next: Destination): Destination | undefined => {
+        // ۱) فقط تطبیق با id یکتا
         if (next.id) {
             const byId = prevById.get(next.id);
             if (byId?.id && !usedPrevIds.has(byId.id)) {
                 usedPrevIds.add(byId.id);
                 return byId;
             }
+            // id جدید/ناشناخته — مقصد جدا؛ با شهر+تناژ به مقصد دیگر نچسبان
+            return undefined;
         }
-        const byKey = prevByKey.get(destinationMergeKey(next));
-        if (byKey?.id && !usedPrevIds.has(byKey.id)) {
-            usedPrevIds.add(byKey.id);
-            return byKey;
-        }
-        const looseKey = destinationMergeKeyLoose(next);
+
+        // ۲) بدون id: فقط برای دادهٔ ناقص، fuzzy محتاطانه
+        const looseKey = destinationFingerprint(next);
         for (const p of previous) {
             if (!p.id || usedPrevIds.has(p.id)) continue;
-            if (destinationMergeKeyLoose(p) === looseKey) {
+            // مقصدهای دارای id را با fingerprint به nextِ بدون-id فقط وقتی next واقعاً id ندارد وصل کن
+            if (destinationFingerprint(p) === looseKey) {
                 usedPrevIds.add(p.id);
                 return p;
             }
@@ -133,52 +143,18 @@ export function mergeAnnouncementDestinations(
         return undefined;
     };
 
-    return dedupeDestinationsLogical(incoming).map((d) => mergeOne(resolvePrevious(d), d));
+    return dedupeDestinationsById(incoming).map((d) => mergeOne(resolvePrevious(d), d));
 }
 
-function destinationMergeKey(d: Destination): string {
-    // مقصدهای با id جدا باید جدا بمانند (مثلاً دو کرمانشاه با تناژ یکسان)
-    if (d.id) return `id:${d.id}`;
+/** اثر انگشت فقط وقتی id نداریم — هرگز جایگزین id نمی‌شود */
+function destinationFingerprint(d: Destination): string {
     const city = (d.city || '').trim().toLowerCase();
     const tonnage = d.tonnage != null && d.tonnage !== '' ? String(d.tonnage) : '';
     const delivery = String(d.deliveryDate || '').trim();
     const lis = (d.lisCode || '').trim().toLowerCase();
     const rep = (d.representativeName || '').trim().toLowerCase();
-    return `${city}|${tonnage}|${delivery}|${lis}|${rep}`;
-}
-
-function destinationMergeKeyLoose(d: Destination): string {
-    if (d.id) return `id:${d.id}`;
-    const city = (d.city || '').trim().toLowerCase();
-    const tonnage = d.tonnage != null && d.tonnage !== '' ? String(d.tonnage) : '';
-    const lis = (d.lisCode || '').trim().toLowerCase();
-    const rep = (d.representativeName || '').trim().toLowerCase();
-    return `${city}|${tonnage}|${lis}|${rep}`;
-}
-
-/**
- * حذف تکرار واقعی مقصد.
- * فقط وقتی id یکسان است (یا id نیست و مشخصات کاملاً یکی‌ست) ادغام می‌شود —
- * دو مقصد واقعی با شهر/تناژ یکسان (مثل دو کرمانشاه ۶۳۰۰) نباید حذف شوند.
- */
-function dedupeDestinationsLogical(destinations: Destination[]): Destination[] {
-    const bestByKey = new Map<string, Destination>();
-    for (const d of destinations) {
-        const key = destinationMergeKeyLoose(d);
-        const cur = bestByKey.get(key);
-        if (!cur || destinationRichnessScore(d) > destinationRichnessScore(cur)) {
-            bestByKey.set(key, d);
-        }
-    }
-    const addedKeys = new Set<string>();
-    const result: Destination[] = [];
-    for (const d of destinations) {
-        const key = destinationMergeKeyLoose(d);
-        if (addedKeys.has(key)) continue;
-        addedKeys.add(key);
-        result.push(bestByKey.get(key)!);
-    }
-    return result;
+    const platform = String(d.platformArrivalTime || '').trim();
+    return `${city}|${tonnage}|${delivery}|${lis}|${rep}|${platform}`;
 }
 
 function destinationRichnessScore(d: Destination): number {
@@ -188,12 +164,15 @@ function destinationRichnessScore(d: Destination): number {
     if (Array.isArray(d.products) && d.products.length > 0) score += 2;
     if ((d.brand || '').trim()) score += 1;
     if (d.deliveryDate) score += 1;
+    if (d.platformArrivalTime) score += 1;
     return score;
 }
 
+/** حذف تکرار فقط روی id یکسان؛ بدون id با fingerprint کامل */
 function dedupeDestinationsById(destinations: Destination[]): Destination[] {
     const bestById = new Map<string, Destination>();
     const withoutId: Destination[] = [];
+
     for (const d of destinations) {
         if (!d.id) {
             withoutId.push(d);
@@ -204,16 +183,32 @@ function dedupeDestinationsById(destinations: Destination[]): Destination[] {
             bestById.set(d.id, d);
         }
     }
+
     const result: Destination[] = [];
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
     for (const d of destinations) {
         if (!d.id) continue;
-        if (seen.has(d.id)) continue;
-        seen.add(d.id);
+        if (seenIds.has(d.id)) continue;
+        seenIds.add(d.id);
         result.push(bestById.get(d.id)!);
     }
-    if (withoutId.length > 0) {
-        result.push(...dedupeDestinationsLogical(withoutId));
+
+    if (withoutId.length === 0) return result;
+
+    const bestByFp = new Map<string, Destination>();
+    for (const d of withoutId) {
+        const fp = destinationFingerprint(d);
+        const cur = bestByFp.get(fp);
+        if (!cur || destinationRichnessScore(d) > destinationRichnessScore(cur)) {
+            bestByFp.set(fp, d);
+        }
+    }
+    const seenFp = new Set<string>();
+    for (const d of withoutId) {
+        const fp = destinationFingerprint(d);
+        if (seenFp.has(fp)) continue;
+        seenFp.add(fp);
+        result.push(bestByFp.get(fp)!);
     }
     return result;
 }

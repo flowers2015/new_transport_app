@@ -1518,7 +1518,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                 destinationId,
                 result.newAnnouncementId,
                 result.newAnnouncementCode,
-                { vehicleType: result.vehicleType, status: result.status }
+                {
+                    vehicleType: result.vehicleType,
+                    status: result.status,
+                    notes: result.notes,
+                    sourceNotes: result.sourceNotes,
+                }
             );
             announcementsRef.current = nextAnnouncements;
             setAnnouncements(nextAnnouncements);

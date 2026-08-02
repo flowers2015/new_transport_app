@@ -15,6 +15,10 @@ const {
   INTAKE_LOCK_MESSAGE,
 } = require('../services/freightIntakeLockService');
 const { ensureJalaliDateColumns } = require('../services/ensureJalaliDateColumns');
+const {
+  joinAnnouncementNotes,
+  partitionNotesForDestinationSplit,
+} = require('../utils/announcementNotes');
 
 const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
 const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
@@ -1893,14 +1897,33 @@ async function updateFreightAnnouncement(req, res) {
       if (vehiclePlate !== undefined) { fields.push(`vehicle_plate = $${idx++}`); values.push(vehiclePlate || null); }
       if (effectiveAssignmentType !== undefined) { fields.push(`assignment_type = $${idx++}`); values.push(effectiveAssignmentType || null); }
       
-      // یادداشت
+      // یادداشت — در مشارکتی پاستوریزه توضیح جدید را با قبلی با " :- " جمع کن تا پاک نشود
       if (notes !== undefined) {
         const notesColumn = await client.query(
           `SELECT 1 FROM information_schema.columns WHERE table_name = 'freight_announcements' AND column_name = 'notes'`
         );
         if (notesColumn.rowCount > 0) {
+          let notesToSave = notes;
+          const oldNotes = oldRecord.notes;
+          if (
+            isDairyAnnouncement &&
+            oldNotes &&
+            notes != null &&
+            String(notes).trim() !== '' &&
+            String(notes).trim() !== String(oldNotes).trim()
+          ) {
+            const oldSegs = String(oldNotes)
+              .split(/\s*:-\s*/)
+              .map((s) => s.trim())
+              .filter(Boolean);
+            const newLower = String(notes).toLowerCase();
+            const preservesAll = oldSegs.every((seg) => newLower.includes(seg.toLowerCase()));
+            if (!preservesAll) {
+              notesToSave = joinAnnouncementNotes(oldNotes, notes);
+            }
+          }
           fields.push(`notes = $${idx++}`);
-          values.push(notes);
+          values.push(notesToSave);
         }
       }
       
@@ -3265,6 +3288,17 @@ async function returnDestinationToCreator(req, res) {
     const newId = crypto.randomUUID();
     const annCode = `ANN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+    const { rows: remainingForReturnNotes } = await client.query(
+      `SELECT original_created_by_user_id
+       FROM freight_destinations
+       WHERE freight_announcement_id = $1 AND id <> $2`,
+      [effectiveSourceId, destinationId]
+    );
+    const returnNotesPartition = partitionNotesForDestinationSplit(sourceAnn.notes, {
+      leavingCreatorId: returnCreatorId,
+      remainingCreatorIds: remainingForReturnNotes.map((r) => r.original_created_by_user_id),
+    });
+
     await client.query(
       `INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
@@ -3299,10 +3333,17 @@ async function returnDestinationToCreator(req, res) {
         sourceAnn.representative_name || null,
         sourceAnn.priority || null,
         sourceAnn.products || '[]',
-        sourceAnn.notes || null,
+        returnNotesPartition.splitNotes,
         returnCreatorId,
       ]
     );
+
+    if ((sourceAnn.notes || null) !== (returnNotesPartition.hostNotes || null)) {
+      await client.query(
+        `UPDATE freight_announcements SET notes = $1, updated_at = NOW() WHERE id = $2`,
+        [returnNotesPartition.hostNotes, effectiveSourceId]
+      );
+    }
 
     if (rejectionCol.rowCount > 0) {
       await client.query(
@@ -10893,6 +10934,20 @@ async function transferDestination(req, res) {
         targetAnnouncementCode: targetAnn.announcement_code
       });
 
+      // قبل از حذف مبدا: توضیحات کاربران مختلف را با " :- " روی هدف نگه دار
+      const mergedNotes = joinAnnouncementNotes(targetAnn.notes, sourceAnn.notes);
+      if (mergedNotes !== (targetAnn.notes || null)) {
+        await client.query(
+          `UPDATE freight_announcements SET notes = $1, updated_at = NOW() WHERE id = $2`,
+          [mergedNotes, targetAnnouncementId]
+        );
+        console.log('📝 [transferDestination] Merged notes onto target:', {
+          targetAnnouncementId,
+          fromSource: sourceAnn.notes || null,
+          mergedNotes,
+        });
+      }
+
       // قبل از حذف مبدا: ساعت حضور را روی خود مقصدها نگه داشته‌ایم؛ سطح اعلام‌بار هدف را از مبدا overwrite نکن
       // (هر مقصد ساعت/تاریخ خودش را دارد؛ کپی سطح ردیف باعث یکسان‌شدن نمایش همه مقصدها می‌شود)
       
@@ -11212,6 +11267,18 @@ async function splitDestinationToNewAnnouncement(req, res) {
     const newPlatformArrival =
       destination.platform_arrival_time || null;
 
+    // توضیحات چندکاربره: بخش مربوط به مقصد جداشونده را به ردیف جدید بده
+    const { rows: remainingCreatorRows } = await client.query(
+      `SELECT original_created_by_user_id
+       FROM freight_destinations
+       WHERE freight_announcement_id = $1 AND id <> $2`,
+      [effectiveSourceId, destinationId]
+    );
+    const notesPartition = partitionNotesForDestinationSplit(sourceAnn.notes, {
+      leavingCreatorId: newCreatedBy,
+      remainingCreatorIds: remainingCreatorRows.map((r) => r.original_created_by_user_id),
+    });
+
     await client.query(
       `INSERT INTO freight_announcements (
         id, announcement_code, loading_date, delivery_date, line_type, status, cargo_value,
@@ -11248,10 +11315,18 @@ async function splitDestinationToNewAnnouncement(req, res) {
         sourceAnn.representative_name || null,
         sourceAnn.priority || null,
         sourceAnn.products || '[]',
-        null, // توضیحات میزبان را روی ردیف جداشده کپی نکن
+        notesPartition.splitNotes,
         newCreatedBy,
       ]
     );
+
+    // به‌روزرسانی توضیحات میزبان بعد از جداسازی
+    if ((sourceAnn.notes || null) !== (notesPartition.hostNotes || null)) {
+      await client.query(
+        `UPDATE freight_announcements SET notes = $1, updated_at = NOW() WHERE id = $2`,
+        [notesPartition.hostNotes, effectiveSourceId]
+      );
+    }
 
     const hasSortOrderOnSplit = await ensureDestinationSortOrderColumn();
     if (hasSortOrderOnSplit) {
@@ -11345,6 +11420,8 @@ async function splitDestinationToNewAnnouncement(req, res) {
       destinationId,
       vehicleType,
       status: newStatus,
+      notes: notesPartition.splitNotes,
+      sourceNotes: notesPartition.hostNotes,
     });
   } catch (error) {
     await client.query('ROLLBACK');

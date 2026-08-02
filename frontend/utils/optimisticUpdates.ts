@@ -5,6 +5,10 @@
 
 import { normalizeFreightAnnouncementPatch } from './freightDisplay';
 import { FreightAnnouncement, Destination } from '../types';
+import {
+    joinAnnouncementNotes,
+    partitionNotesForDestinationSplit,
+} from './announcementNotes';
 
 export type TransferDestinationResult =
     | { ok: true; announcements: FreightAnnouncement[] }
@@ -307,6 +311,8 @@ export function applyDestinationTransferToAnnouncements(
                 const insertIndex = Math.min(newPosition - 1, newDestinations.length);
                 newDestinations.splice(insertIndex, 0, movedDestWithCargo);
                 const destSum = sumDestCargoRaw(newDestinations);
+                const shouldMergeNotes =
+                    remainingOnSource.length === 0 || sourceAnnouncementDeleted;
                 return {
                     ...ann,
                     destinations: newDestinations,
@@ -315,6 +321,9 @@ export function applyDestinationTransferToAnnouncements(
                         destSum > 0
                             ? destSum
                             : (Number(ann.cargoValue) || 0) + movedCargo,
+                    notes: shouldMergeNotes
+                        ? joinAnnouncementNotes(ann.notes, sourceAnn.notes)
+                        : ann.notes,
                 };
             }
             return ann;
@@ -329,7 +338,12 @@ export function applySplitDestinationToAnnouncements(
     destinationId: string,
     newAnnouncementId: string,
     newAnnouncementCode: string,
-    extras?: { vehicleType?: string; status?: string }
+    extras?: {
+        vehicleType?: string;
+        status?: string;
+        notes?: string | null;
+        sourceNotes?: string | null;
+    }
 ): FreightAnnouncement[] {
     let sourceAnn = announcements.find((a) => a.id === sourceAnnouncementId);
     let moved = sourceAnn?.destinations.find((d) => d.id === destinationId);
@@ -359,11 +373,23 @@ export function applySplitDestinationToAnnouncements(
     const remainingSum = sumDestCargoRaw(remainingDests);
     const sourceTotal = Number(sourceAnn.cargoValue) || 0;
 
+    const notesPartition =
+        extras?.notes !== undefined || extras?.sourceNotes !== undefined
+            ? {
+                  splitNotes: extras.notes || undefined,
+                  hostNotes: extras.sourceNotes || undefined,
+              }
+            : partitionNotesForDestinationSplit(sourceAnn.notes, {
+                  leavingCreatorId: stampedMoved.originalCreatedByUserId || null,
+                  remainingCreatorIds: remainingDests.map((d) => d.originalCreatedByUserId),
+              });
+
     const updatedSource: FreightAnnouncement = {
         ...sourceAnn,
         destinations: remainingDests,
         cargoValue:
             remainingSum > 0 ? remainingSum : Math.max(0, sourceTotal - movedCargo),
+        notes: notesPartition.hostNotes,
     };
 
     const destLoading = String((stampedMoved as any).loadingDate || '').trim();
@@ -384,7 +410,7 @@ export function applySplitDestinationToAnnouncements(
         status: (extras?.status as FreightAnnouncement['status']) || sourceAnn.status,
         cargoValue: movedCargo,
         loadingDate: (destLoading || sourceAnn.loadingDate) as any,
-        notes: undefined,
+        notes: notesPartition.splitNotes,
         platformArrivalTime: stampedMovedFinal.platformArrivalTime,
         assignedDriverId: undefined,
         assignedDriverName: undefined,
