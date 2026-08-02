@@ -137,19 +137,30 @@ export function mergeAnnouncementDestinations(
 }
 
 function destinationMergeKey(d: Destination): string {
+    // مقصدهای با id جدا باید جدا بمانند (مثلاً دو کرمانشاه با تناژ یکسان)
+    if (d.id) return `id:${d.id}`;
     const city = (d.city || '').trim().toLowerCase();
     const tonnage = d.tonnage != null && d.tonnage !== '' ? String(d.tonnage) : '';
     const delivery = String(d.deliveryDate || '').trim();
-    return `${city}|${tonnage}|${delivery}`;
+    const lis = (d.lisCode || '').trim().toLowerCase();
+    const rep = (d.representativeName || '').trim().toLowerCase();
+    return `${city}|${tonnage}|${delivery}|${lis}|${rep}`;
 }
 
 function destinationMergeKeyLoose(d: Destination): string {
+    if (d.id) return `id:${d.id}`;
     const city = (d.city || '').trim().toLowerCase();
     const tonnage = d.tonnage != null && d.tonnage !== '' ? String(d.tonnage) : '';
-    return `${city}|${tonnage}`;
+    const lis = (d.lisCode || '').trim().toLowerCase();
+    const rep = (d.representativeName || '').trim().toLowerCase();
+    return `${city}|${tonnage}|${lis}|${rep}`;
 }
 
-/** حذف تکرار مقصد — نسخهٔ غنی‌تر (LIS، محصولات، …) نگه داشته می‌شود */
+/**
+ * حذف تکرار واقعی مقصد.
+ * فقط وقتی id یکسان است (یا id نیست و مشخصات کاملاً یکی‌ست) ادغام می‌شود —
+ * دو مقصد واقعی با شهر/تناژ یکسان (مثل دو کرمانشاه ۶۳۰۰) نباید حذف شوند.
+ */
 function dedupeDestinationsLogical(destinations: Destination[]): Destination[] {
     const bestByKey = new Map<string, Destination>();
     for (const d of destinations) {
@@ -181,7 +192,30 @@ function destinationRichnessScore(d: Destination): number {
 }
 
 function dedupeDestinationsById(destinations: Destination[]): Destination[] {
-    return dedupeDestinationsLogical(destinations);
+    const bestById = new Map<string, Destination>();
+    const withoutId: Destination[] = [];
+    for (const d of destinations) {
+        if (!d.id) {
+            withoutId.push(d);
+            continue;
+        }
+        const cur = bestById.get(d.id);
+        if (!cur || destinationRichnessScore(d) > destinationRichnessScore(cur)) {
+            bestById.set(d.id, d);
+        }
+    }
+    const result: Destination[] = [];
+    const seen = new Set<string>();
+    for (const d of destinations) {
+        if (!d.id) continue;
+        if (seen.has(d.id)) continue;
+        seen.add(d.id);
+        result.push(bestById.get(d.id)!);
+    }
+    if (withoutId.length > 0) {
+        result.push(...dedupeDestinationsLogical(withoutId));
+    }
+    return result;
 }
 
 export function formatDairyDestinationColumnLines(

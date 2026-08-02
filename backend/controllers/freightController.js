@@ -1604,6 +1604,7 @@ async function updateFreightAnnouncement(req, res) {
       announcementWeekDay,
       // فیلدهای تخصیص و مالی (برای ویرایش توسط admin)
       totalFreightCost,
+      tariffFreightCost,
       billOfLadingNumber,
       assignedDriverId,
       assignedDriverName,
@@ -1867,6 +1868,21 @@ async function updateFreightAnnouncement(req, res) {
       
       // فیلدهای تخصیص و مالی (برای ویرایش توسط admin)
       if (totalFreightCost !== undefined) { fields.push(`total_freight_cost = $${idx++}`); values.push(totalFreightCost); }
+      if (tariffFreightCost !== undefined) {
+        const tariffRaw = tariffFreightCost;
+        if (tariffRaw === null || tariffRaw === '' || String(tariffRaw).trim() === '') {
+          fields.push(`tariff_freight_cost = $${idx++}`);
+          values.push(null);
+        } else {
+          const tariffNum = Number(tariffRaw);
+          if (!Number.isFinite(tariffNum) || tariffNum < 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'کرایه تعرفه نامعتبر است.' });
+          }
+          fields.push(`tariff_freight_cost = $${idx++}`);
+          values.push(tariffNum);
+        }
+      }
       if (billOfLadingNumber !== undefined) { fields.push(`bill_of_lading_number = $${idx++}`); values.push(billOfLadingNumber); }
       if (assignedDriverId !== undefined) { fields.push(`assigned_driver_id = $${idx++}`); values.push(assignedDriverId || null); }
       if (assignedDriverName !== undefined) { fields.push(`assigned_driver_name = $${idx++}`); values.push(assignedDriverName || null); }
@@ -1948,6 +1964,7 @@ async function updateFreightAnnouncement(req, res) {
         'loading_date', 'line_type', 'cargo_value', 'vehicle_type', 'notes', 'status',
         'origin_city', 'brand', 'representative_type', 'representative_name', 
         'carton_count', 'pallet_count', 'loading_type', 'priority', 'products', 'platform_arrival_time', 'announcement_week_day', 'total_freight_cost',
+        'tariff_freight_cost',
         'bill_of_lading_number', 'assigned_driver_id', 'assigned_driver_name', 
         'assigned_driver_employee_id', 'assigned_vehicle_id', 'assigned_vehicle_model',
         'assigned_vehicle_brand', 'vehicle_plate', 'assignment_type'

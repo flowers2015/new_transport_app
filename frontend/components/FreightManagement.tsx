@@ -169,6 +169,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
   const [rawNumericValues, setRawNumericValues] = useState<{
     cargoValue?: string;
     totalFreightCost?: string;
+    tariffFreightCost?: string;
     destinations?: { [index: number]: { tonnage?: string; freightCost?: string } };
   }>({});
 
@@ -236,6 +237,10 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
           assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
           totalFreightCost: a.total_freight_cost || a.totalFreightCost || 0,
+          tariffFreightCost:
+            a.tariff_freight_cost != null || a.tariffFreightCost != null
+              ? Number(a.tariff_freight_cost ?? a.tariffFreightCost)
+              : undefined,
           billOfLadingNumber: a.bill_of_lading_number || a.billOfLadingNumber,
           assignedDriverName: a.assigned_driver_name || a.assignedDriverName,
           assignedDriverEmployeeId: a.assigned_driver_employee_id || a.assignedDriverEmployeeId,
@@ -669,6 +674,10 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       assignedVehicleBrand: (announcement as any).assignedVehicleBrand || '',
       vehiclePlate: (announcement as any).vehiclePlate || '',
       totalFreightCost: Number(announcement.totalFreightCost) || 0,
+      tariffFreightCost:
+        announcement.tariffFreightCost != null && Number(announcement.tariffFreightCost) > 0
+          ? Number(announcement.tariffFreightCost)
+          : 0,
       billOfLadingNumber: announcement.billOfLadingNumber || '',
       assignmentType: announcement.assignmentType || ''
     });
@@ -676,6 +685,10 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     setRawNumericValues({
       cargoValue: String(announcement.cargoValue || ''),
       totalFreightCost: String(announcement.totalFreightCost || ''),
+      tariffFreightCost:
+        announcement.tariffFreightCost != null && Number(announcement.tariffFreightCost) > 0
+          ? String(announcement.tariffFreightCost)
+          : '',
       destinations: announcement.destinations ? announcement.destinations.reduce((acc: any, d: any, idx: number) => {
         acc[idx] = {
           tonnage: String(d.tonnage || ''),
@@ -750,6 +763,13 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
         ...formData,
         cargoValue: typeof formData.cargoValue === 'number' ? formData.cargoValue : parseNumberFromFormatted(String(formData.cargoValue)),
         totalFreightCost: typeof formData.totalFreightCost === 'number' ? formData.totalFreightCost : parseNumberFromFormatted(String(formData.totalFreightCost)),
+        tariffFreightCost: (() => {
+          const n =
+            typeof formData.tariffFreightCost === 'number'
+              ? formData.tariffFreightCost
+              : parseNumberFromFormatted(String(formData.tariffFreightCost ?? ''));
+          return n > 0 ? n : null;
+        })(),
         destinations: formData.destinations.map((d: any) => ({
           ...d,
           tonnage: typeof d.tonnage === 'number' ? d.tonnage : parseNumberFromFormatted(String(d.tonnage || 0)),
@@ -975,6 +995,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">راننده</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">خودرو</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کرایه کل</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کرایه تعرفه</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">عملیات</th>
             </tr>
           </thead>
@@ -1111,6 +1132,12 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     return sumFromDest > 0 ? formatNumberWithSeparator(sumFromDest) : '-';
                   })()}
                 </td>
+                {/* کرایه تعرفه */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700 font-medium" dir="ltr">
+                  {ann.tariffFreightCost && Number(ann.tariffFreightCost) > 0
+                    ? formatNumberWithSeparator(Number(ann.tariffFreightCost))
+                    : '-'}
+                </td>
                 {/* عملیات */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
                   <div className="flex gap-2">
@@ -1138,7 +1165,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
             );
             }) : (
               <tr>
-                <td colSpan={14} className="px-4 py-4 text-center text-sm text-gray-500">
+                <td colSpan={15} className="px-4 py-4 text-center text-sm text-gray-500">
                   هیچ اعلام باری یافت نشد
                 </td>
               </tr>
@@ -1336,6 +1363,36 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     }}
                     className="w-full px-3 py-2 border rounded"
                     dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">کرایه تعرفه (ریال)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={
+                      rawNumericValues.tariffFreightCost !== undefined
+                        ? rawNumericValues.tariffFreightCost
+                        : formData.tariffFreightCost
+                          ? String(formData.tariffFreightCost)
+                          : ''
+                    }
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^\d]/g, '');
+                      setRawNumericValues({ ...rawNumericValues, tariffFreightCost: cleaned });
+                      setFormData({ ...formData, tariffFreightCost: cleaned ? Number(cleaned) : 0 });
+                    }}
+                    onBlur={(e) => {
+                      const num = Number(e.target.value.replace(/[^\d]/g, '')) || 0;
+                      setFormData({ ...formData, tariffFreightCost: num });
+                      setRawNumericValues({
+                        ...rawNumericValues,
+                        tariffFreightCost: num ? formatNumberWithSeparator(num) : '',
+                      });
+                    }}
+                    className="w-full px-3 py-2 border rounded"
+                    dir="ltr"
+                    placeholder="در صورت نیاز تغییر دهید"
                   />
                 </div>
                 <div>
@@ -1619,6 +1676,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                           notes: 'یادداشت',
                           total_freight_cost: 'کرایه کل',
                           totalFreightCost: 'کرایه کل',
+                          tariff_freight_cost: 'کرایه تعرفه',
+                          tariffFreightCost: 'کرایه تعرفه',
                           bill_of_lading_number: 'شماره بارنامه',
                           billOfLadingNumber: 'شماره بارنامه',
                           assigned_driver_name: 'نام راننده',
