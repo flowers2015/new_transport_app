@@ -2,31 +2,55 @@
  * API Configuration
  *
  * در محیط توسعه: VITE_API_BASE_URL=http://localhost:3000/api/v1
- * در محیط پروداکشن: VITE_API_BASE_URL=/api/v1  (نسبی — همان پروتکل صفحه)
+ * در محیط پروداکشن: VITE_API_BASE_URL=/api/v1  (نسبی — همان هاست صفحه)
  *
- * توجه: بعضی شبکه‌های داخلی فقط پورت 80 (HTTP) دارند و 443 بسته است.
- * اگر base مطلق https باشد ولی صفحه روی http باز شده، به مسیر نسبی برمی‌گردیم.
+ * اگر بیلد اشتباه localhost را داخل bundle بگذارد، روی دامنه واقعی
+ * به‌صورت runtime به /api/v1 برمی‌گردیم تا CORS/Failed to fetch پیش نیاید.
  */
 
 const envUrl = import.meta.env.VITE_API_BASE_URL;
-let API_BASE_URL = envUrl || (import.meta.env.PROD ? '/api/v1' : 'http://localhost:3000/api/v1');
+
+function isBrowserLocalHost(): boolean {
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function resolveApiBaseUrl(raw: string | undefined): string {
+  const fallbackDev = 'http://localhost:3000/api/v1';
+  const fallbackProd = '/api/v1';
+  let base = (raw || '').trim() || (import.meta.env.PROD ? fallbackProd : fallbackDev);
+
+  // بیلد اشتباه: localhost داخل bundle روی دامنه واقعی
+  if (
+    typeof window !== 'undefined' &&
+    !isBrowserLocalHost() &&
+    (base.includes('localhost') || base.includes('127.0.0.1'))
+  ) {
+    base = fallbackProd;
+  }
+
+  // صفحه روی HTTP ولی base مطلق HTTPS همان هاست → مسیر نسبی
+  if (typeof window !== 'undefined' && window.location.protocol === 'http:' && base.startsWith('https://')) {
+    try {
+      const u = new URL(base);
+      if (u.hostname === window.location.hostname) {
+        const path = (u.pathname || '/').replace(/\/$/, '') || '';
+        base = path || fallbackProd;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return base;
+}
+
+let API_BASE_URL = resolveApiBaseUrl(envUrl);
 
 /** اگر روی HTTP هستیم، base مطلق https همان هاست را به مسیر نسبی تبدیل کن */
 function preferSameOriginHttp(base: string): string {
-  if (typeof window === 'undefined') return base;
-  if (window.location.protocol !== 'http:') return base;
-  const trimmed = (base || '').trim();
-  if (!trimmed.startsWith('https://')) return trimmed;
-  try {
-    const u = new URL(trimmed);
-    if (u.hostname === window.location.hostname) {
-      const path = (u.pathname || '/').replace(/\/$/, '') || '';
-      return path || '/api/v1';
-    }
-  } catch {
-    /* ignore */
-  }
-  return trimmed;
+  return resolveApiBaseUrl(base);
 }
 
 API_BASE_URL = preferSameOriginHttp(API_BASE_URL);
@@ -72,75 +96,62 @@ export const getApiUrl = (endpoint: string): string => {
  */
 export const getFileUrl = (filePath: string): string => {
   if (!filePath) return '';
-  
+
   // حذف اسلش اولیه اگر وجود دارد
   const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-  
+
   // اگر در محیط پروداکشن هستیم (آدرس نسبی)، از آدرس نسبی استفاده می‌کنیم
   if (API_BASE_URL.startsWith('/')) {
     return `/${cleanPath}`;
   }
-  
+
   // در محیط توسعه، از آدرس کامل استفاده می‌کنیم
   // استخراج base URL از API_BASE_URL (مثلاً http://localhost:3000)
   const baseUrl = API_BASE_URL.replace('/api/v1', '');
   return `${baseUrl}/${cleanPath}`;
 };
 
-/**
- * آدرس پایه API برای استفاده مستقیم
- */
-export default API_BASE_URL;
-
-export const getAuthHeaders = (extra: HeadersInit = {}, body?: BodyInit | null): HeadersInit => {
+export const getAuthHeaders = (
+  extra: Record<string, string> = {},
+  body?: BodyInit | null
+): Record<string, string> => {
   const token = localStorage.getItem('token');
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   };
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  if (!isFormData) {
-    return { 'Content-Type': 'application/json', ...headers };
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return headers;
   }
-  return headers;
+  return { 'Content-Type': 'application/json', ...headers };
 };
 
-export const isAuthFailureStatus = (status: number): boolean =>
-  status === 401 || status === 403;
+export const isAuthFailureStatus = (status: number) => status === 401 || status === 403;
 
-/**
- * تابع کمکی برای بررسی و مدیریت خطای توکن منقضی شده
- */
 export const handleAuthError = (
-  response: Response,
+  res: Response,
   { redirect = true }: { redirect?: boolean } = {}
 ): Response => {
-  if (!isAuthFailureStatus(response.status)) {
-    return response;
-  }
-  console.warn('⚠️ [Auth] Token expired or invalid.', response.status);
+  if (!isAuthFailureStatus(res.status)) return res;
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   if (redirect) {
     alert('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
     window.location.href = '/';
   }
-  return response;
+  return res;
 };
 
-/**
- * تابع fetch با مدیریت خودکار خطای توکن — همیشه توکن را تازه از localStorage می‌خواند
- */
-export const apiFetch = async (
-  url: string,
-  options?: RequestInit & { skipAuthRedirect?: boolean }
-): Promise<Response> => {
-  const { skipAuthRedirect, headers: optionHeaders, body, ...rest } = options || {};
-  const response = await fetch(url, {
+type ApiFetchOptions = RequestInit & { skipAuthRedirect?: boolean };
+
+export const apiFetch = async (url: string, options?: ApiFetchOptions): Promise<Response> => {
+  const { skipAuthRedirect, headers, body, ...rest } = options || {};
+  const res = await fetch(url, {
     ...rest,
     body,
-    headers: getAuthHeaders(optionHeaders as HeadersInit, body),
+    headers: getAuthHeaders((headers as Record<string, string>) || {}, body),
   });
-  return handleAuthError(response, { redirect: !skipAuthRedirect });
+  return handleAuthError(res, { redirect: !skipAuthRedirect });
 };
 
+export default API_BASE_URL;
