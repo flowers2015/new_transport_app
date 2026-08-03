@@ -38,6 +38,7 @@ const cityRoutes = require('./routes/cityRoutes');
 const baleRoutes = require('./routes/baleRoutes');
 const supportTicketRoutes = require('./routes/supportTicketRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
+const integrationRoutes = require('./routes/integrationRoutes');
 const { authenticateToken, authorizeRole } = require('./middleware/authMiddleware');
 const { searchCompanyVehicles } = require('./controllers/vehicleController');
 
@@ -174,6 +175,8 @@ app.use('/api/v1/cities', cityRoutes);
 app.use('/api/v1/bale', baleRoutes);
 app.use('/api/v1/support-tickets', supportTicketRoutes);
 app.use('/api/v1/reports', reportsRoutes);
+// لایه بیرونی یکپارچه‌سازی (فقط‌خواندنی — جدا از API داخلی)
+app.use('/api/v1/integrations', integrationRoutes);
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
