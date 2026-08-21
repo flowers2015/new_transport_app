@@ -52,6 +52,7 @@ export enum View {
     CarrierManagement = 'carrier-management',
     FreightManagement = 'freight-management',
     AdminResourceManagement = 'admin-resource-management',
+    GpsResourceManagement = 'gps-resource-management',
     CityManagement = 'city-management',
     FinalizePermissionManagement = 'finalize-permission-management',
     PlanningManagerApprovalPermissionManagement = 'planning-manager-approval-permission-management',
@@ -81,6 +82,8 @@ export enum UserRole {
     CentralFinance = 'مالی مرکزی',
     TransportationFinance = 'مالی ترابری',
     Viewer = 'بیننده',
+    /** پرسنل بازرسی — مشاهده پیگیری زنده + مدیریت منابع GPS */
+    Inspection = 'بازرسی',
 }
 
 export enum RepairStatus {

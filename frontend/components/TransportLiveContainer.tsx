@@ -1832,8 +1832,8 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onChangeVehicleType = async (announcementId: string, vehicleType: string): Promise<boolean> => {
-        if (currentUser?.role === UserRole.Viewer) {
-            alert('نقش بیننده مجاز به تغییر نوع خودرو نیست.');
+        if (isFreightViewOnlyRole(currentUser?.role)) {
+            alert('نقش مشاهده‌گر مجاز به تغییر نوع خودرو نیست.');
             return false;
         }
         console.log('🔄 [TransportLive] Change Vehicle Type Request:', {
@@ -1970,6 +1970,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     return (
         <>
+            {isInspectionRole(currentUser.role) && (
+                <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                    نقش بازرسی — پیگیری اعلام بار فقط مشاهده است؛ مدیریت منابع GPS از منوی «منابع GPS».
+                </div>
+            )}
             {refreshing && (
                 <div className="fixed inset-x-0 top-0 z-50 flex justify-center pointer-events-none">
                     <div className="mt-2 px-4 py-2 rounded-lg bg-sky-700 text-white text-sm shadow-lg">

@@ -95,7 +95,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
     { value: 'accident', label: 'کارشناس تصادفات' },
     { value: 'allocation', label: 'کارشناس تغییر و تحول' },
     { value: 'insurance', label: 'کارشناس بیمه' },
-    { value: 'viewer', label: 'بیننده (فقط مشاهده اعلام بار)' }
+    { value: 'viewer', label: 'بیننده (فقط مشاهده اعلام بار)' },
+    { value: 'inspector', label: 'بازرسی (مشاهده اعلام بار + منابع GPS)' }
   ];
 
   // دریافت لیست کاربران

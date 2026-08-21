@@ -605,6 +605,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [currentUser.role]);
 
     const isCarrierUser = currentUser.role === UserRole.CarrierUser;
+    const isViewOnlyFreight = isFreightViewOnlyRole(currentUser.role);
     const isPersonalTransportUser = isPersonalTransportViewerRole(currentUser.role);
     const personalTariffColumns = useMemo(
         () => (isPersonalTransportUser ? buildTariffFreightColumns() : []),
@@ -614,7 +615,17 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         isPersonalTransportUser &&
         (activeLine === FreightLineType.Ambient || activeLine === 'لبنیات-فروتلند' || activeLine === 'Ambient');
 
-    const canPerformActions = useMemo(() => isCarrierUser || hasAccess([UserRole.Transportation, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User]), [hasAccess, isCarrierUser]);
+    const canPerformActions = useMemo(
+        () =>
+            !isViewOnlyFreight &&
+            (isCarrierUser ||
+                hasAccess([
+                    UserRole.Transportation,
+                    UserRole.TransportationUser,
+                    UserRole.Transportation_Personal_Vehicle_User,
+                ])),
+        [hasAccess, isCarrierUser, isViewOnlyFreight]
+    );
 
     // Helper function to check if user can edit announcement - memoized
     const canEditAnnouncement = useCallback((ann: FreightAnnouncement): { canEdit: boolean; canTakeAction: boolean; isAssignedByOther: boolean } => {
@@ -662,7 +673,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const renderVehicleTypeCell = useCallback((ann: FreightAnnouncement) => {
         // فقط ترابری مجاز به تغییر نوع خودرو است؛ بیننده و نقش‌های مشاهده‌ای فقط متن می‌بینند
-        if (isCarrierUser || !canPerformActions || currentUser.role === UserRole.Viewer) {
+        if (isCarrierUser || !canPerformActions || isViewOnlyFreight) {
             return <span>{ann.vehicleType || '-'}</span>;
         }
         if (!isDairyOrAmbientLine(ann)) {

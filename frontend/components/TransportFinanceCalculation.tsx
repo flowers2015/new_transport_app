@@ -21,6 +21,7 @@ import {
 import CityManagement from './CityManagement';
 import CityAutocomplete from './CityAutocomplete';
 import FinanceExceptionTourDialog from './FinanceExceptionTourDialog';
+import GpsTourPickerDialog, { GpsMileageSource } from './GpsTourPickerDialog';
 import {
     enrichAnnouncementsWithRouteMileage,
     getTotalKilometersFromCalculation,
@@ -106,6 +107,7 @@ function buildSavedCalculationRecord(
         total_cost: requestBody.totalCost ?? 0,
         notes: requestBody.notes ?? '',
         queue_type: requestBody.queueType ?? '',
+        mileage_source: requestBody.mileageSource ?? 'approved',
         calculation_date: requestBody.calculationDate ?? '',
         vehicle_code: requestBody.vehicleCode ?? '',
         vehicle_plate: requestBody.vehiclePlate ?? '',
@@ -218,6 +220,10 @@ interface AllowanceInputDialogData {
         billOfLadingNumber: string; // شماره بارنامه
     }>;
     queueType?: 'porsant' | 'fixed_allowance' | 'helper'; // نوع محاسبه اجرت (پورسانت یا اجرت ثابت)
+    /** منبع کیلومتر: مصوب / CAN / GPS — فقط metadata؛ مقدار در approvedKilometers است */
+    mileageSource?: GpsMileageSource;
+    /** تاریخ تخصیص شمسی برای بازه پیش‌فرض GPS */
+    assignmentDate?: string;
 }
 
 function readTourNumericField(tour: any, camel: string, snake: string): number {
@@ -546,6 +552,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     // دیالوگ ثبت اطلاعات
     const [showInputDialog, setShowInputDialog] = useState(false);
     const [inputDialogData, setInputDialogData] = useState<AllowanceInputDialogData | null>(null);
+    const [showGpsTourPicker, setShowGpsTourPicker] = useState(false);
     // تب‌ها حذف شدند - همه محتوا در یک صفحه نمایش داده می‌شود
     const [helperDriverSearchResults, setHelperDriverSearchResults] = useState<Driver[]>([]);
     const [dialogZoom, setDialogZoom] = useState(100); // بزرگنمایی دیالوگ
@@ -2660,6 +2667,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 }))) : []),
                 queueType: tourQueueType as 'porsant' | 'fixed_allowance' | 'helper',
                 isPaid: isPaid,
+                mileageSource: ((tour as any).mileageSource || (tour as any).mileage_source || 'approved') as GpsMileageSource,
+                assignmentDate:
+                    resolveAssignmentDateFromAnnouncement(
+                        announcements.find((a: any) => a.id === tour.announcementId)
+                    ) || billDateStr || '',
             } as any);
             
             // اگر اطلاعات دپو وجود دارد، بخش دپو را به صورت خودکار باز کن
@@ -2738,6 +2750,11 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 queueType: tourQueueType as 'porsant' | 'fixed_allowance' | 'helper',
                 isPaid: isPaid,
                 periodId: periodId, // قانون 2: قفل ویرایش بعد از بستن دوره
+                mileageSource: 'approved' as GpsMileageSource,
+                assignmentDate:
+                    resolveAssignmentDateFromAnnouncement(
+                        announcements.find((a: any) => a.id === tour.announcementId)
+                    ) || billDateStr || '',
             } as any);
             
             setShowInputDialog(true);
@@ -4162,12 +4179,21 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 announcementId: savedInputDialogData.tourId,
                 destinations: savedInputDialogData.destinations,
             });
-            const finalApprovedKm = Math.max(
-                Number(savedInputDialogData.approvedKilometers) || 0,
-                resolvedForSave.approvedKm || 0
-            );
+            const mileageSource: GpsMileageSource =
+                savedInputDialogData.mileageSource === 'can' ||
+                savedInputDialogData.mileageSource === 'gps' ||
+                savedInputDialogData.mileageSource === 'track'
+                    ? savedInputDialogData.mileageSource
+                    : 'approved';
+            const finalApprovedKm =
+                mileageSource === 'approved'
+                    ? Math.max(
+                          Number(savedInputDialogData.approvedKilometers) || 0,
+                          resolvedForSave.approvedKm || 0
+                      )
+                    : Number(savedInputDialogData.approvedKilometers) || 0;
             const finalApprovedDays =
-                resolvedForSave.approvedKm > 0
+                mileageSource === 'approved' && resolvedForSave.approvedKm > 0
                     ? resolvedForSave.approvedDays
                     : Number(savedInputDialogData.approvedMissionDays) || 0;
             const finalExcessKm = Number(savedInputDialogData.excessKilometers) || 0;
@@ -4180,6 +4206,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingNumber: savedInputDialogData.billOfLadingNumber,
                 billOfLadingCost: billOfLadingCostNum,
                 approvedKilometers: finalApprovedKm,
+                mileageSource,
                 totalKilometers: finalTotalKm,
                 excessKilometers: finalExcessKm,
                 approvedMissionDays: finalApprovedDays || Number(savedInputDialogData.approvedMissionDays) || 0,
@@ -5094,15 +5121,38 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                     className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed"
                                                 />
                                             </td>
-                                            <td className="p-2 border-l border-slate-200 font-medium">پیمایش مصوب (کیلومتر)</td>
+                                            <td className="p-2 border-l border-slate-200 font-medium">
+                                                پیمایش مصوب (کیلومتر)
+                                                {inputDialogData.mileageSource && inputDialogData.mileageSource !== 'approved' && (
+                                                    <span className="block text-[10px] font-normal text-indigo-600 mt-0.5">
+                                                        منبع:{' '}
+                                                        {inputDialogData.mileageSource === 'can'
+                                                            ? 'CAN (GPS)'
+                                                            : inputDialogData.mileageSource === 'track'
+                                                              ? 'مسافت مسیر (نقاط GPS)'
+                                                              : 'GPS/ODO'}
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="p-2">
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={inputDialogData.approvedKilometers ? String(inputDialogData.approvedKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                                        readOnly
-                                                    className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed text-left"
-                                                />
+                                                <div className="flex gap-1 items-center">
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        value={inputDialogData.approvedKilometers ? String(inputDialogData.approvedKilometers).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                                                        readOnly
+                                                        className="w-full px-2 py-1 border border-slate-300 rounded bg-slate-100 text-slate-600 cursor-not-allowed text-left"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        title="محاسبه کمکی از GPS"
+                                                        onClick={() => setShowGpsTourPicker(true)}
+                                                        disabled={!inputDialogData.vehicleCode}
+                                                        className="shrink-0 px-2 py-1 text-[11px] rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 whitespace-nowrap"
+                                                    >
+                                                        از GPS
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                         {/* ردیف 6: پیمایش مازاد، ماموریت مصوب */}
@@ -6058,6 +6108,59 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     </div>
                 </div>
             )}
+
+            <GpsTourPickerDialog
+                open={showGpsTourPicker && !!inputDialogData}
+                onClose={() => setShowGpsTourPicker(false)}
+                vehicleCode={inputDialogData?.vehicleCode || ''}
+                announcementId={inputDialogData?.tourId}
+                approvedKilometers={Number(inputDialogData?.approvedKilometers) || 0}
+                defaultFromDate={
+                    inputDialogData?.assignmentDate ||
+                    inputDialogData?.billOfLadingDate ||
+                    ''
+                }
+                defaultDays={5}
+                onSelect={async ({ source, mileage, tour, meta }) => {
+                    if (!inputDialogData) return;
+                    setInputDialogData({
+                        ...inputDialogData,
+                        approvedKilometers: mileage,
+                        mileageSource: source,
+                    });
+                    setShowGpsTourPicker(false);
+
+                    if (!tour || !meta.imei) {
+                        return;
+                    }
+                    try {
+                        const res = await fetch(getApiUrl('gps-finance/apply-selection'), {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                announcementId: inputDialogData.tourId,
+                                vehicleCode: meta.vehicleCode || inputDialogData.vehicleCode,
+                                imei: meta.imei,
+                                tourId: (tour as any)?.tourId,
+                                searchFrom: meta.searchFrom,
+                                searchTo: meta.searchTo,
+                                tour,
+                                selectedSource: source,
+                                approvedKilometers: mileage,
+                            }),
+                        });
+                        if (!res.ok) {
+                            const body = await res.json().catch(() => ({}));
+                            console.warn('GPS snapshot save failed:', body.message);
+                        }
+                    } catch (e: any) {
+                        console.warn('GPS snapshot save error', e);
+                    }
+                }}
+            />
 
             {/* دیالوگ قوانین محاسبات */}
             {showCalculationRulesDialog && (

@@ -20,7 +20,8 @@ DO $$ BEGIN
     'accident',
     'allocation',
     'insurance',
-    'viewer'
+    'viewer',
+    'inspector'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 

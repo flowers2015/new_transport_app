@@ -210,6 +210,15 @@ const rolePermissions = {
       'freight_archive'
     ],
     description: 'بیننده — مشاهده پیگیری زنده و آرشیو اعلام بار'
+  },
+
+  // بازرسی — مشاهده پیگیری زنده + مدیریت منابع GPS
+  inspector: {
+    menus: [
+      'freight_tracking',
+      'gps_resources'
+    ],
+    description: 'بازرسی — مشاهده پیگیری اعلام بار و مدیریت منابع GPS'
   }
 };
 

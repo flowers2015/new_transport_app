@@ -1,6 +1,25 @@
 const pool = require('../db');
 const crypto = require('crypto');
 
+/** ذخیره منبع کیلومتر بدون دست زدن به ستون‌های اصلی */
+async function persistMileageSource(driverId, announcementId, mileageSource) {
+  if (!mileageSource) return;
+  try {
+    await pool.query(`
+      ALTER TABLE driver_calculations
+      ADD COLUMN IF NOT EXISTS mileage_source VARCHAR(20)
+    `);
+    await pool.query(
+      `UPDATE driver_calculations
+       SET mileage_source = $1, updated_at = NOW()
+       WHERE driver_id = $2 AND announcement_id = $3`,
+      [mileageSource, driverId, announcementId]
+    );
+  } catch (e) {
+    console.warn('⚠️ [saveDriverCalculation] mileage_source skip:', e.message);
+  }
+}
+
 /** بیشترین کیلومتر رفت‌وبرگشت از شهرهای مقصد اعلام بار */
 async function resolveApprovedKmFromAnnouncement(announcementId) {
   const destRows = await pool.query(
@@ -137,16 +156,30 @@ async function saveDriverCalculation(req, res) {
     }
 
     let approvedKmToStore = parseNumber(approvedKilometers, 0);
-    try {
-      const routeKm = await resolveApprovedKmFromAnnouncement(announcementId);
-      if (routeKm > approvedKmToStore) {
-        console.log(
-          `📏 [saveDriverCalculation] پیمایش مصوب از مسیر: ${approvedKmToStore} → ${routeKm} (اعلام بار ${announcementId})`
-        );
-        approvedKmToStore = routeKm;
+    const mileageSourceRaw = String(req.body?.mileageSource || req.body?.mileage_source || 'approved')
+      .trim()
+      .toLowerCase();
+    const mileageSource = ['approved', 'can', 'gps', 'track'].includes(mileageSourceRaw)
+      ? mileageSourceRaw
+      : 'approved';
+
+    // اگر کاربر عمداً از CAN/GPS انتخاب کرده، پیمایش مسیر را جایگزین نکن
+    if (mileageSource === 'approved') {
+      try {
+        const routeKm = await resolveApprovedKmFromAnnouncement(announcementId);
+        if (routeKm > approvedKmToStore) {
+          console.log(
+            `📏 [saveDriverCalculation] پیمایش مصوب از مسیر: ${approvedKmToStore} → ${routeKm} (اعلام بار ${announcementId})`
+          );
+          approvedKmToStore = routeKm;
+        }
+      } catch (routeErr) {
+        console.warn('⚠️ [saveDriverCalculation] خطا در resolve پیمایش مسیر:', routeErr.message);
       }
-    } catch (routeErr) {
-      console.warn('⚠️ [saveDriverCalculation] خطا در resolve پیمایش مسیر:', routeErr.message);
+    } else {
+      console.log(
+        `📡 [saveDriverCalculation] منبع کیلومتر=${mileageSource} — مقدار ارسالی حفظ شد: ${approvedKmToStore}`
+      );
     }
 
     const excessKmToStore = parseNumber(excessKilometers, 0);
@@ -505,6 +538,7 @@ async function saveDriverCalculation(req, res) {
       }
 
       console.log('✅ [saveDriverCalculation] اطلاعات به‌روزرسانی شد:', existingCheck.rows[0].id);
+      await persistMileageSource(driverId, announcementId, mileageSource);
       return res.json({ 
         message: 'اطلاعات محاسباتی به‌روزرسانی شد.',
         id: existingCheck.rows[0].id,
@@ -793,6 +827,7 @@ async function saveDriverCalculation(req, res) {
       }
 
       console.log('✅ [saveDriverCalculation] اطلاعات جدید ثبت شد:', id);
+      await persistMileageSource(driverId, announcementId, mileageSource);
       return res.status(201).json({ 
         message: 'اطلاعات محاسباتی ثبت شد.',
         id,

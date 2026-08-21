@@ -8,6 +8,7 @@ import { getApiUrl } from '../utils/apiConfig';
 import WorkflowRules from './WorkflowRules';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import PerformanceIndexTab from './PerformanceIndexTab';
+import GpsLiveDashboardTab from './GpsLiveDashboardTab';
 
 interface StatisticsData {
     timePeriod: string;
@@ -1196,8 +1197,8 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     const [vehicleTypeSearch, setVehicleTypeSearch] = useState('');
     const [monthlySummaryPage, setMonthlySummaryPage] = useState(1);
     const [dailySummaryPage, setDailySummaryPage] = useState(1);
-    const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics' | 'performance'>('daily');
-    const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics' | 'performance'>>(new Set(['daily']));
+    const [activeTab, setActiveTab] = useState<'daily' | 'lines' | 'representatives' | 'analytics' | 'performance' | 'gpsLive'>('daily');
+    const [loadedTabs, setLoadedTabs] = useState<Set<'daily' | 'lines' | 'representatives' | 'analytics' | 'performance' | 'gpsLive'>>(new Set(['daily']));
     const [dailyStats, setDailyStats] = useState<{
         iceCream: StatisticsData[];
         dairy: StatisticsData[];
@@ -1447,7 +1448,7 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
     }
 
     // Handle tab change with lazy loading
-    const handleTabChange = (tab: 'daily' | 'lines' | 'representatives' | 'analytics' | 'performance') => {
+    const handleTabChange = (tab: 'daily' | 'lines' | 'representatives' | 'analytics' | 'performance' | 'gpsLive') => {
         setActiveTab(tab);
         setLoadedTabs(prev => new Set([...prev, tab]));
     };
@@ -1528,6 +1529,16 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                         }`}
                     >
                         شاخص عملکرد
+                    </button>
+                    <button
+                        onClick={() => handleTabChange('gpsLive')}
+                        className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                            activeTab === 'gpsLive'
+                                ? 'border-b-2 border-sky-600 text-sky-600 bg-sky-50'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                    >
+                        داشبورد لحظه‌ای GPS
                     </button>
                 </div>
 
@@ -2393,6 +2404,13 @@ const TransportDashboard: React.FC<TransportDashboardProps> = ({
                     {activeTab === 'performance' && loadedTabs.has('performance') && (
                         <div className="space-y-4">
                             <PerformanceIndexTab />
+                        </div>
+                    )}
+
+                    {/* Tab 6: GPS Live */}
+                    {activeTab === 'gpsLive' && loadedTabs.has('gpsLive') && (
+                        <div className="space-y-4">
+                            <GpsLiveDashboardTab />
                         </div>
                     )}
                 </div>

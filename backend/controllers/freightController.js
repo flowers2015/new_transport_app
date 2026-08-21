@@ -11473,7 +11473,7 @@ async function changeVehicleType(req, res) {
   const { vehicleType } = req.body || {};
   const { id: userId, name, username, role } = req.user || {};
   const roleNorm = String(role || '').toLowerCase();
-  if (roleNorm === 'carrier_user' || roleNorm === 'viewer') {
+  if (roleNorm === 'carrier_user' || roleNorm === 'viewer' || roleNorm === 'inspector') {
     return res.status(403).json({ message: 'شما مجاز به تغییر نوع خودرو نیستید.' });
   }
   const userName = username 

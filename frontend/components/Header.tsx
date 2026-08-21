@@ -104,7 +104,8 @@ const Header: React.FC<HeaderProps> = ({
       // Planning Section - برنامه ریزی (اولین برای PlanningEmployee)
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager] },
       // Freight Management Section - اعلام بار
-      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance], special: 'blinking' },
+      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance, UserRole.Inspection], special: 'blinking' },
+      { view: View.GpsResourceManagement, label: 'منابع GPS', roles: [UserRole.Inspection] },
       { view: View.CarrierManagement, label: 'تعریف باربری', roles: [UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.AmbientBaleNotifySettings, label: 'اعلان بله فروتلند', roles: [UserRole.Transportation_Personal_Vehicle_User, UserRole.Admin] },
       { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance] },
@@ -157,6 +158,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.CarrierManagement, label: 'تعریف باربری', icon: '🚛' },
       { view: View.FreightManagement, label: 'مدیریت اعلام بار', icon: '📦' },
       { view: View.AdminResourceManagement, label: 'مدیریت منابع', icon: '🚛' },
+      { view: View.GpsResourceManagement, label: 'منابع GPS', icon: '📡' },
       { view: View.CityManagement, label: 'مدیریت شهرها', icon: '🏙️' },
       { view: View.FinalizePermissionManagement, label: 'مدیریت دسترسی اتمام تخصیص', icon: '🔐' },
       { view: View.PlanningManagerApprovalPermissionManagement, label: 'مجوز تاییدیه مدیران برنامه‌ریزی', icon: '✅' },
@@ -191,7 +193,7 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                     <div className="flex items-center">
                         <nav className="hidden md:flex items-center flex-wrap gap-x-2 gap-y-1">
-                            {!isTransportDefault && !isTransportRole && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.SalesExpert && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && (
+                            {!isTransportDefault && !isTransportRole && currentUser?.role !== UserRole.BranchFinance && currentUser?.role !== UserRole.PlanningEmployee && currentUser?.role !== UserRole.SalesExpert && currentUser?.role !== UserRole.PlanningManager && currentUser?.role !== UserRole.TransportationFinance && currentUser?.role !== UserRole.Inspection && (
                                 <button onClick={() => onNavigate(defaultDashboardView)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition">داشبورد</button>
                             )}
                             

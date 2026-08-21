@@ -22,6 +22,7 @@ const isTokenExpired = (token: string): boolean => {
 import Header from './components/Header'; // Header همیشه نیاز است
 import Login, { LoginAuthFlags } from './components/Login'; // Login همیشه نیاز است
 import ChangePasswordDialog, { ForcePasswordReason } from './components/ChangePasswordDialog';
+import { isInspectionRole } from './utils/roleAccess';
 
 // Lazy load همه کامپوننت‌های دیگر
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
@@ -63,6 +64,7 @@ const CustomerManagement = React.lazy(() => import('./components/CustomerManagem
 const CarrierManagement = React.lazy(() => import('./components/CarrierManagement'));
 const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
 const AdminResourceManagement = React.lazy(() => import('./components/AdminResourceManagement'));
+const GpsResourceManagement = React.lazy(() => import('./components/GpsResourceManagement'));
 const CityManagement = React.lazy(() => import('./components/CityManagement'));
 const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
 const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
@@ -88,6 +90,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
         case UserRole.TransportationFinance:
             return View.TransportFinanceCalculation; // محاسبه هزینه تور
         case UserRole.Viewer:
+            return View.TransportLive;
+        case UserRole.Inspection:
             return View.TransportLive;
         default:
             return View.Dashboard;
@@ -144,6 +148,7 @@ const App: React.FC = () => {
             case 'allocation': return UserRole.VehicleAllocationExpert;
             case 'insurance': return UserRole.InsuranceExpert;
             case 'viewer': return UserRole.Viewer;
+            case 'inspector': return UserRole.Inspection;
             case 'carrier_user': return UserRole.CarrierUser;
             default: return null;
         }
@@ -723,6 +728,13 @@ const App: React.FC = () => {
                 console.log('[App] Render view:', View.AdminResourceManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <AdminResourceManagement />;
+            case View.GpsResourceManagement:
+                console.log('[App] Render view:', View.GpsResourceManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                if (!hasAccess([UserRole.Admin, UserRole.Inspection])) {
+                    return <div className="p-8 text-center text-red-600">دسترسی به منابع GPS ندارید.</div>;
+                }
+                return <GpsResourceManagement />;
             case View.CityManagement:
                 console.log('[App] Render view:', View.CityManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;

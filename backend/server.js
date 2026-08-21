@@ -177,6 +177,10 @@ app.use('/api/v1/support-tickets', supportTicketRoutes);
 app.use('/api/v1/reports', reportsRoutes);
 // لایه بیرونی یکپارچه‌سازی (فقط‌خواندنی — جدا از API داخلی)
 app.use('/api/v1/integrations', integrationRoutes);
+// منابع GPS (ادمین) — جدا از مدیریت منابع؛ خاموش با GPS_ADMIN_ENABLED=false
+app.use('/api/v1/gps-resources', require('./routes/gpsResourceRoutes'));
+app.use('/api/v1/gps-finance', require('./routes/gpsFinanceRoutes'));
+app.use('/api/v1/gps-live', require('./routes/gpsLiveRoutes'));
 
 // Serve uploaded files - با پشتیبانی از پوشه‌های شعبه
 app.use('/uploads/freight-transactions', express.static(path.join(__dirname, 'uploads', 'freight-transactions')));
@@ -213,6 +217,11 @@ async function runStartupMigrations() {
     { name: 'announcement_week_day', fn: require('./migrations/add_announcement_week_day') },
     { name: 'dairy_arrangement_state', fn: require('./migrations/create_dairy_arrangement_state') },
     { name: 'freight_intake_locks', fn: require('./migrations/create_freight_intake_locks') },
+    { name: 'gps_resources', fn: require('./migrations/create_gps_resources_tables') },
+    { name: 'gps_tour_snapshots', fn: require('./migrations/create_gps_tour_snapshots') },
+    { name: 'gps_tours_summary', fn: require('./migrations/create_gps_tours_summary_tables') },
+    { name: 'mileage_gps_track', fn: require('./migrations/add_mileage_gps_track') },
+    { name: 'inspector_role', fn: require('./migrations/add_inspector_role') },
   ];
 
   for (const step of steps) {
