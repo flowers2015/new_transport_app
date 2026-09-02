@@ -154,7 +154,11 @@ export function buildIceCreamLiveSummary(items: FreightAnnouncement[]): IceCream
 }
 
 export function isShahrLabaniatOrigin(origin?: string | null): boolean {
-    return (origin || '').includes('شهرلبنیات');
+    const n = String(origin || '')
+        .replace(/\s+/g, '')
+        .replace(/ي/g, 'ی')
+        .replace(/ك/g, 'ک');
+    return n.includes('شهرلبنیات') || (n.includes('لبنیات') && n.includes('میهن'));
 }
 
 export function parseHourFromPlatformTime(value?: string | Date | null): number | null {
@@ -170,20 +174,24 @@ export function parseHourFromPlatformTime(value?: string | Date | null): number 
     return h;
 }
 
-/** صبح ۷ تا ۱۹ — شب ۱۹ تا ۷ */
+/** صبح ۷ تا ۱۹ — شب ۱۹ تا ۷ (همان شیفت‌بندی قبلی) */
 export function shiftFromHour(hour: number): 'morning' | 'night' {
     return hour >= 7 && hour < 19 ? 'morning' : 'night';
+}
+
+function announcedLoadingHour(ann: FreightAnnouncement): number | null {
+    for (const d of ann.destinations || []) {
+        const h = parseHourFromPlatformTime(d.platformArrivalTime);
+        if (h != null) return h;
+    }
+    return parseHourFromPlatformTime(ann.platformArrivalTime);
 }
 
 export function announcementLoadingShift(
     ann: FreightAnnouncement
 ): 'morning' | 'night' | 'unknown' {
-    const fromPlatform = parseHourFromPlatformTime(ann.platformArrivalTime);
-    if (fromPlatform != null) return shiftFromHour(fromPlatform);
-    if (ann.loadingStartedAt) {
-        const d = new Date(ann.loadingStartedAt);
-        if (!isNaN(d.getTime())) return shiftFromHour(d.getHours());
-    }
+    const hour = announcedLoadingHour(ann);
+    if (hour != null) return shiftFromHour(hour);
     return 'unknown';
 }
 
@@ -204,7 +212,6 @@ export function buildShahrLabaniatLoadingSummary(items: FreightAnnouncement[]) {
     const night = emptyLoadingCounts();
     const unknown = emptyLoadingCounts();
     for (const ann of items) {
-        if (!isShahrLabaniatOrigin(ann.originCity)) continue;
         bumpLoadingCount(overall, ann.loadingStatus);
         const shift = announcementLoadingShift(ann);
         if (shift === 'morning') bumpLoadingCount(morning, ann.loadingStatus);

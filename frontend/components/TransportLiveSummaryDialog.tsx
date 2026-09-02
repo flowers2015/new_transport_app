@@ -107,7 +107,7 @@ function DairyBody({ summary }: { summary: DairyLiveSummary }) {
         ['شب (۱۹ تا ۷)', sl.night.total, sl.night.completed, sl.night.inProgress, sl.night.notStarted],
     ];
     if (sl.unknown.total > 0) {
-        shiftRows.push(['بدون ساعت حضور', sl.unknown.total, sl.unknown.completed, sl.unknown.inProgress, sl.unknown.notStarted]);
+        shiftRows.push(['بدون ساعت بارگیری اعلام‌شده', sl.unknown.total, sl.unknown.completed, sl.unknown.inProgress, sl.unknown.notStarted]);
     }
     return (
         <div className="space-y-4">
@@ -123,12 +123,12 @@ function DairyBody({ summary }: { summary: DairyLiveSummary }) {
                 />
             </section>
             <section>
-                <h4 className="text-sm font-semibold text-slate-800 mb-2">بارگیری شهرلبنیات برحسب شیفت</h4>
+                <h4 className="text-sm font-semibold text-slate-800 mb-2">بارگیری برحسب شیفت</h4>
                 <p className="text-[11px] text-slate-500 mb-2">
-                    شیفت از ساعت حضور روی سکو. «شروع‌نشده» یعنی هنوز شروع نزده و مانده برای شیفت بعد.
+                    روی همین ردیف‌های جدول (فیلتر تب). ساعت از بارگیری اعلام‌شده / حضور روی سکو. صبح ۷ تا ۱۹ — شب ۱۹ تا ۷.
                 </p>
                 <SummaryTable
-                    headers={['شیفت', 'تعداد بار این شیفت', 'تمام‌شده در همین شیفت', 'در حال بارگیری', 'شروع‌نشده (مانده شیفت بعد)']}
+                    headers={['شیفت', 'تعداد بار این شیفت', 'تمام‌شده در همین شیفت', 'در حال بارگیری', 'شروع‌نشده']}
                     rows={shiftRows}
                 />
             </section>

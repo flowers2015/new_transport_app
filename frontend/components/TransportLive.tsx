@@ -656,14 +656,35 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [hasInProgress]);
     
     // Check if announcement matches any of the keeper warehouses
+    const warehouseCityKey = (s?: string | null) =>
+        String(s || '').replace(/\s+/g, '').replace(/ي/g, 'ی').replace(/ك/g, 'ک');
+
     const canLoadAnnouncement = useCallback((ann: FreightAnnouncement): boolean => {
         if (!isWarehouseKeeper || !myWarehouses.length) return false;
-        // Map announcement line_type (Farsi) to warehouse line_type (English)
         const lineTypeMap: Record<string, string> = {
-            'بستنی': 'Basteni', 'پاستوریزه': 'Pasturized', 'لبنیات-فروتلند': 'Ambient'
+            بستنی: 'Basteni',
+            پاستوریزه: 'Pasturized',
+            Dairy: 'Pasturized',
+            'لبنیات-فروتلند': 'Ambient',
+            Ambient: 'Ambient',
+            IceCream: 'Basteni',
         };
-        const annLineEn = lineTypeMap[ann.lineType] || ann.lineType;
-        return myWarehouses.some(wh => wh.city === ann.originCity && wh.line_type === annLineEn);
+        const annLineEn = lineTypeMap[ann.lineType] || lineTypeMap[String(ann.lineType)] || ann.lineType;
+        const origin = warehouseCityKey(ann.originCity);
+        return myWarehouses.some((wh) => {
+            const lineOk = warehouseCityKey(wh.line_type) === warehouseCityKey(String(annLineEn))
+                || String(wh.line_type) === String(ann.lineType)
+                || String(wh.line_type) === annLineEn;
+            if (!lineOk) return false;
+            const whCity = warehouseCityKey(wh.city);
+            const whName = warehouseCityKey(wh.name);
+            if (!origin) return false;
+            return origin === whCity || origin === whName
+                || (whCity && origin.includes(whCity))
+                || (whName && origin.includes(whName))
+                || (whCity && whCity.includes(origin))
+                || (whName && whName.includes(origin));
+        });
     }, [isWarehouseKeeper, myWarehouses]);
 
     const canEditWarehouseLis = useCallback((ann: FreightAnnouncement): boolean => {
@@ -800,12 +821,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const renderWarehouseLoadingActions = (ann: FreightAnnouncement) => {
         if (!canLoadAnnouncement(ann)) return null;
+        if (!hasDriverAndVehicleAssigned(ann) && getAssignedDriverDisplayName(ann, drivers, personalDrivers) === '-' && ann.loadingStatus !== 'in_progress' && ann.loadingStatus !== 'completed') {
+            return null;
+        }
         const busy = loadingAnnId === ann.id;
         const solid = 'w-full px-2 py-1 rounded-md text-[11px] font-medium text-white';
         const ghost = 'w-full px-2 py-1 rounded-md text-[11px] font-medium border';
-        if (!ann.assignedDriverId) {
-            return <span className="text-slate-400 text-xs">تخصیص نشده</span>;
-        }
         if (ann.loadingStatus === 'in_progress') {
             const elapsed = formatLoadingElapsed(ann.loadingStartedAt);
             const clock = formatLoadingClock(ann.loadingStartedAt);
