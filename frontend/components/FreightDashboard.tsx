@@ -458,6 +458,38 @@ type LastFreightChoices = {
     representativeType?: 'agent' | 'distributor';
 };
 
+const DAIRY_DEFAULT_ORIGIN = 'کارخانه شهرلبنیات';
+const AMBIENT_DEFAULT_ORIGIN = 'انبار مرکزی';
+const PLANNER_PRESET_ORIGINS = [DAIRY_DEFAULT_ORIGIN, AMBIENT_DEFAULT_ORIGIN] as const;
+
+const originNameKey = (s?: string | null) =>
+    String(s || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .replace(/ي/g, 'ی')
+        .replace(/ك/g, 'ک');
+
+/** املای کارخانه/انبار مرکزی را یکی می‌کند؛ بقیه مبدأها دست‌نخورده می‌مانند */
+const canonicalizePlannerOrigin = (raw?: string | null): string => {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return '';
+    if ((PLANNER_PRESET_ORIGINS as readonly string[]).includes(trimmed)) return trimmed;
+    const key = originNameKey(trimmed);
+    if (key.includes('شهرلبنیات') || (key.includes('لبنیات') && key.includes('میهن'))) {
+        return DAIRY_DEFAULT_ORIGIN;
+    }
+    if (key.includes('انبارمرکزی')) return 'انبار مرکزی';
+    return trimmed;
+};
+
+const isPlannerPresetOrigin = (city?: string | null): boolean => {
+    const trimmed = String(city || '').trim();
+    if (!trimmed) return false;
+    if ((PLANNER_PRESET_ORIGINS as readonly string[]).includes(trimmed)) return true;
+    const key = originNameKey(trimmed);
+    return key.includes('شهرلبنیات') || key.includes('انبارمرکزی') || (key.includes('لبنیات') && key.includes('میهن'));
+};
+
 const applyLastFreightChoices = (
     lastChoices: LastFreightChoices | null,
     lineType: FreightLineType,
@@ -486,13 +518,13 @@ const applyLastFreightChoices = (
         loadingType: (lastChoices.loadingType as 'single' | 'double') || 'single',
         originCity1: iceCreamLine
             ? ''
-            : lastChoices.originCity1 ||
+            : canonicalizePlannerOrigin(lastChoices.originCity1) ||
               (lineType === FreightLineType.Dairy
-                  ? 'کارخانه شهر لبنیات'
+                  ? 'کارخانه شهرلبنیات'
                   : lineType === FreightLineType.Ambient
                     ? 'انبار مرکزی'
                     : ''),
-        originCity2: iceCreamLine ? '' : lastChoices.originCity2 || '',
+        originCity2: iceCreamLine ? '' : canonicalizePlannerOrigin(lastChoices.originCity2),
     });
     setters.setBrandState({
         brandType: (lastChoices.brandType as 'single' | 'double') || 'single',
@@ -508,11 +540,6 @@ const applyLastFreightChoices = (
     }
 };
 
-const PLANNER_PRESET_ORIGINS = ['کارخانه شهر لبنیات', 'انبار مرکزی'] as const;
-
-const isPlannerPresetOrigin = (city?: string | null): boolean =>
-    !!city?.trim() && PLANNER_PRESET_ORIGINS.includes(city.trim() as (typeof PLANNER_PRESET_ORIGINS)[number]);
-
 const isOriginCity1Accepted = (city: string, validFromPicker: boolean): boolean => {
     const trimmed = city.trim();
     if (!trimmed) return false;
@@ -525,15 +552,15 @@ const resolvePlannerOriginCity1 = (
     lastChoices?: LastFreightChoices | null
 ): string => {
     if (lastChoices?.originCity1?.trim()) return lastChoices.originCity1.trim();
-    if (lineType === FreightLineType.Dairy) return 'کارخانه شهر لبنیات';
+    if (lineType === FreightLineType.Dairy) return 'کارخانه شهرلبنیات';
     if (lineType === FreightLineType.Ambient) return 'انبار مرکزی';
     return '';
 };
 
-/** مبدا نهایی برای ثبت — اگر خالی باشد پیش‌فرض خط اعمال می‌شود */
+/** مبدا نهایی برای ثبت — پیش‌فرض پاستوریزه کارخانه شهرلبنیات */
 const getEffectiveOriginCity1 = (lineType: FreightLineType, raw: string): string => {
-    const trimmed = raw.trim();
-    if (trimmed) return trimmed;
+    const canonical = canonicalizePlannerOrigin(raw);
+    if (canonical) return canonical;
     return resolvePlannerOriginCity1(lineType, null);
 };
 
@@ -2947,7 +2974,7 @@ const AnnouncementPanel: React.FC<{
                 setOriginCity2Valid(false);
             }
         } else if (effectiveLineType === FreightLineType.Dairy) {
-            setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهر لبنیات', originCity2: '' });
+            setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهرلبنیات', originCity2: '' });
             setBrandState(initialBrandState);
         } else if (effectiveLineType === FreightLineType.Ambient) {
             setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
@@ -3036,6 +3063,15 @@ const AnnouncementPanel: React.FC<{
                             originCity2: ''
                         };
                     }
+                }
+                if (lineType === FreightLineType.Dairy || lineType === FreightLineType.Ambient) {
+                    loadingLocationData = {
+                        ...loadingLocationData,
+                        originCity1:
+                            canonicalizePlannerOrigin(loadingLocationData.originCity1) ||
+                            (lineType === FreightLineType.Dairy ? 'کارخانه شهرلبنیات' : 'انبار مرکزی'),
+                        originCity2: canonicalizePlannerOrigin(loadingLocationData.originCity2),
+                    };
                 }
                 setLoadingLocationState(loadingLocationData);
                 setOriginCity1Valid(!!loadingLocationData.originCity1?.trim());
@@ -3235,7 +3271,7 @@ const AnnouncementPanel: React.FC<{
                     setDestinations,
                 });
             } else if (lineType === FreightLineType.Dairy) {
-                setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهر لبنیات', originCity2: '' });
+                setLoadingLocationState({ loadingType: 'single', originCity1: 'کارخانه شهرلبنیات', originCity2: '' });
             } else if (lineType === FreightLineType.Ambient) {
                 setLoadingLocationState({ loadingType: 'single', originCity1: 'انبار مرکزی', originCity2: '' });
             } else if (lineType === FreightLineType.IceCream) {
@@ -3435,13 +3471,24 @@ const AnnouncementPanel: React.FC<{
         }
 
         const resolvedOriginCity1 = isDairyAmbientLine(lineType)
-            ? getEffectiveOriginCity1(lineType, loadingLocationState.originCity1)
+            ? canonicalizePlannerOrigin(loadingLocationState.originCity1)
             : loadingLocationState.originCity1.trim();
+
+        if (
+            isDairyAmbientLine(lineType) &&
+            !isDraft &&
+            !isOriginCity1Accepted(loadingLocationState.originCity1, originCity1Valid)
+        ) {
+            alert('مبدا بارگیری را از لیست پیشنهادها انتخاب کنید.');
+            return;
+        }
+
+        const resolvedOriginCity2 = canonicalizePlannerOrigin(loadingLocationState.originCity2);
 
         const finalOriginCity = lineType === FreightLineType.IceCream && iceCreamBuilt
             ? iceCreamBuilt.originCity
             : loadingLocationState.loadingType === 'double'
-            ? `${resolvedOriginCity1} و ${loadingLocationState.originCity2}`
+            ? `${resolvedOriginCity1} و ${resolvedOriginCity2 || loadingLocationState.originCity2.trim()}`
             : resolvedOriginCity1;
 
         // برای Dairy و Ambient: فقط مقاصد فعال (پر شده) اعتبارسنجی می‌شوند
@@ -3488,7 +3535,7 @@ const AnnouncementPanel: React.FC<{
         if (!isDraft && lineType !== FreightLineType.IceCream) {
             if (
                 loadingLocationState.loadingType === 'double' &&
-                (!loadingLocationState.originCity2.trim() || !originCity2Valid)
+                !isOriginCity1Accepted(loadingLocationState.originCity2, originCity2Valid)
             ) {
                 alert('مبدا بارگیری دوم را از لیست پیشنهادها انتخاب کنید.');
                 return;
@@ -3664,9 +3711,15 @@ const AnnouncementPanel: React.FC<{
                         lineType === FreightLineType.IceCream
                             ? ''
                             : isDairyAmbientLine(lineType)
-                              ? getEffectiveOriginCity1(lineType, loadingLocationState.originCity1)
+                              ? canonicalizePlannerOrigin(loadingLocationState.originCity1) ||
+                                getEffectiveOriginCity1(lineType, loadingLocationState.originCity1)
                               : loadingLocationState.originCity1,
-                    originCity2: lineType === FreightLineType.IceCream ? '' : loadingLocationState.originCity2 || '',
+                    originCity2:
+                        lineType === FreightLineType.IceCream
+                            ? ''
+                            : canonicalizePlannerOrigin(loadingLocationState.originCity2) ||
+                              loadingLocationState.originCity2 ||
+                              '',
                     brandType: brandState.brandType,
                     brand1: brandState.brand1,
                     brand2: brandState.brand2 || '',
@@ -4287,8 +4340,15 @@ const AnnouncementPanel: React.FC<{
                                             onChange={(city) => {
                                                 if (lockSharedAnnouncementFields) return;
                                                 onRouteQueryChange(city);
-                                                setLoadingLocationState(s => ({ ...s, originCity1: city }));
+                                                setLoadingLocationState((s) => ({ ...s, originCity1: city }));
                                             }}
+                                            onValidityChange={setOriginCity1Valid}
+                                            requireSelection
+                                            presetValues={
+                                                lineType === FreightLineType.Dairy
+                                                    ? [DAIRY_DEFAULT_ORIGIN]
+                                                    : [AMBIENT_DEFAULT_ORIGIN]
+                                            }
                                             disabled={lockSharedAnnouncementFields}
                                             placeholder="جستجوی مبدا..."
                                             className="input-style mt-1 w-full"
@@ -4304,8 +4364,15 @@ const AnnouncementPanel: React.FC<{
                                                 onChange={(city) => {
                                                     if (lockSharedAnnouncementFields) return;
                                                     onRouteQueryChange(city);
-                                                    setLoadingLocationState(s => ({ ...s, originCity1: city }));
+                                                    setLoadingLocationState((s) => ({ ...s, originCity1: city }));
                                                 }}
+                                                onValidityChange={setOriginCity1Valid}
+                                                requireSelection
+                                                presetValues={
+                                                lineType === FreightLineType.Dairy
+                                                    ? [DAIRY_DEFAULT_ORIGIN]
+                                                    : [AMBIENT_DEFAULT_ORIGIN]
+                                            }
                                                 disabled={lockSharedAnnouncementFields}
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"
@@ -4319,10 +4386,15 @@ const AnnouncementPanel: React.FC<{
                                                 onChange={(city) => {
                                                     if (lockSharedAnnouncementFields) return;
                                                     onRouteQueryChange(city);
-                                                    setLoadingLocationState(s => ({ ...s, originCity2: city }));
+                                                    setLoadingLocationState((s) => ({ ...s, originCity2: city }));
                                                 }}
                                                 onValidityChange={setOriginCity2Valid}
                                                 requireSelection
+                                                presetValues={
+                                                lineType === FreightLineType.Dairy
+                                                    ? [DAIRY_DEFAULT_ORIGIN]
+                                                    : [AMBIENT_DEFAULT_ORIGIN]
+                                            }
                                                 disabled={lockSharedAnnouncementFields}
                                                 placeholder="جستجوی مبدا..."
                                                 className="input-style mt-1 w-full"

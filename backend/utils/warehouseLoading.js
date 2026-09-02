@@ -22,15 +22,34 @@ function linesMatch(warehouseLine, announcementLine) {
   );
 }
 
+function cityKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک');
+}
+
+function isShahrLabaniatPlace(value) {
+  const n = cityKey(value);
+  return n.includes('شهرلبنیات') || (n.includes('لبنیات') && n.includes('میهن'));
+}
+
 function citiesMatch(warehouseCity, originCity) {
-  return String(warehouseCity || '').trim() === String(originCity || '').trim();
+  const w = cityKey(warehouseCity);
+  const o = cityKey(originCity);
+  if (!w || !o) return false;
+  if (w === o) return true;
+  if (isShahrLabaniatPlace(warehouseCity) && isShahrLabaniatPlace(originCity)) return true;
+  return o.includes(w) || w.includes(o);
 }
 
 function warehouseMatchesAnnouncement(warehouse, announcement) {
-  return (
-    citiesMatch(warehouse && warehouse.city, announcement && announcement.origin_city) &&
-    linesMatch(warehouse && warehouse.line_type, announcement && announcement.line_type)
-  );
+  const origin = announcement && announcement.origin_city;
+  const cityOk =
+    citiesMatch(warehouse && warehouse.city, origin) ||
+    citiesMatch(warehouse && warehouse.name, origin);
+  return cityOk && linesMatch(warehouse && warehouse.line_type, announcement && announcement.line_type);
 }
 
 function loadingStatusOf(row) {

@@ -92,6 +92,7 @@ import {
     type ColumnFiltersState,
     type SortDirection,
 } from '../utils/transportLiveFilters';
+import { isShahrLabaniatOrigin } from '../utils/transportLiveSummary';
 import { getApiUrl } from '../utils/apiConfig';
 import {
     buildExcelFileName,
@@ -679,6 +680,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             const whCity = warehouseCityKey(wh.city);
             const whName = warehouseCityKey(wh.name);
             if (!origin) return false;
+            if (
+                isShahrLabaniatOrigin(ann.originCity) &&
+                (isShahrLabaniatOrigin(wh.city) || isShahrLabaniatOrigin(wh.name))
+            ) {
+                return true;
+            }
             return origin === whCity || origin === whName
                 || (whCity && origin.includes(whCity))
                 || (whName && origin.includes(whName))

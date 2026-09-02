@@ -67,6 +67,30 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
     const presetValues = presetValuesProp ?? EMPTY_PRESET_VALUES;
     const isPresetValue = (text: string) =>
         presetValues.some((p) => p.trim() === text.trim());
+
+    const presetOptionsFor = (searchQuery: string): CityOption[] => {
+        const q = searchQuery.trim();
+        const qKey = q.replace(/\s+/g, '');
+        return presetValues
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .filter((p) => {
+                if (!q) return true;
+                const pKey = p.replace(/\s+/g, '');
+                return p.includes(q) || pKey.includes(qKey);
+            })
+            .map((p) => ({ id: `preset:${p}`, city: p }));
+    };
+
+    const mergeWithPresets = (apiItems: CityOption[], searchQuery: string): CityOption[] => {
+        const merged = new Map<string, CityOption>();
+        for (const p of presetOptionsFor(searchQuery)) merged.set(p.city, p);
+        for (const item of apiItems) {
+            if (item.city && !merged.has(item.city)) merged.set(item.city, item);
+        }
+        return Array.from(merged.values());
+    };
+
     const [query, setQuery] = useState(safeValue);
     const [suggestions, setSuggestions] = useState<CityOption[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -80,16 +104,15 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
         const next = value ?? '';
         // هنگام تایپ کاربر query را با value همگام نکن (جلوگیری از چشمک‌زدن)
         if (inputRef.current === document.activeElement) {
-            if (requireSelection && next.trim()) {
-                onValidityChange?.(true);
-                setInvalid(false);
-            }
             return;
         }
         setQuery(next);
-        if (requireSelection && next.trim()) {
-            onValidityChange?.(true);
-            setInvalid(false);
+        if (requireSelection) {
+            const ok = !!next.trim() && isPresetValue(next);
+            if (ok) {
+                onValidityChange?.(true);
+                setInvalid(false);
+            }
         }
     }, [value, requireSelection]);
 
@@ -131,9 +154,14 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
     }, [showSuggestions, inModal, suggestions]);
 
     const fetchCities = async (searchQuery: string) => {
-        if (searchQuery.length < 2) {
-            setSuggestions([]);
-            setShowSuggestions(false);
+        const applyLocal = (apiItems: CityOption[] = []) => {
+            const merged = mergeWithPresets(apiItems, searchQuery);
+            setSuggestions(merged);
+            setShowSuggestions(merged.length > 0);
+        };
+
+        if (searchQuery.trim().length < 2) {
+            applyLocal([]);
             setIsLoading(false);
             return;
         }
@@ -179,19 +207,13 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
                             });
                         }
                     });
-                    setSuggestions(Array.from(uniqueCities.values()));
-                    setShowSuggestions(uniqueCities.size > 0);
-                } else {
-                    setSuggestions([]);
-                    setShowSuggestions(false);
                 }
+                applyLocal(Array.from(uniqueCities.values()));
             } else {
-                setSuggestions([]);
-                setShowSuggestions(false);
+                applyLocal([]);
             }
         } catch {
-            setSuggestions([]);
-            setShowSuggestions(false);
+            applyLocal([]);
         } finally {
             setIsLoading(false);
         }
@@ -199,17 +221,14 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
 
     const scheduleFetch = (searchQuery: string) => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if (searchQuery.length === 0) {
-            setSuggestions([]);
-            setShowSuggestions(false);
+        if (searchQuery.trim().length < 2) {
+            const merged = mergeWithPresets([], searchQuery);
+            setSuggestions(merged);
+            setShowSuggestions(merged.length > 0);
             setIsLoading(false);
             return;
         }
-        if (searchQuery.length >= 2) {
-            timeoutRef.current = setTimeout(() => fetchCities(searchQuery), 300);
-        } else {
-            setIsLoading(false);
-        }
+        timeoutRef.current = setTimeout(() => fetchCities(searchQuery), 300);
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,9 +265,12 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
 
     const handleInputFocus = () => {
         const q = requireSelection ? query : safeValue;
-        if (q.length >= 2 && suggestions.length > 0) {
+        const local = mergeWithPresets(suggestions, q);
+        if (local.length > 0) {
+            setSuggestions(local);
             setShowSuggestions(true);
-        } else if (q.length >= 2) {
+        }
+        if (q.trim().length >= 2) {
             fetchCities(q);
         }
         if (inModal) updateMenuPosition();
@@ -317,7 +339,7 @@ const CityAutocomplete: React.FC<CityAutocompleteProps> = ({
             />
 
             {invalid && (
-                <p className="text-[10px] text-red-600 mt-0.5">شهر را از لیست پیشنهادها انتخاب کنید.</p>
+                <p className="text-[10px] text-red-600 mt-0.5">از لیست پیشنهادها انتخاب کنید.</p>
             )}
 
             {isLoading && (
