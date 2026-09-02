@@ -17,7 +17,7 @@ const HISTORY_STATUS_MAP: Record<string, FreightAnnouncementStatus> = {
     ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
 };
 
-const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
+export const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
     return {
         id: a.id,
         announcementCode: a.announcement_code || a.announcementCode,
@@ -111,7 +111,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
     
     // فیلترهای جستجو - بدون تاریخ پیش‌فرض (خالی باشد تا همه را نشان بده)
-    const [filterDate, setFilterDate] = useState<string>(''); // تاریخ شمسی: خالی = همه
+    const [filterDate, setFilterDate] = useState<string>(''); // تاریخ شمسی اعلام بار: خالی = همه
+    const [filterLoadingDate, setFilterLoadingDate] = useState<string>(''); // تاریخ بارگیری
     const [filterDestination, setFilterDestination] = useState<string>('');
     const [filterBillOfLading, setFilterBillOfLading] = useState<string>(''); // شماره بارنامه
     const [filterDriverName, setFilterDriverName] = useState<string>(''); // نام راننده
@@ -121,7 +122,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
-    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, creatorName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50) => {
+    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, creatorName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50, loadingDate?: string) => {
         setLoading(true);
         setError(null);
         try {
@@ -131,6 +132,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             // ساخت query string برای فیلترها - فقط اگر مقدار داشته باشند
             const params = new URLSearchParams();
             if (date && date.trim()) params.append('date', date.trim());
+            if (loadingDate && loadingDate.trim()) params.append('loadingDate', loadingDate.trim());
             if (destination && destination.trim()) params.append('destination', destination.trim());
             if (billOfLading && billOfLading.trim()) params.append('billOfLading', billOfLading.trim());
             if (driverName && driverName.trim()) params.append('driverName', driverName.trim());
@@ -213,6 +215,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                 const params = new URLSearchParams();
                 if (opts.dateFrom?.trim()) params.append('dateFrom', opts.dateFrom.trim().replace(/-/g, '/'));
                 if (opts.dateTo?.trim()) params.append('dateTo', opts.dateTo.trim().replace(/-/g, '/'));
+                if (filterDate?.trim()) params.append('date', filterDate.trim());
+                if (filterLoadingDate?.trim()) params.append('loadingDate', filterLoadingDate.trim());
                 if (filterDestination?.trim()) params.append('destination', filterDestination.trim());
                 if (filterBillOfLading?.trim()) params.append('billOfLading', filterBillOfLading.trim());
                 if (filterDriverName?.trim()) params.append('driverName', filterDriverName.trim());
@@ -244,6 +248,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
         },
         [
             activeLine,
+            filterDate,
+            filterLoadingDate,
             filterDestination,
             filterBillOfLading,
             filterDriverName,
@@ -268,12 +274,14 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterCreatorName?.trim() || undefined,
             activeLine, // فقط برای تب فعلی
             1, // Reset to first page
-            itemsPerPage
+            itemsPerPage,
+            filterLoadingDate?.trim() || undefined
         );
     };
 
     const handleClearFilters = () => {
         setFilterDate('');
+        setFilterLoadingDate('');
         setFilterDestination('');
         setFilterBillOfLading('');
         setFilterDriverName('');
@@ -292,7 +300,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterCreatorName?.trim() || undefined,
             activeLine,
             newPage,
-            itemsPerPage
+            itemsPerPage,
+            filterLoadingDate?.trim() || undefined
         );
     };
     
@@ -307,7 +316,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterCreatorName?.trim() || undefined,
             activeLine,
             1,
-            newLimit
+            newLimit,
+            filterLoadingDate?.trim() || undefined
         );
     };
 
@@ -326,6 +336,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setActiveLine={setActiveLine}
             filterDate={filterDate}
             setFilterDate={setFilterDate}
+            filterLoadingDate={filterLoadingDate}
+            setFilterLoadingDate={setFilterLoadingDate}
             filterDestination={filterDestination}
             setFilterDestination={setFilterDestination}
             filterBillOfLading={filterBillOfLading}

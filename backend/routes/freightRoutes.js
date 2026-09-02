@@ -41,6 +41,7 @@ const {
   getVehicleTypes,
   changeVehicleType,
   updateIceCreamDisplayOrder,
+  checkDuplicateBillOfLading,
 } = require('../controllers/freightController');
 const {
   referToCarrier,
@@ -82,6 +83,9 @@ router.get('/', authenticateToken, getFreightAnnouncements);
 
 // Get freight history (Finalized announcements) with filters
 router.get('/history', authenticateToken, getFreightHistory);
+
+// تکراری بودن شماره بارنامه در سه ماه اخیر (شامل آرشیو)
+router.get('/bill-of-lading-duplicates', authenticateToken, checkDuplicateBillOfLading);
 
 // Get transport statistics for dashboard
 router.get('/statistics', authenticateToken, getTransportStatistics);
@@ -173,7 +177,7 @@ router.put(
 router.get(
   '/:id/history',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'viewer', 'inspector', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'viewer', 'inspector', 'warehouse_keeper', 'admin']),
   getFreightAnnouncementHistory
 );
 
@@ -225,7 +229,7 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'warehouse_keeper', 'admin']),
   updateFreightAnnouncement
 );
 

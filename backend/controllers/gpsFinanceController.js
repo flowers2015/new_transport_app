@@ -1,18 +1,19 @@
 const crypto = require('crypto');
 const pool = require('../db');
 const { jalaliToGregorian, formatJalali } = require('../utils/jalali');
-const { isKingGpsConfigured, getMessages, getEvents, formatDt } = require('../services/kingGpsClient');
+const { isKingGpsConfigured, getMessages, formatDt } = require('../services/kingGpsClient');
 const {
-  parseZoneEvents,
-  parseRawEvents,
-  detectTours,
   intervalsOverlap,
   parseTime,
   buildZoneDebug,
   enrichTourDrivingStats,
-  summarizeEventOnlyTour,
   takeSamplePoints,
 } = require('../services/gpsTourAnalyzer');
+const {
+  loadToursOverlapping,
+  fetchAndUpsertVehicle,
+} = require('../services/gpsTourCatalog');
+const { isGpsIngestEnabled, getLatestIngestStatus, runFleetIngest } = require('../services/gpsFleetIngest');
 
 function newId() {
   return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
@@ -72,10 +73,6 @@ function toTehranDisplay(dt) {
   }
 }
 
-function tourKey(imei, startTime, endTime) {
-  return crypto.createHash('sha1').update(`${imei}|${startTime}|${endTime}`).digest('hex');
-}
-
 function normalizeJson(value, fallback = null) {
   if (value == null) return fallback;
   if (typeof value === 'object') return value;
@@ -93,10 +90,27 @@ function toNum(value) {
 }
 
 async function getStatus(req, res) {
+  const lastIngest = await getLatestIngestStatus().catch(() => null);
   return res.json({
     enabled: isGpsFinanceEnabled(),
     kingConfigured: isKingGpsConfigured(),
+    ingestEnabled: isGpsIngestEnabled(),
+    ingestSlots: ['06:30', '09:00', '12:00', '16:00'],
+    ingestLookbackDays: 4,
+    lastIngest,
   });
+}
+
+async function triggerFleetIngest(req, res) {
+  try {
+    const result = await runFleetIngest({
+      slot: 'manual',
+      triggerSource: 'manual',
+    });
+    return res.json({ ok: !result.error, ...result });
+  } catch (err) {
+    return res.status(500).json({ message: err?.message || 'خطا در اجرای ingest' });
+  }
 }
 
 async function resolveImei(vehicleCode, assetKind) {
@@ -199,6 +213,8 @@ function buildToursResponseFromRows(rows) {
             stopBreakdown: hasBreakdown ? breakdown : null,
             unloadStops: hasBreakdown ? breakdown.unloadStops || [] : null,
             legalIntervals: hasBreakdown ? breakdown.legalIntervals || [] : null,
+            overspeedDetails: normalizeJson(row.overspeed_details_json, []),
+            fuelEvents: normalizeJson(row.fuel_events_json, null) || [],
           };
         })()
       : null;
@@ -254,145 +270,6 @@ function buildToursResponseFromRows(rows) {
   });
 }
 
-async function upsertToursAndLoad(imei, vehicleCode, tours, rawEvents) {
-  for (const t of tours || []) {
-    const eventSummary = summarizeEventOnlyTour(t, rawEvents);
-    const key = tourKey(imei, t.startTime, t.endTime);
-    await pool.query(
-      `
-      INSERT INTO gps_tours (
-        id, tour_key, vehicle_code, imei,
-        start_hub, end_hub, tour_start, tour_end,
-        unload_stations_json, zone_markers_json,
-        odo_start_can, odo_end_can, odo_start_gps, odo_end_gps,
-        mileage_can, mileage_gps, mileage_go, mileage_back,
-        hours_to_dest, hours_back, hours_total,
-        fuel_start_total, fuel_end_total, fuel_used_total,
-        tank_level_start, tank_level_end,
-        engine_temp_start, engine_temp_end, engine_temp_start_source, engine_temp_end_source,
-        air_temp_start, air_temp_end, air_temp_start_source, air_temp_end_source,
-        overspeed_count_events, stopped_count_events, raw_flags
-      ) VALUES (
-        $1,$2,$3,$4,
-        $5,$6,$7,$8,
-        $9::jsonb,$10::jsonb,
-        $11,$12,$13,$14,
-        $15,$16,$17,$18,
-        $19,$20,$21,
-        $22,$23,$24,
-        $25,$26,
-        $27,$28,$29,$30,
-        $31,$32,$33,$34,
-        $35,$36,$37::jsonb
-      )
-      ON CONFLICT (tour_key) DO UPDATE SET
-        vehicle_code = EXCLUDED.vehicle_code,
-        start_hub = EXCLUDED.start_hub,
-        end_hub = EXCLUDED.end_hub,
-        tour_start = EXCLUDED.tour_start,
-        tour_end = EXCLUDED.tour_end,
-        unload_stations_json = EXCLUDED.unload_stations_json,
-        zone_markers_json = EXCLUDED.zone_markers_json,
-        odo_start_can = EXCLUDED.odo_start_can,
-        odo_end_can = EXCLUDED.odo_end_can,
-        odo_start_gps = EXCLUDED.odo_start_gps,
-        odo_end_gps = EXCLUDED.odo_end_gps,
-        mileage_can = EXCLUDED.mileage_can,
-        mileage_gps = EXCLUDED.mileage_gps,
-        mileage_go = EXCLUDED.mileage_go,
-        mileage_back = EXCLUDED.mileage_back,
-        hours_to_dest = EXCLUDED.hours_to_dest,
-        hours_back = EXCLUDED.hours_back,
-        hours_total = EXCLUDED.hours_total,
-        fuel_start_total = EXCLUDED.fuel_start_total,
-        fuel_end_total = EXCLUDED.fuel_end_total,
-        fuel_used_total = EXCLUDED.fuel_used_total,
-        tank_level_start = EXCLUDED.tank_level_start,
-        tank_level_end = EXCLUDED.tank_level_end,
-        engine_temp_start = EXCLUDED.engine_temp_start,
-        engine_temp_end = EXCLUDED.engine_temp_end,
-        engine_temp_start_source = EXCLUDED.engine_temp_start_source,
-        engine_temp_end_source = EXCLUDED.engine_temp_end_source,
-        air_temp_start = EXCLUDED.air_temp_start,
-        air_temp_end = EXCLUDED.air_temp_end,
-        air_temp_start_source = EXCLUDED.air_temp_start_source,
-        air_temp_end_source = EXCLUDED.air_temp_end_source,
-        overspeed_count_events = EXCLUDED.overspeed_count_events,
-        stopped_count_events = EXCLUDED.stopped_count_events,
-        raw_flags = EXCLUDED.raw_flags,
-        updated_at = NOW()
-      `,
-      [
-        newId(),
-        key,
-        vehicleCode || null,
-        String(imei),
-        t.startHub || null,
-        t.endHub || null,
-        parseTime(t.startTime)?.toISOString() || t.startTime,
-        parseTime(t.endTime)?.toISOString() || t.endTime,
-        JSON.stringify(t.unloadDetails || []),
-        JSON.stringify(eventSummary.zoneMarkers || []),
-        t.startOdoCan ?? null,
-        t.endOdoCan ?? null,
-        t.startOdo ?? null,
-        t.endOdo ?? null,
-        t.mileageCan ?? null,
-        t.mileageGps ?? null,
-        t.mileageGo ?? null,
-        t.mileageBack ?? null,
-        t.hoursToDest ?? null,
-        t.hoursBack ?? null,
-        t.hoursTotal ?? null,
-        eventSummary.fuelStartTotal ?? null,
-        eventSummary.fuelEndTotal ?? null,
-        eventSummary.fuelUsedTotal ?? null,
-        eventSummary.tankLevelStart ?? null,
-        eventSummary.tankLevelEnd ?? null,
-        eventSummary.engineTempStart ?? null,
-        eventSummary.engineTempEnd ?? null,
-        eventSummary.engineTempStartSource ?? null,
-        eventSummary.engineTempEndSource ?? null,
-        eventSummary.airTempStart ?? null,
-        eventSummary.airTempEnd ?? null,
-        eventSummary.airTempStartSource ?? null,
-        eventSummary.airTempEndSource ?? null,
-        eventSummary.overspeedCountEvents ?? 0,
-        eventSummary.stoppedCountEvents ?? 0,
-        JSON.stringify(eventSummary.rawFlags || {}),
-      ]
-    );
-  }
-
-  if (!tours.length) return [];
-  const keys = tours.map((t) => tourKey(imei, t.startTime, t.endTime));
-  const { rows } = await pool.query(
-    `
-    SELECT
-      t.*,
-      d.id AS detail_id,
-      d.driving_hours,
-      d.driving_percent,
-      d.total_duration_hours,
-      d.stop_inside_h,
-      d.stop_outside_h,
-      d.stop_legal_h,
-      d.overspeed_rule_count,
-      d.max_speed AS detail_max_speed,
-      d.fuel_l_per_100km,
-      d.computed_at AS detail_computed_at,
-      d.sample_points_json,
-      d.stop_breakdown_json
-    FROM gps_tours t
-    LEFT JOIN gps_tour_details d ON d.tour_id = t.id
-    WHERE t.tour_key = ANY($1::text[])
-    ORDER BY t.tour_start ASC
-    `,
-    [keys]
-  );
-  return rows;
-}
-
 async function calculateTours(req, res) {
   try {
     const vehicleCode = String(req.body?.vehicleCode || '').trim();
@@ -442,34 +319,52 @@ async function calculateTours(req, res) {
     const toStr = formatDt(toDt);
     const timings = {};
     const t0 = Date.now();
-    const tEvents = Date.now();
-    const eventsRaw = await getEvents(imei, fromStr, toStr);
-    timings.eventsMs = Date.now() - tEvents;
+    const forceLive = req.body?.live === true || req.body?.live === '1';
+    let servedFrom = 'catalog';
+    let storedRows = [];
+    let eventsRaw = [];
+    let zoneEvents = [];
+    let tours = [];
 
-    if (eventsRaw && eventsRaw.error) {
-      console.error('❌ [gps-finance] King events:', eventsRaw.error);
-      return res.status(502).json({
-        message: eventsRaw.error || 'خطا در دریافت رویداد GPS',
-        kingError: true,
-        kingUnreachable: true,
-        timings,
-        debug: {
-          hint: eventsRaw.error,
-          searchFrom: fromStr,
-          searchTo: toStr,
-          timings,
-          rawEventCount: 0,
-          zoneEventCount: 0,
-          tourCount: 0,
-          kingUnreachable: true,
-        },
-      });
+    if (!forceLive) {
+      storedRows = await loadToursOverlapping(imei, fromDt, toDt);
+      timings.catalogMs = Date.now() - t0;
     }
 
-    const rawEvents = parseRawEvents(Array.isArray(eventsRaw) ? eventsRaw : []);
-    const zoneEvents = parseZoneEvents(Array.isArray(eventsRaw) ? eventsRaw : []);
-    const tours = detectTours(zoneEvents, []);
-    const storedRows = await upsertToursAndLoad(imei, imeiRow.vehicle_code || vehicleCode, tours, rawEvents);
+    if (forceLive || !storedRows.length) {
+      servedFrom = 'king';
+      const ingested = await fetchAndUpsertVehicle({
+        imei,
+        vehicleCode: imeiRow.vehicle_code || vehicleCode,
+        fromDt,
+        toDt,
+      });
+      timings.eventsMs = ingested.eventsMs;
+      if (!ingested.ok) {
+        console.error('❌ [gps-finance] King events:', ingested.error);
+        return res.status(502).json({
+          message: ingested.error || 'خطا در دریافت رویداد GPS',
+          kingError: true,
+          kingUnreachable: true,
+          timings,
+          debug: {
+            hint: ingested.error,
+            searchFrom: fromStr,
+            searchTo: toStr,
+            timings,
+            rawEventCount: 0,
+            zoneEventCount: 0,
+            tourCount: 0,
+            kingUnreachable: true,
+          },
+        });
+      }
+      storedRows = ingested.rows;
+      eventsRaw = ingested.eventsRaw || [];
+      zoneEvents = ingested.zoneEvents || [];
+      tours = ingested.tours || [];
+    }
+
     const used = await getUsedIntervals(imeiRow.vehicle_code || vehicleCode, announcementId);
     const candidates = buildToursResponseFromRows(storedRows).map((t) => {
       const start = parseTime(t.startTime);
@@ -479,18 +374,27 @@ async function calculateTours(req, res) {
     });
 
     timings.totalMs = Date.now() - t0;
-    const debug = buildZoneDebug(eventsRaw, zoneEvents, tours);
+    const debug = servedFrom === 'king'
+      ? buildZoneDebug(eventsRaw, zoneEvents, tours)
+      : {
+          rawEventCount: 0,
+          zoneEventCount: 0,
+          tourCount: candidates.length,
+          hint: 'از سینی ingest دیتابیس',
+        };
     debug.timings = timings;
     debug.includeTelemetry = false;
     debug.searchFrom = fromStr;
     debug.searchTo = toStr;
+    debug.servedFrom = servedFrom;
 
     console.log(
-      `📡 [gps-finance] IMEI=${imei} code=${vehicleCode} events=${debug.rawEventCount} msgs=0 tours=${candidates.length} ${timings.totalMs}ms`
+      `📡 [gps-finance] IMEI=${imei} code=${vehicleCode} from=${servedFrom} tours=${candidates.length} ${timings.totalMs}ms`
     );
 
     return res.json({
       enabled: true,
+      servedFrom,
       vehicleCode: imeiRow.vehicle_code || vehicleCode,
       imei,
       assetKind: imeiRow.asset_kind,
@@ -512,6 +416,47 @@ async function calculateTours(req, res) {
   }
 }
 
+function decorateFuelEvents(events) {
+  return (events || []).map((e) => {
+    const atDisp = toTehranDisplay(e.atIso);
+    const startDisp = toTehranDisplay(e.startIso);
+    return {
+      ...e,
+      atJalali: atDisp?.jalali || null,
+      atTime: atDisp?.time || null,
+      startJalali: startDisp?.jalali || null,
+      startTime: startDisp?.time || null,
+    };
+  });
+}
+
+function detailPayloadFromRow(row, tourId, tourIn) {
+  const breakdown = normalizeJson(row.stop_breakdown_json, {}) || {};
+  return {
+    tourId,
+    drivingHours: toNum(row.driving_hours),
+    drivingPercent: toNum(row.driving_percent),
+    totalDurationHours: toNum(row.total_duration_hours) ?? tourIn?.hoursTotal ?? null,
+    stopTotalHours: toNum(row.stop_inside_h),
+    stopUnloadHours: toNum(breakdown.stopUnloadHours),
+    stopLegalHours: toNum(row.stop_legal_h),
+    stopEnRouteHours: toNum(row.stop_outside_h),
+    stopInsideHours: toNum(row.stop_inside_h),
+    stopOutsideHours: toNum(row.stop_outside_h),
+    unloadStops: breakdown.unloadStops || [],
+    legalIntervals: breakdown.legalIntervals || [],
+    stopBreakdown: breakdown,
+    overspeedRuleCount: toNum(row.overspeed_rule_count) ?? 0,
+    maxSpeed: toNum(row.max_speed) ?? 0,
+    overspeedDetails: normalizeJson(row.overspeed_details_json, []),
+    fuelLPer100Km: toNum(row.fuel_l_per_100km),
+    mileageGpsTrack: tourIn?.mileageGpsTrack ?? null,
+    samplePoints: normalizeJson(row.sample_points_json, []),
+    fuelEvents: normalizeJson(row.fuel_events_json, []) || [],
+    computedAt: row.computed_at || null,
+  };
+}
+
 async function computeAndPersistTourDetails(imei, tourId, tourIn) {
   const start = parseTime(tourIn?.startTime);
   const end = parseTime(tourIn?.endTime);
@@ -520,6 +465,24 @@ async function computeAndPersistTourDetails(imei, tourId, tourIn) {
   }
 
   const t0 = Date.now();
+  try {
+    const cached = await pool.query(
+      `SELECT * FROM gps_tour_details WHERE tour_id = $1 AND fuel_events_json IS NOT NULL LIMIT 1`,
+      [tourId]
+    );
+    if (cached.rows[0]) {
+      return {
+        ok: true,
+        cached: true,
+        messageCount: 0,
+        timings: { totalMs: Date.now() - t0 },
+        detail: detailPayloadFromRow(cached.rows[0], tourId, tourIn),
+      };
+    }
+  } catch (e) {
+    console.warn('⚠️ [gps-finance] detail cache lookup skipped:', e.message);
+  }
+
   const messagesResult = await getMessages(imei, formatDt(start), formatDt(end));
   if (messagesResult && messagesResult.error && !Array.isArray(messagesResult)) {
     return { ok: false, error: messagesResult.error, timings: { totalMs: Date.now() - t0 } };
@@ -590,11 +553,13 @@ async function computeAndPersistTourDetails(imei, tourId, tourIn) {
     INSERT INTO gps_tour_details (
       id, tour_id, driving_hours, driving_percent, total_duration_hours,
       stop_inside_h, stop_outside_h, stop_legal_h,
-      overspeed_rule_count, max_speed, fuel_l_per_100km, sample_points_json, stop_breakdown_json, computed_at
+      overspeed_rule_count, max_speed, fuel_l_per_100km, sample_points_json, stop_breakdown_json,
+      overspeed_details_json, fuel_events_json, computed_at
     ) VALUES (
       $1,$2,$3,$4,$5,
       $6,$7,$8,
-      $9,$10,$11,$12::jsonb,$13::jsonb,NOW()
+      $9,$10,$11,$12::jsonb,$13::jsonb,
+      $14::jsonb,$15::jsonb,NOW()
     )
     ON CONFLICT (tour_id) DO UPDATE SET
       driving_hours = EXCLUDED.driving_hours,
@@ -608,6 +573,8 @@ async function computeAndPersistTourDetails(imei, tourId, tourIn) {
       fuel_l_per_100km = EXCLUDED.fuel_l_per_100km,
       sample_points_json = EXCLUDED.sample_points_json,
       stop_breakdown_json = EXCLUDED.stop_breakdown_json,
+      overspeed_details_json = EXCLUDED.overspeed_details_json,
+      fuel_events_json = EXCLUDED.fuel_events_json,
       computed_at = NOW()
     `,
     [
@@ -624,9 +591,12 @@ async function computeAndPersistTourDetails(imei, tourId, tourIn) {
       fuelLPer100Km,
       JSON.stringify(samplePoints),
       JSON.stringify(stopBreakdown),
+      JSON.stringify(enriched.overspeedDetails || []),
+      JSON.stringify(decorateFuelEvents(enriched.fuelEvents || [])),
     ]
   );
 
+  const fuelEvents = decorateFuelEvents(enriched.fuelEvents || []);
   const detail = {
     tourId,
     drivingHours: enriched.drivingHours ?? null,
@@ -643,9 +613,11 @@ async function computeAndPersistTourDetails(imei, tourId, tourIn) {
     stopBreakdown,
     overspeedRuleCount: enriched.overspeedCount ?? 0,
     maxSpeed: enriched.maxSpeed ?? 0,
+    overspeedDetails: enriched.overspeedDetails || [],
     fuelLPer100Km,
     mileageGpsTrack: enriched.mileageGpsTrack ?? null,
     samplePoints,
+    fuelEvents,
     computedAt: new Date().toISOString(),
   };
 
@@ -840,6 +812,7 @@ module.exports = {
   isGpsFinanceEnabled,
   requireGpsFinance,
   getStatus,
+  triggerFleetIngest,
   calculateTours,
   enrichDriving,
   applyTourSelection,

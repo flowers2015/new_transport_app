@@ -101,18 +101,38 @@ function IceCreamBody({ summary }: { summary: IceCreamLiveSummary }) {
 }
 
 function DairyBody({ summary }: { summary: DairyLiveSummary }) {
+    const sl = summary.shahrLabaniatLoading;
+    const shiftRows: Array<Array<string | number>> = [
+        ['صبح (۷ تا ۱۹)', sl.morning.total, sl.morning.completed, sl.morning.inProgress, sl.morning.notStarted],
+        ['شب (۱۹ تا ۷)', sl.night.total, sl.night.completed, sl.night.inProgress, sl.night.notStarted],
+    ];
+    if (sl.unknown.total > 0) {
+        shiftRows.push(['بدون ساعت حضور', sl.unknown.total, sl.unknown.completed, sl.unknown.inProgress, sl.unknown.notStarted]);
+    }
     return (
-        <section>
-            <h4 className="text-sm font-semibold text-slate-800 mb-2">وضعیت تخصیص</h4>
-            <SummaryTable
-                headers={['وضعیت', 'تعداد']}
-                rows={[
-                    ['تخصیص انجام‌شده', summary.assigned],
-                    ['تخصیص انجام‌نشده', summary.unassigned],
-                    ['جمع', summary.total],
-                ]}
-            />
-        </section>
+        <div className="space-y-4">
+            <section>
+                <h4 className="text-sm font-semibold text-slate-800 mb-2">وضعیت تخصیص</h4>
+                <SummaryTable
+                    headers={['وضعیت', 'تعداد']}
+                    rows={[
+                        ['تخصیص انجام‌شده', summary.assigned],
+                        ['تخصیص انجام‌نشده', summary.unassigned],
+                        ['جمع', summary.total],
+                    ]}
+                />
+            </section>
+            <section>
+                <h4 className="text-sm font-semibold text-slate-800 mb-2">بارگیری شهرلبنیات برحسب شیفت</h4>
+                <p className="text-[11px] text-slate-500 mb-2">
+                    شیفت از ساعت حضور روی سکو. «شروع‌نشده» یعنی هنوز شروع نزده و مانده برای شیفت بعد.
+                </p>
+                <SummaryTable
+                    headers={['شیفت', 'تعداد بار این شیفت', 'تمام‌شده در همین شیفت', 'در حال بارگیری', 'شروع‌نشده (مانده شیفت بعد)']}
+                    rows={shiftRows}
+                />
+            </section>
+        </div>
     );
 }
 

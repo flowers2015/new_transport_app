@@ -1,0 +1,81 @@
+const LINE_PAIRS = [
+  ['Basteni', 'بستنی'],
+  ['Pasturized', 'پاستوریزه'],
+  ['Ambient', 'لبنیات-فروتلند'],
+];
+
+const ALLOWED_START_STATUSES = [
+  'Assigned',
+  'InTransit',
+  'PendingPersonalAssignment',
+  'PendingCompanyAssignment',
+  'ChangeRequested',
+];
+
+function linesMatch(warehouseLine, announcementLine) {
+  const w = String(warehouseLine || '').trim();
+  const a = String(announcementLine || '').trim();
+  if (!w || !a) return false;
+  if (w === a) return true;
+  return LINE_PAIRS.some(
+    ([en, fa]) => (w === en && a === fa) || (w === fa && a === en)
+  );
+}
+
+function citiesMatch(warehouseCity, originCity) {
+  return String(warehouseCity || '').trim() === String(originCity || '').trim();
+}
+
+function warehouseMatchesAnnouncement(warehouse, announcement) {
+  return (
+    citiesMatch(warehouse && warehouse.city, announcement && announcement.origin_city) &&
+    linesMatch(warehouse && warehouse.line_type, announcement && announcement.line_type)
+  );
+}
+
+function loadingStatusOf(row) {
+  return row && row.loading_status ? String(row.loading_status) : '';
+}
+
+function canStart(row) {
+  if (!row) return false;
+  if (!ALLOWED_START_STATUSES.includes(row.status)) return false;
+  if (!row.assigned_driver_id) return false;
+  const st = loadingStatusOf(row);
+  return !st || st === 'not_started';
+}
+
+function canEnd(row) {
+  return loadingStatusOf(row) === 'in_progress';
+}
+
+function canCancelStart(row) {
+  return loadingStatusOf(row) === 'in_progress';
+}
+
+function canReopen(row) {
+  return loadingStatusOf(row) === 'completed';
+}
+
+function canReset(row) {
+  const st = loadingStatusOf(row);
+  return st === 'in_progress' || st === 'completed';
+}
+
+function isWarehouseKeeperRole(role) {
+  return String(role || '').toLowerCase() === 'warehouse_keeper';
+}
+
+module.exports = {
+  LINE_PAIRS,
+  ALLOWED_START_STATUSES,
+  linesMatch,
+  citiesMatch,
+  warehouseMatchesAnnouncement,
+  canStart,
+  canEnd,
+  canCancelStart,
+  canReopen,
+  canReset,
+  isWarehouseKeeperRole,
+};

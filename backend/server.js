@@ -35,6 +35,7 @@ const finalizePermissionRoutes = require('./routes/finalizePermissionRoutes');
 const planningManagerApprovalPermissionRoutes = require('./routes/planningManagerApprovalPermissionRoutes');
 const realtimeRoutes = require('./routes/realtimeRoutes');
 const cityRoutes = require('./routes/cityRoutes');
+const warehouseRoutes = require('./routes/warehouseRoutes');
 const baleRoutes = require('./routes/baleRoutes');
 const supportTicketRoutes = require('./routes/supportTicketRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
@@ -171,6 +172,7 @@ app.use('/api/v1/finalize-permissions', finalizePermissionRoutes);
 app.use('/api/v1/freight-intake-locks', require('./routes/freightIntakeLockRoutes'));
 app.use('/api/v1/planning-manager-approval-permissions', planningManagerApprovalPermissionRoutes);
 app.use('/api/v1/realtime', realtimeRoutes);
+app.use('/api/v1/warehouses', warehouseRoutes);
 app.use('/api/v1/cities', cityRoutes);
 app.use('/api/v1/bale', baleRoutes);
 app.use('/api/v1/support-tickets', supportTicketRoutes);
@@ -221,7 +223,13 @@ async function runStartupMigrations() {
     { name: 'gps_tour_snapshots', fn: require('./migrations/create_gps_tour_snapshots') },
     { name: 'gps_tours_summary', fn: require('./migrations/create_gps_tours_summary_tables') },
     { name: 'mileage_gps_track', fn: require('./migrations/add_mileage_gps_track') },
+    { name: 'gps_ingest_tables', fn: require('./migrations/create_gps_ingest_tables') },
+    { name: 'gps_tour_detail_fuel_events', fn: require('./migrations/add_gps_tour_detail_fuel_events') },
     { name: 'inspector_role', fn: require('./migrations/add_inspector_role') },
+    { name: 'warehouses', fn: require('./migrations/create_warehouses_table') },
+    { name: 'user_warehouse_assignments', fn: require('./migrations/create_user_warehouse_assignments') },
+    { name: 'warehouse_loading_columns', fn: require('./migrations/add_warehouse_loading_columns') },
+    { name: 'warehouse_keeper_role', fn: require('./migrations/add_warehouse_keeper_role') },
   ];
 
   for (const step of steps) {
@@ -247,6 +255,7 @@ const PORT = process.env.PORT || 3000;
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    require('./services/gpsIngestScheduler').startGpsIngestScheduler();
   });
 })().catch((err) => {
   console.error('❌ [Server] startup failed:', err?.message || err);

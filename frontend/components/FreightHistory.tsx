@@ -23,6 +23,9 @@ import {
     formatAnnouncementDestinationProductsLabel,
     formatDestinationRepCompactSegment,
     formatDairyCompactDestinationsText,
+    formatDairyDestinationFreightCostsText,
+    insertDairyCompactFreightExcelColumn,
+    DAIRY_DEST_FREIGHT_EXCEL_HEADER,
     formatTonnageKgFromRaw,
     matchesFreightLine,
     isDairyOrAmbientLineType,
@@ -59,6 +62,15 @@ const ASSIGNMENT_DATE_COLUMN = {
     render: (ann: FreightAnnouncement) => renderAssignmentDateCell(ann),
 };
 
+const LOADING_DATE_HEADER = 'تاریخ بارگیری';
+
+const LOADING_DATE_COLUMN = {
+    header: LOADING_DATE_HEADER,
+    render: (ann: FreightAnnouncement) => (
+        <span className="text-xs whitespace-nowrap">{formatJalali(ann.loadingDate)}</span>
+    ),
+};
+
 const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     ردیف: 'col-row',
     'کارمند اعلام‌کننده': 'col-creator',
@@ -68,6 +80,7 @@ const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     مقاصد: 'col-destinations',
     'ارزش بار (ریال)': 'col-cargo-value',
     'ساعت حضور': 'col-platform-time',
+    'تاریخ بارگیری': 'col-loading-date',
     'تاریخ اعلام بار': 'col-created-at',
     'تاریخ تخصیص': 'col-assigned-at',
     باربری: 'col-carrier',
@@ -159,6 +172,8 @@ interface FreightHistoryProps {
     setActiveLine: (line: FreightLineType) => void;
     filterDate: string;
     setFilterDate: (date: string) => void;
+    filterLoadingDate: string;
+    setFilterLoadingDate: (date: string) => void;
     filterDestination: string;
     setFilterDestination: (destination: string) => void;
     filterBillOfLading: string;
@@ -180,6 +195,10 @@ interface FreightHistoryProps {
         dateFrom: string;
         dateTo: string;
     }) => Promise<FreightAnnouncement[]>;
+    variant?: 'archive' | 'financeSearch';
+    lineHitCounts?: Partial<Record<FreightLineType, number>>;
+    onExportPdf?: () => void | Promise<void>;
+    pdfExporting?: boolean;
 }
 
 // Move helper functions inside component to ensure proper re-rendering
@@ -222,7 +241,8 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange, onFetchForExcelExport } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterLoadingDate = '', setFilterLoadingDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange, onFetchForExcelExport, variant = 'archive', lineHitCounts, onExportPdf, pdfExporting } = props;
+    const isFinanceSearch = variant === 'financeSearch';
     
     // Debug logging for re-renders
     // console.log('🔄 [TransportLive] Component re-rendered with:', {
@@ -232,15 +252,18 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     //     timestamp: new Date().toISOString()
     // });
     // حفظ viewMode در localStorage تا بعد از سرچ حفظ شود
-    const [viewMode, setViewMode] = useState<'compact' | 'full'>(() => {
+    const [viewModeState, setViewMode] = useState<'compact' | 'full'>(() => {
+        if (variant === 'financeSearch') return 'full';
         const saved = localStorage.getItem('freightHistoryViewMode');
         return (saved === 'compact' || saved === 'full') ? saved : 'compact';
     });
+    const viewMode: 'compact' | 'full' = isFinanceSearch ? 'full' : viewModeState;
     
     // ذخیره viewMode در localStorage وقتی تغییر می‌کند
     useEffect(() => {
-        localStorage.setItem('freightHistoryViewMode', viewMode);
-    }, [viewMode]);
+        if (isFinanceSearch) return;
+        localStorage.setItem('freightHistoryViewMode', viewModeState);
+    }, [viewModeState, isFinanceSearch]);
 
     const filterStorageKey = useMemo(
         () => freightHistoryFilterStorageKey(currentUser.id, activeLine, viewMode),
@@ -508,6 +531,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR'),
             },
             { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+            LOADING_DATE_COLUMN,
             {
                 header: 'تاریخ اعلام بار',
                 render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
@@ -546,6 +570,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR'),
             },
             { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+            LOADING_DATE_COLUMN,
             {
                 header: 'تاریخ اعلام بار',
                 render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
@@ -631,6 +656,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'پالت', render: (ann: FreightAnnouncement) => ann.palletCount ?? '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'اولویت', render: (ann: FreightAnnouncement) => ({ low: 'کم اهمیت', normal: 'عادی', high: 'فوری' } as any)[ann.priority || 'normal'] },
+                LOADING_DATE_COLUMN,
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
                 ASSIGNMENT_DATE_COLUMN,
             ];
@@ -671,10 +697,16 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     render: (ann: FreightAnnouncement) => renderDairyCompactDestinations(ann),
                 },
                 {
+                    header: DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+                    excelOnly: true,
+                    render: (ann: FreightAnnouncement) => formatDairyDestinationFreightCostsText(ann),
+                },
+                {
                     header: 'ارزش بار (ریال)',
                     render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR'),
                 },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                LOADING_DATE_COLUMN,
                 {
                     header: 'تاریخ اعلام بار',
                     render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt),
@@ -718,6 +750,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 { header: 'برند', render: (ann: FreightAnnouncement) => ann.brand || '-' },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
+                LOADING_DATE_COLUMN,
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => renderAnnouncementDateTimeCell(ann.createdAt) },
                 ASSIGNMENT_DATE_COLUMN,
             ];
@@ -786,6 +819,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             }
         }
         
+        if (mode === 'compact' && activeLine === FreightLineType.Dairy) {
+            const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
+            headers.splice(0, headers.length, ...nextHeaders);
+        }
+        
         // ایجاد workbook و worksheet
         const wb = XLSX.utils.book_new();
         const wsData: any[][] = [];
@@ -801,7 +839,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             const getValueForHeader = (header: string): any => {
                 // بررسی اینکه آیا این ستون عددی است
                 const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'کرایه تعرفه', 'اختلاف کرایه', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
-                const isNumericColumn = numericHeaders.some(h => header.includes(h));
+                const isNumericColumn = numericHeaders.some(h => header.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
+
+                if (header === DAIRY_DEST_FREIGHT_EXCEL_HEADER) {
+                    return formatDairyDestinationFreightCostsText(ann);
+                }
                 
                 // Handle special columns directly - اولویت با اینهاست
                 if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
@@ -842,6 +884,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 }
                 if (header === 'توضیحات') {
                     return ann.notes || '';
+                }
+                if (header === LOADING_DATE_HEADER || header === 'تاریخ بارگیری') {
+                    const formatted = formatJalali(ann.loadingDate);
+                    return !formatted || formatted === '-' ? '' : formatted;
                 }
                 
                 // Find column definition - دقیقاً همان header را پیدا کن
@@ -973,7 +1019,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         
         // تنظیم فرمت اعداد برای ستون‌های عددی
         headers.forEach((header, colIdx) => {
-            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h));
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
             if (isNumericColumn) {
                 for (let row = 1; row <= rowsToExport.length; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIdx });
@@ -1050,6 +1096,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     }
                 }
 
+                if (mode === 'compact' && activeLine === FreightLineType.Dairy) {
+                    const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
+                    headers.splice(0, headers.length, ...nextHeaders);
+                }
+
                 const headerRow = worksheet.addRow(headers);
                 headerRow.eachCell((cell: any) => {
                     cell.fill = {
@@ -1069,7 +1120,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
 
                 const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
                     const numericHeaders = ['تناژ', 'کرایه', 'ارزش بار', TOTAL_FREIGHT_HEADER, 'کرایه کل', 'کرایه تعرفه', 'اختلاف کرایه', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
-                    const isNumericColumn = numericHeaders.some((h) => header.includes(h));
+                    const isNumericColumn = numericHeaders.some((h) => header.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
+
+                    if (header === DAIRY_DEST_FREIGHT_EXCEL_HEADER) {
+                        return formatDairyDestinationFreightCostsText(ann);
+                    }
 
                     if (header === TOTAL_FREIGHT_HEADER || header === 'کرایه کل') {
                         return ann.totalFreightCost || 0;
@@ -1104,6 +1159,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     }
                     if (header === 'توضیحات') {
                         return ann.notes || '';
+                    }
+                    if (header === LOADING_DATE_HEADER || header === 'تاریخ بارگیری') {
+                        const formatted = formatJalali(ann.loadingDate);
+                        return !formatted || formatted === '-' ? '' : formatted;
                     }
 
                     const col = cols.find((c) => c.header === header);
@@ -1201,7 +1260,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                         };
                         const header = headers[colNumber - 1];
-                        const isDestCol = header === 'مقاصد' || header === 'مقصد';
+                        const isDestCol = header === 'مقاصد' || header === 'مقصد' || header === DAIRY_DEST_FREIGHT_EXCEL_HEADER;
                         cell.alignment = {
                             horizontal: 'right',
                             vertical: isDestCol ? 'top' : 'middle',
@@ -1209,7 +1268,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         };
                         
                         // Format numbers
-                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h));
+                        const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', TOTAL_FREIGHT_HEADER, 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کل تناژ', 'کارتن', 'پالت'].some(h => header.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
                         if (isNumericColumn && typeof cell.value === 'number') {
                             // برای اعداد بزرگ، از فرمت عددی بدون نماد علمی استفاده می‌کنیم
                             if (cell.value > 1e15) {
@@ -1230,6 +1289,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 headers.forEach((header, idx) => {
                     if (header === 'مقاصد') {
                         worksheet.getColumn(idx + 1).width = 55;
+                        return;
+                    }
+                    if (header === DAIRY_DEST_FREIGHT_EXCEL_HEADER) {
+                        worksheet.getColumn(idx + 1).width = 22;
                         return;
                     }
                     let maxLength = header.length;
@@ -1301,7 +1364,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         try {
             const rows = await onFetchForExcelExport({ dateFrom: fromNorm, dateTo: toNorm });
             if (!rows.length) {
-                alert('در این بازهٔ تاریخ اعلام بار، رکوردی یافت نشد.');
+                alert('در این بازهٔ تاریخ بارگیری، رکوردی یافت نشد.');
                 return;
             }
             if (rows.length >= 5000) {
@@ -1323,7 +1386,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
     );
 
     const visibleColumns = useMemo(
-        () => allColumns.filter((col) => !hiddenColumnHeaders.has(col.header)),
+        () => allColumns.filter((col: any) => !hiddenColumnHeaders.has(col.header) && !col.excelOnly),
         [allColumns, hiddenColumnHeaders]
     );
 
@@ -1395,12 +1458,23 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         setSortDirection('asc');
     };
 
+    const printEmployeeLabel = [
+        currentUser.name,
+        currentUser.username ? `(${currentUser.username})` : '',
+        currentUser.branchCity ? `— شعبه ${currentUser.branchCity}` : '',
+    ]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
   return (
-    <div className="max-w-screen-2xl mx-auto space-y-4">
+    <div className="max-w-screen-2xl mx-auto space-y-4 finance-print-root">
       <div className="bg-white p-4 rounded-xl shadow-md">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                    <h2 className="text-xl font-bold text-slate-800 flex items-center"><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />تاریخچه اعلام بار</h2>
+                    <h2 className={`text-xl font-bold text-slate-800 flex items-center ${isFinanceSearch ? 'hidden print:flex' : ''}`}><TruckIcon className="w-6 h-6 mr-2 text-sky-600" />{isFinanceSearch ? 'مالی حمل' : 'تاریخچه اعلام بار'}</h2>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+                        {!isFinanceSearch && (
+                        <>
                         {/* فیلتر تاریخ اعلام بار */}
                         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
                             <label className="text-xs whitespace-nowrap">تاریخ اعلام بار:</label>
@@ -1409,9 +1483,33 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 placeholder="1404-05-01" 
                                 value={filterDate}
                                 onChange={e => setFilterDate(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
                                 className="px-2 py-1 text-xs rounded border w-32"
           />
         </div>
+                        {/* فیلتر تاریخ بارگیری */}
+                        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+                            <label className="text-xs whitespace-nowrap">تاریخ بارگیری:</label>
+                            <input
+                                type="text"
+                                placeholder="1404/05/01"
+                                value={filterLoadingDate}
+                                onChange={(e) => setFilterLoadingDate(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs rounded border w-32"
+                                autoComplete="off"
+                            />
+                        </div>
                         {/* فیلتر مقصد */}
                         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
                             <label className="text-xs whitespace-nowrap">مقصد:</label>
@@ -1491,7 +1589,9 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         <button onClick={onSearch} className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600">جستجو</button>
                         <button onClick={onClearFilters} className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600">پاک کردن</button>
                         <div className="flex items-center p-1 bg-slate-200 rounded-lg"><button onClick={()=>setViewMode('compact')} className={`px-2 py-1 text-xs rounded ${viewMode==='compact'?'bg-white shadow':''}`}>فشرده</button><button onClick={()=>setViewMode('full')} className={`px-2 py-1 text-xs rounded ${viewMode==='full'?'bg-white shadow':''}`}>کامل</button></div>
-                        <div className="relative" ref={columnPickerRef}>
+                        </>
+                        )}
+                        <div className="relative print:hidden" ref={columnPickerRef}>
                             <button
                                 type="button"
                                 onClick={() => setColumnPickerOpen((o) => !o)}
@@ -1525,7 +1625,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                             همه
                                         </button>
                                     </div>
-                                    {allColumns.map((col) => (
+                                    {allColumns.filter((col: any) => !col.excelOnly).map((col) => (
                                         <label
                                             key={col.header}
                                             className="flex items-center gap-2 py-1 px-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700"
@@ -1544,6 +1644,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 </div>
                             )}
                         </div>
+                        {!isFinanceSearch && (
+                        <>
                         <button onClick={() => openExcelExportDialog('compact')} className="px-3 py-1 bg-green-500 text-white rounded-md text-xs hover:bg-green-600 whitespace-nowrap">
                             اکسل فشرده
                         </button>
@@ -1551,14 +1653,47 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             اکسل کامل
                         </button>
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100"><BookOpenIcon className="w-5 h-5 text-slate-600"/></button>
-                        <div className="flex items-center p-1 bg-slate-100 rounded-lg">
-                            {Object.values(FreightLineType).map(lt => (
-                                <button key={lt} onClick={() => setActiveLine(lt)} className={`flex-1 px-3 py-1 rounded-md text-sm font-semibold transition-colors ${activeLine === lt ? 'bg-sky-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}>{lt}</button>
-                            ))}
+                        </>
+                        )}
+                        {isFinanceSearch && (
+                        <button
+                            type="button"
+                            disabled={pdfExporting}
+                            onClick={() => void onExportPdf?.()}
+                            className="px-3 py-1 bg-rose-600 text-white rounded-md text-xs hover:bg-rose-700 whitespace-nowrap print:hidden disabled:opacity-50"
+                        >
+                            {pdfExporting ? 'در حال تهیه PDF...' : 'خروجی PDF'}
+                        </button>
+                        )}
+                        <div className="flex items-center p-1 bg-slate-100 rounded-lg print:hidden">
+                            {Object.values(FreightLineType).map(lt => {
+                                const hitCount = lineHitCounts?.[lt] || 0;
+                                const hasHits = isFinanceSearch && hitCount > 0;
+                                return (
+                                <button
+                                    key={lt}
+                                    onClick={() => setActiveLine(lt)}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5 ${activeLine === lt ? 'bg-sky-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
+                                >
+                                    {hasHits && (
+                                        <span
+                                            className={`inline-block w-2 h-2 rounded-full shrink-0 ${activeLine === lt ? 'bg-red-300' : 'bg-red-500'}`}
+                                            title={`${hitCount.toLocaleString('fa-IR')} نتیجه`}
+                                        />
+                                    )}
+                                    <span>{lt}</span>
+                                    {hasHits && (
+                                        <span className={`text-[10px] font-bold ${activeLine === lt ? 'text-red-100' : 'text-red-600'}`}>
+                                            {hitCount.toLocaleString('fa-IR')}
+                                        </span>
+                                    )}
+                                </button>
+                                );
+                            })}
                         </div>
                     </div>
         </div>
-                <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+                <div className="flex flex-wrap items-center gap-2 mb-3 px-1 print:hidden">
                     {activeColumnFilterCount > 0 && (
                         <button
                             type="button"
@@ -1848,7 +1983,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
         
         {/* صفحه‌بندی */}
         {onPageChange && onItemsPerPageChange && (
-            <div className="flex items-center justify-between mt-4 px-4 py-3 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between mt-4 px-4 py-3 bg-slate-50 rounded-lg print:hidden">
                 <div className="flex items-center gap-2">
                     <label className="text-sm text-slate-700">تعداد در هر صفحه:</label>
                     <select 
@@ -1886,6 +2021,11 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 </div>
             </div>
         )}
+        {isFinanceSearch && (
+            <div className="hidden print:block mt-6 pt-3 border-t border-slate-400 text-center text-sm text-slate-800">
+                چاپ توسط کارمند مالی شعب: {printEmployeeLabel || currentUser.username} — {formatJalaliDateTime(new Date())}
+            </div>
+        )}
             </div>
              {/* دیالوگ‌های تخصیص و انتقال در تاریخچه نیازی نیست */}
              {isRulesOpen && (
@@ -1907,15 +2047,15 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <h3 className="text-base font-bold text-slate-800">
-                            بازه تاریخ اعلام بار برای اکسل{' '}
+                            بازه تاریخ بارگیری برای اکسل{' '}
                             {excelExportDialog.mode === 'compact' ? '(فشرده)' : '(کامل)'}
                         </h3>
                         <p className="text-xs text-slate-600">
-                            پیش‌فرض یک ماه اخیر است. همهٔ ردیف‌های همین تب و فیلترهای فعلی در بازه انتخابی خروجی گرفته می‌شود (نه فقط صفحه جاری).
+                            پیش‌فرض یک ماه اخیر بر حسب تاریخ بارگیری است. همهٔ ردیف‌های همین تب و فیلترهای فعلی در بازه انتخابی خروجی گرفته می‌شود (نه فقط صفحه جاری).
                         </p>
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="text-xs font-semibold text-slate-700 mb-1 block">از تاریخ</label>
+                                <label className="text-xs font-semibold text-slate-700 mb-1 block">از تاریخ بارگیری</label>
                                 <input
                                     type="text"
                                     value={excelDateFrom}
@@ -1927,7 +2067,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-semibold text-slate-700 mb-1 block">تا تاریخ</label>
+                                <label className="text-xs font-semibold text-slate-700 mb-1 block">تا تاریخ بارگیری</label>
                                 <input
                                     type="text"
                                     value={excelDateTo}
@@ -1960,7 +2100,14 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                     </div>
                 </div>
              )}
-             <style>{`.input-style { display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; } `}</style>
+             <style>{`.input-style { display: block; width:100%; padding: 0.5rem 0.75rem; background-color: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .input-style:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; } .input-style:disabled { background-color: #f1f5f9; color: #64748b; }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  .freight-sticky-table-wrap { overflow: visible !important; max-height: none !important; }
+  table { font-size: 8px !important; }
+  thead input { display: none !important; }
+}
+`}</style>
     </div>
   );
 };

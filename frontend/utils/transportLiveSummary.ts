@@ -34,11 +34,24 @@ export type IceCreamLiveSummary = {
     byRepType: NamedCountRow[];
 };
 
+export type LoadingShiftCounts = {
+    total: number;
+    completed: number;
+    inProgress: number;
+    notStarted: number;
+};
+
 export type DairyLiveSummary = {
     kind: 'dairy';
     assigned: number;
     unassigned: number;
     total: number;
+    shahrLabaniatLoading: {
+        overall: LoadingShiftCounts;
+        morning: LoadingShiftCounts;
+        night: LoadingShiftCounts;
+        unknown: LoadingShiftCounts;
+    };
 };
 
 export type AmbientLiveSummary = {
@@ -140,6 +153,67 @@ export function buildIceCreamLiveSummary(items: FreightAnnouncement[]): IceCream
     };
 }
 
+export function isShahrLabaniatOrigin(origin?: string | null): boolean {
+    return (origin || '').includes('شهرلبنیات');
+}
+
+export function parseHourFromPlatformTime(value?: string | Date | null): number | null {
+    if (value == null || value === '') return null;
+    if (value instanceof Date) {
+        if (isNaN(value.getTime())) return null;
+        return value.getHours();
+    }
+    const m = String(value).match(/(\d{1,2})(?::(\d{2}))?/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    if (Number.isNaN(h) || h < 0 || h > 23) return null;
+    return h;
+}
+
+/** صبح ۷ تا ۱۹ — شب ۱۹ تا ۷ */
+export function shiftFromHour(hour: number): 'morning' | 'night' {
+    return hour >= 7 && hour < 19 ? 'morning' : 'night';
+}
+
+export function announcementLoadingShift(
+    ann: FreightAnnouncement
+): 'morning' | 'night' | 'unknown' {
+    const fromPlatform = parseHourFromPlatformTime(ann.platformArrivalTime);
+    if (fromPlatform != null) return shiftFromHour(fromPlatform);
+    if (ann.loadingStartedAt) {
+        const d = new Date(ann.loadingStartedAt);
+        if (!isNaN(d.getTime())) return shiftFromHour(d.getHours());
+    }
+    return 'unknown';
+}
+
+function emptyLoadingCounts(): LoadingShiftCounts {
+    return { total: 0, completed: 0, inProgress: 0, notStarted: 0 };
+}
+
+function bumpLoadingCount(counts: LoadingShiftCounts, status?: string | null) {
+    counts.total += 1;
+    if (status === 'completed') counts.completed += 1;
+    else if (status === 'in_progress') counts.inProgress += 1;
+    else counts.notStarted += 1;
+}
+
+export function buildShahrLabaniatLoadingSummary(items: FreightAnnouncement[]) {
+    const overall = emptyLoadingCounts();
+    const morning = emptyLoadingCounts();
+    const night = emptyLoadingCounts();
+    const unknown = emptyLoadingCounts();
+    for (const ann of items) {
+        if (!isShahrLabaniatOrigin(ann.originCity)) continue;
+        bumpLoadingCount(overall, ann.loadingStatus);
+        const shift = announcementLoadingShift(ann);
+        if (shift === 'morning') bumpLoadingCount(morning, ann.loadingStatus);
+        else if (shift === 'night') bumpLoadingCount(night, ann.loadingStatus);
+        else bumpLoadingCount(unknown, ann.loadingStatus);
+    }
+    return { overall, morning, night, unknown };
+}
+
 export function buildDairyLiveSummary(items: FreightAnnouncement[]): DairyLiveSummary {
     let assigned = 0;
     for (const ann of items) {
@@ -151,6 +225,7 @@ export function buildDairyLiveSummary(items: FreightAnnouncement[]): DairyLiveSu
         assigned,
         unassigned: Math.max(0, total - assigned),
         total,
+        shahrLabaniatLoading: buildShahrLabaniatLoadingSummary(items),
     };
 }
 

@@ -219,6 +219,13 @@ const rolePermissions = {
       'gps_resources'
     ],
     description: 'بازرسی — مشاهده پیگیری اعلام بار و مدیریت منابع GPS'
+  },
+
+  warehouse_keeper: {
+    menus: [
+      'freight_tracking'
+    ],
+    description: 'انباردار — شروع و پایان بارگیری اعلام بار انبار خود؛ پس از ارجاع به ترابری فقط ثبت کد LIS لاین پاستوریزه'
   }
 };
 

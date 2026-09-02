@@ -19,6 +19,10 @@ const {
   joinAnnouncementNotes,
   partitionNotesForDestinationSplit,
 } = require('../utils/announcementNotes');
+const {
+  warehouseMatchesAnnouncement,
+  isWarehouseKeeperRole,
+} = require('../utils/warehouseLoading');
 
 const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
 const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
@@ -170,6 +174,17 @@ function isAssignmentFinalizedRecord(record) {
   if (record.assignment_finalized_at) return true;
   const status = record.status;
   return status === 'Finalized' || status === 'نهایی شده' || status === 'InTransit' || status === 'در حال حمل';
+}
+
+async function keeperOwnsAnnouncement(userId, announcement) {
+  if (!userId || !announcement) return false;
+  const result = await pool.query(
+    `SELECT w.* FROM warehouses w
+     JOIN user_warehouse_assignments uwa ON uwa.warehouse_id = w.id
+     WHERE uwa.user_id = $1 AND w.is_active = TRUE`,
+    [userId]
+  );
+  return result.rows.some((w) => warehouseMatchesAnnouncement(w, announcement));
 }
 
 function mapDestRowsForRealtime(rows) {
@@ -1080,7 +1095,6 @@ async function getFreightAnnouncements(req, res) {
     const isPlanningEmployee = isPlanningEmployeeRole(userRole);
     const isSalesExpert = isSalesExpertRole(userRole);
     const isPlanningManager = userRole === 'planner_manager' || userRole === 'مدیر برنامه‌ریزی';
-    const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
     
     // کارمند/کارشناس: اعلام‌بارهای خودشان + ردیف‌هایی که مقصدشان بعد از ادغام روی اعلام‌بار دیگری رفته
     let userFilter = '';
@@ -1126,45 +1140,7 @@ async function getFreightAnnouncements(req, res) {
       }
     }
     
-    // Add filter for branch finance users (only see announcements with destinations matching their branch city)
-    let branchCityFilter = '';
-    if (isBranchFinance) {
-      // گرفتن branch_city از JWT token یا از دیتابیس
-      let branchCity = req.user?.branchCity || null;
-      
-      // اگر branchCity در JWT نیست، از دیتابیس بگیر
-      if (!branchCity && userId) {
-        try {
-          const userRow = await pool.query('SELECT branch_city FROM users WHERE id = $1', [userId]);
-          if (userRow.rows.length > 0) {
-            const user = userRow.rows[0];
-            branchCity = user.branch_city;
-            
-            // اگر branch_city یک UUID است، از branches table نام شهر را بگیر
-            if (branchCity && branchCity.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-              const branchResult = await pool.query('SELECT name FROM branches WHERE id = $1', [branchCity]);
-              if (branchResult.rows.length > 0) {
-                branchCity = branchResult.rows[0].name;
-              }
-            }
-          }
-        } catch (branchError) {
-          console.error('❌ [getFreightAnnouncements] Error fetching branch city:', branchError);
-        }
-      }
-      
-      if (branchCity) {
-        // فیلتر بر اساس مقاصد: فقط اعلام بارهایی که یکی از مقاصدشان با branch_city مطابقت دارد
-        branchCityFilter = ` AND EXISTS (
-          SELECT 1 FROM freight_destinations fd 
-          WHERE fd.freight_announcement_id = fa.id 
-          AND fd.city = '${branchCity.replace(/'/g, "''")}'
-        )`;
-        console.log(`🏢 [getFreightAnnouncements] Branch finance filter applied for city: ${branchCity}`);
-      } else {
-        console.warn('⚠️ [getFreightAnnouncements] Branch finance user but no branch city found');
-      }
-    }
+    const branchCityFilter = '';
 
     const isCarrierUser = userRole === 'carrier_user';
     if (isCarrierUser && userId) {
@@ -1643,11 +1619,26 @@ async function updateFreightAnnouncement(req, res) {
       const lisCodeOnlyRequested = req.body?.lisCodeOnly === true;
       const isPlannerOrSales =
         isPlanningEmployeeRole(role) || isSalesExpertRole(role);
+      const isKeeper = isWarehouseKeeperRole(role);
       const isDairyAnnouncement = isDairyLineTypeValue(lineType || oldRecord.line_type);
 
       // مسیر باریک: فقط به‌روزرسانی کد LIS مقاصد (پاستوریزه، بعد از ارجاع تا قبل اتمام تخصیص)
       if (lisCodeOnlyRequested) {
-        if (!isPlannerOrSales || !isDairyAnnouncement) {
+        if (isKeeper) {
+          if (!isDairyAnnouncement) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({
+              message: 'ثبت کد LIS فقط برای لاین پاستوریزه مجاز است.',
+            });
+          }
+          const owns = await keeperOwnsAnnouncement(userId, oldRecord);
+          if (!owns) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({
+              message: 'این اعلام بار مربوط به انبار شما نیست.',
+            });
+          }
+        } else if (!isPlannerOrSales || !isDairyAnnouncement) {
           await client.query('ROLLBACK');
           return res.status(403).json({
             message:
@@ -1694,17 +1685,30 @@ async function updateFreightAnnouncement(req, res) {
         );
 
         try {
+          let lisUserName =
+            req.user?.username ||
+            req.user?.name ||
+            req.user?.fullName ||
+            'کاربر';
+          let lisDescription = 'به‌روزرسانی کد LIS مقاصد (ویرایش محدود پس از ارجاع)';
+          if (isKeeper) {
+            try {
+              const { getKeeperActor } = require('./warehouseController');
+              const actor = await getKeeperActor(userId);
+              lisUserName = actor.historyName || lisUserName;
+              lisDescription = `ثبت کد LIS توسط ${lisUserName} (ویرایش محدود پس از ارجاع به ترابری)`;
+            } catch (actorErr) {
+              lisDescription = 'ثبت کد LIS توسط انباردار (ویرایش محدود پس از ارجاع به ترابری)';
+              console.warn('⚠️ [updateFreightAnnouncement] keeper actor lookup skipped:', actorErr?.message);
+            }
+          }
           await logFreightHistory({
             announcementId: id,
             userId,
-            userName:
-              req.user?.username ||
-              req.user?.name ||
-              req.user?.fullName ||
-              'کاربر',
+            userName: lisUserName,
             action: 'LIS_CODE_UPDATED',
             newStatus: oldRecord.status,
-            description: 'به‌روزرسانی کد LIS مقاصد (ویرایش محدود پس از ارجاع)',
+            description: lisDescription,
             ipAddress: req.ip,
             client,
           });
@@ -1753,6 +1757,13 @@ async function updateFreightAnnouncement(req, res) {
         }
 
         return res.json(updated);
+      }
+
+      if (isKeeper) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          message: 'انباردار فقط مجاز به ثبت کد LIS است.',
+        });
       }
 
       // کارمند/کارشناس پس از ارجاع نباید ویرایش کامل بزند (فقط مسیر lisCodeOnly)
@@ -3449,6 +3460,62 @@ async function returnDestinationToCreator(req, res) {
   }
 }
 
+function normalizeBillOfLadingNumber(value) {
+  const map = {
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+  };
+  return String(value || '')
+    .replace(/[۰-۹٠-٩]/g, (ch) => map[ch] || ch)
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+async function checkDuplicateBillOfLading(req, res) {
+  try {
+    const number = normalizeBillOfLadingNumber(req.query?.number);
+    const rawExclude = req.query?.excludeId;
+    const excludeId = rawExclude ? String(rawExclude).trim() : null;
+    if (!number) {
+      return res.json({ duplicate: false, matches: [] });
+    }
+
+    const result = await pool.query(
+      `SELECT fa.id, fa.announcement_code, fa.status, fa.bill_of_lading_number
+       FROM freight_announcements fa
+       WHERE fa.bill_of_lading_number IS NOT NULL
+         AND TRIM(fa.bill_of_lading_number) <> ''
+         AND translate(
+               regexp_replace(TRIM(fa.bill_of_lading_number), '\\s+', '', 'g'),
+               '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩',
+               '01234567890123456789'
+             ) = $1
+         AND ($2::text IS NULL OR fa.id::text <> $2::text)
+         AND (
+           fa.created_at >= NOW() - INTERVAL '3 months'
+           OR fa.updated_at >= NOW() - INTERVAL '3 months'
+           OR COALESCE(fa.assignment_finalized_at, '-infinity'::timestamptz) >= NOW() - INTERVAL '3 months'
+         )
+       ORDER BY fa.updated_at DESC NULLS LAST
+       LIMIT 8`,
+      [number, excludeId]
+    );
+
+    return res.json({
+      duplicate: result.rows.length > 0,
+      matches: result.rows.map((r) => ({
+        id: r.id,
+        announcementCode: r.announcement_code,
+        status: r.status,
+        billOfLadingNumber: r.bill_of_lading_number,
+      })),
+    });
+  } catch (error) {
+    console.error('[checkDuplicateBillOfLading]', error.message);
+    return res.status(500).json({ message: 'خطا در بررسی تکراری بودن بارنامه' });
+  }
+}
+
 function isDairyOrAmbientLineType(lineType) {
   const lt = String(lineType || '');
   return ['Dairy', 'Ambient', 'پاستوریزه', 'لبنیات-فروتلند'].includes(lt);
@@ -5081,13 +5148,26 @@ async function getFreightAnnouncementHistory(req, res) {
   }
 }
 
+function padJalaliYmd(raw) {
+  const m = String(raw || '')
+    .trim()
+    .replace(/-/g, '/')
+    .match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return null;
+  return `${m[1]}/${String(m[2]).padStart(2, '0')}/${String(m[3]).padStart(2, '0')}`;
+}
+
+function sqlJalaliLoadingDate(alias) {
+  return `REPLACE(CAST(${alias}.loading_date AS TEXT), '-', '/')`;
+}
+
 /**
  * دریافت اعلام بارهای تاریخچه شده (Finalized) با قابلیت فیلتر بر اساس تاریخ و مقصد
- * GET /api/freight-announcements/history?date=1403/10/15&destination=تهران&creatorName=...
+ * GET /api/freight-announcements/history?date=1403/10/15&loadingDate=1403/10/16&destination=تهران
  */
 async function getFreightHistory(req, res) {
   try {
-    const { date, destination, billOfLading, driverName, creatorName, lineType, page = 1, limit = 50 } = req.query;
+    const { date, loadingDate, destination, billOfLading, driverName, creatorName, lineType, page = 1, limit = 50 } = req.query;
     
     // Pagination parameters
     const pageNum = parseInt(page, 10) || 1;
@@ -5098,10 +5178,13 @@ async function getFreightHistory(req, res) {
     const userRole = req.user?.role || req.user?.userRole;
     const userId = req.user?.id || req.user?.userId;
     const isBranchFinance = userRole === 'finance' || userRole === 'مالی شعب';
+    const skipBranchFilter = ['1', 'true', 'yes'].includes(
+      String(req.query.skipBranchFilter || req.query.allBranches || '').toLowerCase()
+    );
     
     // Get branch city for branch finance users
     let branchCity = null;
-    if (isBranchFinance) {
+    if (isBranchFinance && !skipBranchFilter) {
       branchCity = req.user?.branchCity || null;
       
       // اگر branchCity در JWT نیست، از دیتابیس بگیر
@@ -5203,8 +5286,8 @@ async function getFreightHistory(req, res) {
     const params = [];
     let paramIndex = 1;
     
-    // Add branch city filter for branch finance users
-    if (isBranchFinance && branchCity) {
+    // Add branch city filter for branch finance users (unless skipBranchFilter)
+    if (isBranchFinance && branchCity && !skipBranchFilter) {
       query += ` AND EXISTS (
         SELECT 1 FROM freight_destinations fd 
         WHERE fd.freight_announcement_id = fa.id 
@@ -5223,52 +5306,66 @@ async function getFreightHistory(req, res) {
       console.log(`📦 [getFreightHistory] Filtering by lineType: ${lineType}`);
     }
     
-    // فیلتر بر اساس تاریخ اعلام بار (created_at) — ورودی شمسی
-    // اولویت با بازه dateFrom/dateTo؛ در غیر این صورت تک‌روزه date
+    // بازه dateFrom/dateTo برای خروجی اکسل: تاریخ بارگیری (نه تاریخ اعلام بار)
     const dateFromRaw = (req.query.dateFrom || req.query.date_from || '').toString().trim();
     const dateToRaw = (req.query.dateTo || req.query.date_to || '').toString().trim();
     const hasDateRange = Boolean(dateFromRaw || dateToRaw);
+    const faLoadingNorm = sqlJalaliLoadingDate('fa');
+    const fdLoadingNorm = sqlJalaliLoadingDate('fd');
 
     if (hasDateRange) {
-      if (dateFromRaw) {
-        const normalizedFrom = dateFromRaw.replace(/\//g, '-');
-        const fromMatch = normalizedFrom.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-        if (fromMatch) {
-          const [, jy, jm, jd] = fromMatch.map(Number);
-          const dayStart = parseJalaliDateString(
-            `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`
-          );
-          if (dayStart) {
-            query += ` AND fa.created_at >= $${paramIndex}`;
-            params.push(dayStart);
-            paramIndex += 1;
-            console.log(`📅 [getFreightHistory] dateFrom (created_at >=): ${dateFromRaw}`);
-          }
-        } else {
-          console.log(`⚠️ [getFreightHistory] Invalid dateFrom: ${dateFromRaw}`);
-        }
+      const fromPadded = padJalaliYmd(dateFromRaw);
+      const toPadded = padJalaliYmd(dateToRaw);
+      const loadingRangeClauses = [];
+      let fromParamIdx = null;
+      let toParamIdx = null;
+      if (fromPadded) {
+        fromParamIdx = paramIndex;
+        loadingRangeClauses.push(`${faLoadingNorm} >= $${fromParamIdx}`);
+        params.push(fromPadded);
+        paramIndex += 1;
       }
-      if (dateToRaw) {
-        const normalizedTo = dateToRaw.replace(/\//g, '-');
-        const toMatch = normalizedTo.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-        if (toMatch) {
-          const [, jy, jm, jd] = toMatch.map(Number);
-          const dayStart = parseJalaliDateString(
-            `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`
-          );
-          if (dayStart) {
-            const dayEndExclusive = new Date(dayStart);
-            dayEndExclusive.setDate(dayEndExclusive.getDate() + 1);
-            query += ` AND fa.created_at < $${paramIndex}`;
-            params.push(dayEndExclusive);
-            paramIndex += 1;
-            console.log(`📅 [getFreightHistory] dateTo (created_at < next day): ${dateToRaw}`);
-          }
-        } else {
-          console.log(`⚠️ [getFreightHistory] Invalid dateTo: ${dateToRaw}`);
-        }
+      if (toPadded) {
+        toParamIdx = paramIndex;
+        loadingRangeClauses.push(`${faLoadingNorm} <= $${toParamIdx}`);
+        params.push(toPadded);
+        paramIndex += 1;
       }
-    } else if (date && date.trim() !== '') {
+      if (loadingRangeClauses.length) {
+        const destParts = [];
+        if (fromParamIdx != null) destParts.push(`${fdLoadingNorm} >= $${fromParamIdx}`);
+        if (toParamIdx != null) destParts.push(`${fdLoadingNorm} <= $${toParamIdx}`);
+        const destSql = destParts.length
+          ? ` OR EXISTS (
+              SELECT 1 FROM freight_destinations fd
+              WHERE fd.freight_announcement_id = fa.id
+                AND fd.loading_date IS NOT NULL
+                AND TRIM(COALESCE(CAST(fd.loading_date AS TEXT), '')) <> ''
+                AND ${destParts.join(' AND ')}
+            )`
+          : '';
+        query += ` AND ((${loadingRangeClauses.join(' AND ')})${destSql})`;
+        console.log(`📅 [getFreightHistory] loading_date range: ${fromPadded || '…'} .. ${toPadded || '…'}`);
+      }
+    }
+
+    const loadingDateRaw = (loadingDate || req.query.loading_date || '').toString().trim();
+    if (loadingDateRaw) {
+      const loadingNorm = loadingDateRaw.replace(/-/g, '/');
+      query += ` AND (
+        ${faLoadingNorm} LIKE $${paramIndex}
+        OR EXISTS (
+          SELECT 1 FROM freight_destinations fd
+          WHERE fd.freight_announcement_id = fa.id
+            AND ${fdLoadingNorm} LIKE $${paramIndex}
+        )
+      )`;
+      params.push(`%${loadingNorm}%`);
+      paramIndex += 1;
+      console.log(`📅 [getFreightHistory] Filtering by loadingDate: ${loadingNorm}`);
+    }
+
+    if (date && date.trim() !== '') {
       const normalizedDate = date.trim().replace(/\//g, '-');
       const dateMatch = normalizedDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (dateMatch) {
@@ -5286,7 +5383,7 @@ async function getFreightHistory(req, res) {
       } else {
         console.log(`⚠️ [getFreightHistory] Invalid date format: ${date}. Expected: 1404-05-01 or 1404/05/01`);
       }
-    } else {
+    } else if (!hasDateRange && !loadingDateRaw) {
       console.log(`📅 [getFreightHistory] No date filter - showing all Finalized announcements`);
     }
     
@@ -5366,19 +5463,14 @@ async function getFreightHistory(req, res) {
     // Fetch destinations for each announcement and convert dates
     const filteredRows = [];
     for (let announcement of rows) {
-      // همیشه همه destinations را بگیر
-      const allDestRows = await pool.query('SELECT * FROM freight_destinations WHERE freight_announcement_id = $1', [announcement.id]);
-      
-      // اگر فیلتر مقصد داریم، فقط destinations matching را نگه دار
-      if (destination && destination.trim()) {
-        const matchingDests = allDestRows.rows.filter(d => 
-          d.city && d.city.toLowerCase().includes(destination.trim().toLowerCase())
-        );
-        announcement.destinations = matchingDests;
-      } else {
-        // اگر فیلتر نداریم، همه destinations را بگیر
-        announcement.destinations = allDestRows.rows;
-      }
+      // جستجوی مقصد فقط اعلام‌بار را فیلتر می‌کند؛ همه تخلیه‌های همان ردیف باید دیده شوند
+      const allDestRows = await pool.query(
+        `SELECT * FROM freight_destinations
+         WHERE freight_announcement_id = $1
+         ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
+        [announcement.id]
+      );
+      announcement.destinations = allDestRows.rows;
       
       // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
       if (announcement.loading_date) {
@@ -9634,6 +9726,7 @@ module.exports = {
   rejectFinanceTour,
   ensureFinanceDispositionColumns,
   updateIceCreamDisplayOrder,
+  checkDuplicateBillOfLading,
   FINANCE_EXCEPTION_TRANSPORT_ROLES,
 };
 

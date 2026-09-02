@@ -144,6 +144,18 @@ const ActionIcon: React.FC<{ action: string }> = ({ action }) => {
           </svg>
         </div>
       );
+    case 'LOADING_STARTED':
+    case 'LOADING_ENDED':
+    case 'LOADING_CANCELLED':
+    case 'LOADING_REOPENED':
+    case 'LOADING_RESET':
+      return (
+        <div className="bg-emerald-100 p-2 rounded-full">
+          <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+      );
     default:
       return (
         <div className="bg-gray-100 p-2 rounded-full">
@@ -237,6 +249,12 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
         handoff_carrier_id: 'باربری ارجاع‌شده',
         باربری: 'باربری',
         handoff_status: 'وضعیت واگذاری',
+        loading_status: 'وضعیت بارگیری',
+        loadingStatus: 'وضعیت بارگیری',
+        loading_started_at: 'زمان شروع بارگیری',
+        loadingStartedAt: 'زمان شروع بارگیری',
+        loading_ended_at: 'زمان اتمام بارگیری',
+        loadingEndedAt: 'زمان اتمام بارگیری',
         freight_cost_locked_at: 'زمان قفل کرایه',
       };
       
@@ -275,6 +293,30 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
         };
         oldValue = statusLabels[oldValue] || oldValue;
         newValue = statusLabels[newValue] || newValue;
+      } else if (key === 'loading_status' || key === 'loadingStatus' || key === 'وضعیت بارگیری') {
+        const loadingLabels: { [key: string]: string } = {
+          in_progress: 'در حال بارگیری',
+          completed: 'تمام‌شده',
+          not_started: 'شروع‌نشده',
+        };
+        oldValue = loadingLabels[oldValue] || oldValue || 'شروع‌نشده';
+        newValue = loadingLabels[newValue] || newValue || 'شروع‌نشده';
+      } else if (
+        key === 'loading_started_at' ||
+        key === 'loadingStartedAt' ||
+        key === 'loading_ended_at' ||
+        key === 'loadingEndedAt' ||
+        key === 'زمان شروع بارگیری' ||
+        key === 'زمان اتمام بارگیری'
+      ) {
+        const fmt = (v: any) => {
+          if (!v || v === '-' || v === 'لغو شد' || v === 'پاک شد') return v || '-';
+          const d = new Date(v);
+          if (isNaN(d.getTime())) return String(v);
+          return formatJalaliDateTime(d);
+        };
+        oldValue = fmt(oldValue);
+        newValue = fmt(newValue);
       } else if (key === 'loadingDate' || key === 'loading_date') {
         // فرمت تاریخ
         try {
@@ -590,7 +632,16 @@ const FreightHistoryDialog: React.FC<Props> = ({ isOpen, onClose, announcementId
                       
                       {/* شرح عملیات */}
                       <div className="text-sm text-slate-800 mb-2">
-                        {entry.description}
+                        {(() => {
+                          const desc = entry.description || '';
+                          const loadingActions = ['LOADING_STARTED', 'LOADING_ENDED', 'LOADING_CANCELLED', 'LOADING_REOPENED', 'LOADING_RESET'];
+                          if (!loadingActions.includes(entry.action)) return desc;
+                          if (desc.includes('شروع ') || desc.includes('اتمام ')) return desc;
+                          const t = formatJalaliDateTime(new Date(entry.created_at));
+                          if (entry.action === 'LOADING_STARTED') return `${desc} — شروع ${t}`;
+                          if (entry.action === 'LOADING_ENDED') return `${desc} — اتمام ${t}`;
+                          return desc;
+                        })()}
                       </div>
                       
                       {/* تغییر وضعیت */}

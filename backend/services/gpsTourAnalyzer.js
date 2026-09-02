@@ -163,6 +163,119 @@ function extractFuelTotal(params) {
   return null;
 }
 
+function extractFuelRemainLiters(params) {
+  if (!params || typeof params !== 'object') return null;
+  for (const key of ['fuel_liters', 'can_fuel', 'fuel_level_l', 'remaining_fuel']) {
+    const v = safeFloat(params[key]);
+    if (v != null && v > 100 && v <= 2000) return Math.round(v * 10) / 10;
+  }
+  return null;
+}
+
+function extractMessageParams(msg) {
+  if (!Array.isArray(msg)) return {};
+  for (let i = msg.length - 1; i >= 6; i--) {
+    if (msg[i] && typeof msg[i] === 'object' && !Array.isArray(msg[i])) return msg[i];
+  }
+  return {};
+}
+
+const FUEL_STOP_KMH = Number(process.env.GPS_FUEL_STOP_KMH || 5);
+const FUEL_MIN_LITERS = Number(process.env.GPS_FUEL_EVENT_MIN_LITERS || 30);
+const FUEL_MIN_PERCENT = Number(process.env.GPS_FUEL_EVENT_MIN_PERCENT || 6);
+const FUEL_GAP_MS = 30 * 60 * 1000;
+
+/**
+ * پر/خالی شدن ناگهانی باک در توقف (سرعت ≈ ۰) بیش از ۳۰ لیتر
+ * kind: refuel | drain — نامزد سوختگیری / تخلیه مشکوک (نه حکم قطعی)
+ */
+function detectFuelAnomalies(messages, tourStart, tourEnd) {
+  const startT = parseTime(tourStart);
+  const endT = parseTime(tourEnd);
+  if (!startT || !endT) return [];
+
+  const series = [];
+  for (const msg of messages || []) {
+    if (!Array.isArray(msg) || !msg[0]) continue;
+    const ts = parseTime(msg[0]);
+    if (!ts || ts < startT || ts > endT) continue;
+    const params = extractMessageParams(msg);
+    const tankPct = extractTankLevel(params);
+    const fuelRemainL = extractFuelRemainLiters(params);
+    if (tankPct == null && fuelRemainL == null) continue;
+    const ll = normalizeMsgLatLng(msg[3], msg[4]);
+    series.push({
+      ts,
+      speed: safeFloat(msg[5], 0) || 0,
+      tankPct,
+      fuelRemainL,
+      lat: ll?.lat ?? null,
+      lng: ll?.lng ?? null,
+    });
+  }
+  series.sort((a, b) => a.ts - b.ts);
+  if (series.length < 2) return [];
+
+  const events = [];
+  let stretch = [];
+
+  const flushStretch = () => {
+    if (stretch.length < 2) {
+      stretch = [];
+      return;
+    }
+    let anchor = stretch[0];
+    for (let i = 1; i < stretch.length; i++) {
+      const p = stretch[i];
+      if (p.ts - stretch[i - 1].ts > FUEL_GAP_MS) {
+        anchor = p;
+        continue;
+      }
+      const dL =
+        p.fuelRemainL != null && anchor.fuelRemainL != null
+          ? Math.round((p.fuelRemainL - anchor.fuelRemainL) * 10) / 10
+          : null;
+      const dPct =
+        p.tankPct != null && anchor.tankPct != null
+          ? Math.round((p.tankPct - anchor.tankPct) * 10) / 10
+          : null;
+      const hitLiters = dL != null && Math.abs(dL) >= FUEL_MIN_LITERS;
+      const hitPercent = dL == null && dPct != null && Math.abs(dPct) >= FUEL_MIN_PERCENT;
+      if (!hitLiters && !hitPercent) continue;
+      const signed = dL != null ? dL : dPct;
+      const minutes = Math.max((p.ts - anchor.ts) / 60000, 0.1);
+      events.push({
+        kind: signed > 0 ? 'refuel' : 'drain',
+        labelFa: signed > 0 ? 'سوختگیری محتمل' : 'تخلیه مشکوک',
+        liters: dL != null ? Math.abs(dL) : null,
+        deltaPercent: dPct != null ? Math.abs(dPct) : null,
+        fromLiters: anchor.fuelRemainL ?? null,
+        toLiters: p.fuelRemainL ?? null,
+        tankPctFrom: anchor.tankPct,
+        tankPctTo: p.tankPct,
+        speedKmh: Math.max(anchor.speed, p.speed),
+        durationMin: Math.round(minutes * 10) / 10,
+        startIso: anchor.ts.toISOString(),
+        atIso: p.ts.toISOString(),
+        lat: p.lat,
+        lng: p.lng,
+      });
+      anchor = p;
+    }
+    stretch = [];
+  };
+
+  for (const p of series) {
+    if (p.speed <= FUEL_STOP_KMH) {
+      stretch.push(p);
+    } else {
+      flushStretch();
+    }
+  }
+  flushStretch();
+  return events;
+}
+
 function extractTankLevel(params) {
   if (!params || typeof params !== 'object') return null;
   for (const key of ['can_fls', 'fls', 'fuel_level']) {
@@ -1007,6 +1120,7 @@ function enrichTourDrivingStats(tour, messages) {
       overspeedCount: 0,
       maxSpeed: 0,
       overspeedDetails: [],
+      fuelEvents: [],
     };
   }
   const inRange = (messages || []).filter((msg) => {
@@ -1020,6 +1134,7 @@ function enrichTourDrivingStats(tour, messages) {
   const unloadDetails = tour.unloadDetails || tour.unload_stations_json || [];
   const breakdown = buildStopBreakdown(rawStops, unloadDetails);
   const mileageGpsTrack = calculateTrackMileage(messages, startT, endT);
+  const fuelEvents = detectFuelAnomalies(messages, startT, endT);
   return {
     drivingHours: driving,
     stopHours: breakdown.stopTotalHours,
@@ -1036,6 +1151,7 @@ function enrichTourDrivingStats(tour, messages) {
     maxSpeed: overspeed.maxSpeed,
     overspeedDetails: overspeed.details,
     mileageGpsTrack,
+    fuelEvents,
   };
 }
 
@@ -1226,6 +1342,7 @@ module.exports = {
   splitStopHoursByLegalSleep,
   buildStopBreakdown,
   calculateTrackMileage,
+  detectFuelAnomalies,
   extractOdometer,
   extractOdometerCan,
   extractOdometerGpsLike,

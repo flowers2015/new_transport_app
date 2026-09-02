@@ -3,6 +3,7 @@ const { authenticateToken, authorizeRole } = require('../middleware/authMiddlewa
 const {
   requireGpsFinance,
   getStatus,
+  triggerFleetIngest,
   calculateTours,
   enrichDriving,
   applyTourSelection,
@@ -20,6 +21,14 @@ const FINANCE_ROLES = [
 ];
 
 router.get('/status', authenticateToken, authorizeRole(FINANCE_ROLES), getStatus);
+
+router.post(
+  '/ingest-now',
+  authenticateToken,
+  authorizeRole(FINANCE_ROLES),
+  requireGpsFinance,
+  triggerFleetIngest
+);
 
 router.post(
   '/calculate-tours',

@@ -507,6 +507,69 @@ export function formatDairyCompactDestinationsText(
     return destinations.map((d, i) => formatDairyCompactDestinationLine(ann, d, i)).join('\n');
 }
 
+/** ستون اکسل فشرده پاستوریزه: کرایه هر مقصد با شماره‌گذاری در یک سلول */
+export const DAIRY_DEST_FREIGHT_EXCEL_HEADER = 'کرایه مقاصد';
+
+export function formatDairyDestinationFreightCostsText(
+    ann: Pick<FreightAnnouncement, 'destinations'> | null | undefined
+): string {
+    const destinations = ann?.destinations || [];
+    if (!destinations.length) return '';
+    return destinations
+        .map((d, i) => {
+            const n = Number(d?.freightCost) || 0;
+            const amount = n > 0 ? n.toLocaleString('fa-IR') : '—';
+            return `${i + 1}) ${amount}`;
+        })
+        .join('\n');
+}
+
+/** بین ستون مقاصد و ارزش بار در اکسل فشرده پاستوریزه — همیشه در همین جا قرار می‌گیرد */
+export function insertDairyCompactFreightExcelColumn(headers: string[]): string[] {
+    const next = headers.filter((h) => h !== DAIRY_DEST_FREIGHT_EXCEL_HEADER);
+    const destIdx = next.findIndex(
+        (h) =>
+            h === 'مقاصد و تایم بارگیری' ||
+            h === 'مقاصد' ||
+            (typeof h === 'string' &&
+                h.includes('مقاصد') &&
+                (h.includes('تایم') || h.includes('بارگیری')))
+    );
+    const cargoIdx = next.findIndex((h) => typeof h === 'string' && h.includes('ارزش بار'));
+    let insertAt = next.length;
+    if (destIdx >= 0) {
+        insertAt = cargoIdx > destIdx ? cargoIdx : destIdx + 1;
+    } else if (cargoIdx >= 0) {
+        insertAt = cargoIdx;
+    }
+    next.splice(insertAt, 0, DAIRY_DEST_FREIGHT_EXCEL_HEADER);
+    return next;
+}
+
+/** برچسب مقصد در تخصیص کرایه: نوع/نام نماینده + شعبه (شهر) */
+export function formatAssignmentDestinationFreightCaption(
+    ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName'>,
+    dest: Pick<Destination, 'city' | 'tonnage' | 'representativeType' | 'representativeName'>,
+    index: number
+): string {
+    const city = String(dest.city || '').trim();
+    const rawType = dest.representativeType || ann.representativeType;
+    const typeLabel = formatRepresentativeType(rawType);
+    const name = String(dest.representativeName || '').trim();
+    let who = '';
+    if (isAgentRepresentativeType(rawType)) {
+        who = name || (typeLabel !== '-' ? typeLabel : '');
+    } else {
+        who = typeLabel !== '-' ? typeLabel : name;
+    }
+    const identity = [who, city].filter(Boolean).join(' ') || `مقصد ${index + 1}`;
+    const tonnage = dest.tonnage != null && String(dest.tonnage).trim() !== ''
+        ? formatTonnageKgFromRaw(dest.tonnage)
+        : '';
+    const tonnagePart = tonnage && tonnage !== '-' ? ` (${tonnage} کیلوگرم)` : '';
+    return `مقصد ${index + 1}: ${identity}${tonnagePart}`;
+}
+
 /** ستون «مقاصد» فشرده — خروجی اکسل؛ چندمقصدی زیر هم مثل UI */
 export function formatCompactDestinationsForExcel(
     ann: Pick<FreightAnnouncement, 'representativeType' | 'representativeName' | 'destinations'>

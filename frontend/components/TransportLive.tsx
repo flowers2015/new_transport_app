@@ -48,6 +48,10 @@ import {
     localizeExcelValue,
     formatCompactDestinationsForExcel,
     formatDairyCompactDestinationsText,
+    formatDairyDestinationFreightCostsText,
+    insertDairyCompactFreightExcelColumn,
+    DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+    formatAssignmentDestinationFreightCaption,
     formatDestinationRepCompactSegment,
     resolveDestinationRepTypeLabel,
     formatDestinationBrandLabel,
@@ -106,6 +110,7 @@ import {
     selectCompanyBaleReportAnnouncements,
 } from '../utils/baleCompanyReport';
 import { isDairyAnnouncementForArrangement } from '../utils/dairyRouteArrangement';
+import { isFreightViewOnlyRole, isInspectionRole } from '../utils/roleAccess';
 
 /** دیالوگ‌ها و Excel فقط هنگام نیاز لود شوند تا ورود اول سبک‌تر شود */
 const DestinationTransferDialog = React.lazy(() => import('./DestinationTransferDialog'));
@@ -113,6 +118,7 @@ const WorkflowRules = React.lazy(() => import('./WorkflowRules'));
 const BaleReportDialog = React.lazy(() => import('./BaleReportDialog'));
 const DairyRouteArrangementDialog = React.lazy(() => import('./DairyRouteArrangementDialog'));
 const TransportLiveSummaryDialog = React.lazy(() => import('./TransportLiveSummaryDialog'));
+const WarehouseLisCodeDialog = React.lazy(() => import('./WarehouseLisCodeDialog'));
 
 const ReannounceBadge: React.FC = () => (
     <span
@@ -271,7 +277,7 @@ interface TransportLiveProps {
         assignedDriverName?: string;
         assignedDriverContact?: string;
         assignedVehiclePlate?: string;
-    }) => void;
+    }) => void | boolean | Promise<void | boolean>;
     onFinalize: (announcementIds: string[], lineTypeForBackend?: string) => void | Promise<void>;
     finalizePermissions?: Record<string, boolean>;
     intakeLocks?: Record<string, boolean>;
@@ -627,6 +633,207 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         [hasAccess, isCarrierUser, isViewOnlyFreight]
     );
 
+    // Warehouse Keeper loading operations
+    const isWarehouseKeeper = currentUser.role === 'warehouse_keeper' || currentUser.role === UserRole.WarehouseKeeper;
+        const [loadingAnnId, setLoadingAnnId] = useState<string | null>(null);
+    const [myWarehouses, setMyWarehouses] = useState<Array<{line_type: string; city: string; name: string}>>([]);
+    // Fetch warehouse keeper assignments
+    useEffect(() => {
+        if (!isWarehouseKeeper) return;
+        const tk = localStorage.getItem('token');
+        fetch(getApiUrl('warehouses/my'), { headers: { Authorization: 'Bearer ' + tk } })
+            .then(r => r.ok ? r.json() : [])
+            .then(d => setMyWarehouses(Array.isArray(d) ? d : []))
+            .catch(() => setMyWarehouses([]));
+    }, [isWarehouseKeeper]);
+    const [timerTick, setTimerTick] = useState(0);
+    // Timer tick every second for in-progress loading
+    const hasInProgress = announcements.some(a => a.loadingStatus === 'in_progress');
+    useEffect(() => {
+        if (!hasInProgress) return;
+        const iv = setInterval(() => setTimerTick(t => t + 1), 1000);
+        return () => clearInterval(iv);
+    }, [hasInProgress]);
+    
+    // Check if announcement matches any of the keeper warehouses
+    const canLoadAnnouncement = useCallback((ann: FreightAnnouncement): boolean => {
+        if (!isWarehouseKeeper || !myWarehouses.length) return false;
+        // Map announcement line_type (Farsi) to warehouse line_type (English)
+        const lineTypeMap: Record<string, string> = {
+            'بستنی': 'Basteni', 'پاستوریزه': 'Pasturized', 'لبنیات-فروتلند': 'Ambient'
+        };
+        const annLineEn = lineTypeMap[ann.lineType] || ann.lineType;
+        return myWarehouses.some(wh => wh.city === ann.originCity && wh.line_type === annLineEn);
+    }, [isWarehouseKeeper, myWarehouses]);
+
+    const canEditWarehouseLis = useCallback((ann: FreightAnnouncement): boolean => {
+        if (!isWarehouseKeeper || !canLoadAnnouncement(ann)) return false;
+        const line = String(ann.lineType || '');
+        if (ann.lineType !== FreightLineType.Dairy && line !== 'Dairy' && line !== 'پاستوریزه') return false;
+        if (ann.assignmentFinalizedAt) return false;
+        const locked = new Set([
+            FreightAnnouncementStatus.Finalized,
+            FreightAnnouncementStatus.InTransit,
+            FreightAnnouncementStatus.Cancelled,
+            'Finalized',
+            'InTransit',
+            'Cancelled',
+            'نهایی شده',
+            'در حال حمل',
+            'لغو شده',
+        ]);
+        if (locked.has(ann.status as any) || locked.has(String(ann.status))) return false;
+        const lisWindow = new Set([
+            FreightAnnouncementStatus.PendingManagerApproval,
+            FreightAnnouncementStatus.PendingPersonalAssignment,
+            FreightAnnouncementStatus.PendingCompanyAssignment,
+            FreightAnnouncementStatus.Assigned,
+            'PendingManagerApproval',
+            'PendingPersonalAssignment',
+            'PendingCompanyAssignment',
+            'Assigned',
+            'در انتظار تایید مدیر',
+            'در انتظار تخصیص (شخصی)',
+            'در انتظار تخصیص (شرکت)',
+            'تخصیص یافته',
+        ]);
+        return lisWindow.has(ann.status as any) || lisWindow.has(String(ann.status));
+    }, [isWarehouseKeeper, canLoadAnnouncement]);
+
+    const [lisDialogAnn, setLisDialogAnn] = useState<FreightAnnouncement | null>(null);
+
+    const handleStartLoading = useCallback(async (ann: FreightAnnouncement) => {
+        if (!window.confirm('بارگیری این اعلام بار شروع شود؟')) return;
+        setLoadingAnnId(ann.id);
+        try {
+            const tk = localStorage.getItem('token');
+            const r = await fetch(getApiUrl('warehouses/' + ann.id + '/start-loading'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
+                body: JSON.stringify({}),
+            });
+            if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.message || 'خطا'); return; }
+            onRefresh && onRefresh();
+        } catch(e: any) { alert(e.message || 'خطا'); }
+        finally { setLoadingAnnId(null); }
+    }, [onRefresh]);
+
+    const handleEndLoading = useCallback(async (ann: FreightAnnouncement) => {
+        if (!window.confirm('بارگیری این اعلام بار تمام شود؟')) return;
+        setLoadingAnnId(ann.id);
+        try {
+            const tk = localStorage.getItem('token');
+            const r = await fetch(getApiUrl('warehouses/' + ann.id + '/end-loading'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
+                body: JSON.stringify({}),
+            });
+            if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.message || 'خطا'); return; }
+            window.dispatchEvent(new CustomEvent('announcements-updated'));
+            onRefresh && onRefresh();
+        } catch(e: any) { alert(e.message || 'خطا'); }
+        finally { setLoadingAnnId(null); }
+    }, [onRefresh]);
+
+    const postLoadingAction = useCallback(async (ann: FreightAnnouncement, path: string, confirmText: string) => {
+        if (!window.confirm(confirmText)) return;
+        setLoadingAnnId(ann.id);
+        try {
+            const tk = localStorage.getItem('token');
+            const r = await fetch(getApiUrl('warehouses/' + ann.id + '/' + path), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
+                body: JSON.stringify({}),
+            });
+            if (!r.ok) { const e = await r.json().catch(()=>({})); alert(e.message || 'خطا'); return; }
+            window.dispatchEvent(new CustomEvent('announcements-updated'));
+            onRefresh && onRefresh();
+        } catch(e: any) { alert(e.message || 'خطا'); }
+        finally { setLoadingAnnId(null); }
+    }, [onRefresh]);
+
+    const formatLoadingClock = (iso?: string | null) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    };
+    const formatLoadingElapsed = (start?: string | null, end?: string | null) => {
+        if (!start) return '';
+        const s = new Date(start).getTime();
+        if (isNaN(s)) return '';
+        const e = end ? new Date(end).getTime() : Date.now();
+        const d = Math.max(0, Math.floor(((isNaN(e) ? Date.now() : e) - s) / 1000));
+        const h = Math.floor(d / 3600);
+        const m = Math.floor((d % 3600) / 60);
+        const sec = d % 60;
+        return h > 0
+            ? h + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0')
+            : m + ':' + String(sec).padStart(2, '0');
+    };
+
+    const renderWarehouseLisButton = (ann: FreightAnnouncement) => {
+        if (!canEditWarehouseLis(ann)) return null;
+        return (
+            <button
+                type="button"
+                onClick={() => setLisDialogAnn(ann)}
+                className="w-full px-2 py-1 rounded-md text-[11px] font-medium bg-teal-600 text-white hover:bg-teal-700"
+                title="پس از ارجاع به ترابری فقط ثبت یا ویرایش کد LIS مقاصد"
+            >
+                ثبت کد LIS
+            </button>
+        );
+    };
+
+    const renderWarehouseOps = (ann: FreightAnnouncement) => {
+        const lisBtn = renderWarehouseLisButton(ann);
+        const loading = renderWarehouseLoadingActions(ann);
+        if (!lisBtn && !loading) return null;
+        return (
+            <div className="flex flex-col items-stretch gap-1 min-w-[7.5rem]">
+                {lisBtn}
+                {loading}
+            </div>
+        );
+    };
+
+    const renderWarehouseLoadingActions = (ann: FreightAnnouncement) => {
+        if (!canLoadAnnouncement(ann)) return null;
+        const busy = loadingAnnId === ann.id;
+        const solid = 'w-full px-2 py-1 rounded-md text-[11px] font-medium text-white';
+        const ghost = 'w-full px-2 py-1 rounded-md text-[11px] font-medium border';
+        if (!ann.assignedDriverId) {
+            return <span className="text-slate-400 text-xs">تخصیص نشده</span>;
+        }
+        if (ann.loadingStatus === 'in_progress') {
+            const elapsed = formatLoadingElapsed(ann.loadingStartedAt);
+            const clock = formatLoadingClock(ann.loadingStartedAt);
+            return (
+                <div className="flex flex-col items-stretch gap-1 min-w-[7.5rem]">
+                    <span className="text-[11px] text-slate-600 bg-slate-100 px-2 py-1 rounded font-mono">
+                        {elapsed}{clock ? ` (${clock})` : ''}
+                    </span>
+                    <button disabled={busy} onClick={() => handleEndLoading(ann)} className={`${solid} ${busy ? 'bg-emerald-300' : 'bg-green-600 hover:bg-green-700'}`}>{busy ? '...' : 'پایان بارگیری'}</button>
+                    <button disabled={busy} onClick={() => postLoadingAction(ann, 'cancel-loading', 'شروع بارگیری لغو شود؟ زمان شروع پاک می‌شود.')} className={`${ghost} border-slate-300 text-slate-700 hover:bg-slate-50`}>لغو شروع</button>
+                </div>
+            );
+        }
+        if (ann.loadingStatus === 'completed') {
+            const dur = formatLoadingElapsed(ann.loadingStartedAt, ann.loadingEndedAt);
+            return (
+                <div className="flex flex-col items-stretch gap-1 min-w-[7.5rem]">
+                    <span className="text-green-700 text-[11px] font-medium">اتمام{dur ? ` (${dur})` : ''}</span>
+                    <button disabled={busy} onClick={() => postLoadingAction(ann, 'reopen-loading', 'از اتمام برگردیم به در حال بارگیری؟')} className={`${ghost} border-amber-400 text-amber-800 bg-amber-50 hover:bg-amber-100`}>برگشت از اتمام</button>
+                    <button disabled={busy} onClick={() => postLoadingAction(ann, 'reset-loading', 'ریست کامل بارگیری انجام شود؟ شروع و پایان پاک می‌شود.')} className={`${ghost} border-red-300 text-red-700 hover:bg-red-50`}>ریست بارگیری</button>
+                </div>
+            );
+        }
+        return (
+            <button disabled={busy} onClick={() => handleStartLoading(ann)} className={`${solid} ${busy ? 'bg-amber-300' : 'bg-red-500 hover:bg-red-600'}`}>{busy ? '...' : 'شروع بارگیری'}</button>
+        );
+    };
+
     // Helper function to check if user can edit announcement - memoized
     const canEditAnnouncement = useCallback((ann: FreightAnnouncement): { canEdit: boolean; canTakeAction: boolean; isAssignedByOther: boolean } => {
         const today = new Date();
@@ -770,20 +977,21 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: 'ارزش بار', align: 'center', display: () => viewMode === 'full', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
             
             // Operations Column
-            { header: 'عملیات', display: () => true, render: (ann: FreightAnnouncement) => {
+            { header: isWarehouseKeeper ? 'عملیات بارگیری' : 'عملیات', display: () => true, render: (ann: FreightAnnouncement) => {
                 const { canEdit, canTakeAction, isAssignedByOther } = canEditAnnouncement(ann);
                 const disabledClasses = (!canTakeAction || isAssignedByOther) ? 'opacity-50 cursor-not-allowed' : '';
                 return (
-                    <div className="flex gap-1 flex-wrap">
+                    <div className="flex gap-1 flex-wrap items-center">
                         {canPerformActions && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('assign', ann)} className={`flex items-center gap-1 px-3 py-1 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 ${disabledClasses}`}><PencilIcon className="w-3 h-3"/>{[FreightAnnouncementStatus.PendingCompanyAssignment, FreightAnnouncementStatus.PendingPersonalAssignment].includes(ann.status) ? 'تخصیص' : 'ویرایش'}</button>}
                         {canPerformActions && (ann.lineType === FreightLineType.Ambient || ann.lineType === 'Ambient' || ann.lineType === 'لبنیات-فروتلند') && ann.destinations.length >= 1 && <button disabled={!canTakeAction || isAssignedByOther} onClick={() => handleOpenDialog('transfer', ann)} title="جابجایی مقصد" className={`p-1 bg-yellow-500 text-white rounded-md text-xs hover:bg-yellow-600 ${disabledClasses}`}><SwitchHorizontalIcon className="w-4 h-4"/></button>}
-                </div>
+                        {renderWarehouseOps(ann)}
+                    </div>
                 );
             } },
         ];
 
         return columns;
-    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, activeLine, onChangeVehicleType, renderVehicleTypeCell, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props]);
+    }, [editingVehicleTypeId, canEditAnnouncement, canPerformActions, currentUser.role, activeLine, onChangeVehicleType, renderVehicleTypeCell, getDriverName, getPersonalDriverName, getDriverContact, getPersonalDriverContact, getVehicleIdentifier, getPersonalVehicleIdentifier, drivers, vehicles, personalDrivers, personalVehicles, props, isWarehouseKeeper, canLoadAnnouncement, canEditWarehouseLis, handleStartLoading, handleEndLoading, loadingAnnId, timerTick, postLoadingAction]);
     
     const [selectedAnnouncement, setSelectedAnnouncement] = useState<FreightAnnouncement | null>(null);
 
@@ -888,10 +1096,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 
                 return false;
             }
-            if (currentUser.role === UserRole.BranchFinance && currentUser.branchCity) {
-                 return a.destinations.some(d => d.city === currentUser.branchCity) && a.status === FreightAnnouncementStatus.Assigned;
-            }
-            // Other roles like planners see everything that's live (but not Finalized, Leftover, or Cancelled)
+            // Other roles (شامل مالی حمل): اعلام‌بارهای زنده بدون فیلتر شعبه
             const liveStatuses = [
                 FreightAnnouncementStatus.PendingCompanyAssignment, 
                 FreightAnnouncementStatus.PendingPersonalAssignment, 
@@ -1133,6 +1338,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             { header: TOTAL_FREIGHT_HEADER, render: (ann: FreightAnnouncement) => formatTotalFreightCost(ann.totalFreightCost) },
             ...personalTariffColumns,
             { header: 'توضیحات', render: (ann: FreightAnnouncement) => ann.notes || '-' },
+
         ];
 
         // تب «در انتظار بارنامه»: ستون‌ها مطابق همان تب در پیگیری زنده (+ ستون‌های تخصیص)
@@ -1173,6 +1379,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                     { header: DAIRY_DESTINATIONS_HEADER, render: (ann: FreightAnnouncement) =>
                         withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
+                    {
+                        header: DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+                        excelOnly: true,
+                        render: (ann: FreightAnnouncement) => formatDairyDestinationFreightCostsText(ann),
+                    },
                     { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                     { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                     { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -1268,11 +1479,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: DAIRY_DESTINATIONS_HEADER, render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyCompactDestinations(ann)) },
+                {
+                    header: DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+                    excelOnly: true,
+                    render: (ann: FreightAnnouncement) => formatDairyDestinationFreightCostsText(ann),
+                },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
                 // { header: 'وضعیت', render: (ann: FreightAnnouncement) => <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{ann.status}</span> },
-            ];
+                            ];
             return [...base, ...extraCols];
         }
 
@@ -1355,8 +1571,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     const visibleColumns = useMemo(
         () =>
             (isDairyCompactTable || isDairyOrAmbientTab)
-                ? allColumns.filter((col) => !hiddenColumnHeaders.has(col.header))
-                : allColumns,
+                ? allColumns.filter((col: any) => !hiddenColumnHeaders.has(col.header) && !col.excelOnly)
+                : allColumns.filter((col: any) => !col.excelOnly),
         [allColumns, hiddenColumnHeaders, isDairyCompactTable, isDairyOrAmbientTab]
     );
 
@@ -1626,6 +1842,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 `مقصد ${i} - نماینده`,
                 `مقصد ${i} - شهر`,
                 `مقصد ${i} - تناژ`,
+                `مقصد ${i} - کرایه`,
                 `مقصد ${i} - نوع برند`,
                 `مقصد ${i} - کد LIS`
             );
@@ -1660,15 +1877,20 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         dest.tonnage != null && dest.tonnage !== ''
                             ? Number(dest.tonnage)
                             : '';
+                    const freightCost =
+                        dest.freightCost != null && Number(dest.freightCost) > 0
+                            ? Number(dest.freightCost)
+                            : '';
                     row.push(
                         resolveDestinationRepTypeLabel(ann, dest),
                         dest.city || '',
                         Number.isFinite(tonnage as number) ? (tonnage as number) : '',
+                        freightCost,
                         formatDestinationBrandLabel(dest),
                         dest.lisCode || ''
                     );
                 } else {
-                    row.push('', '', '', '', '');
+                    row.push('', '', '', '', '', '');
                 }
             }
             const tonnageSum = sumDestinationTonnageKg(ann.destinations);
@@ -1717,6 +1939,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         }
 
         const applyDairyHiddenColumns =
+            mode === 'compact' &&
+            ((activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine)) ||
+                (isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy));
+        const isDairyCompactExcel =
             mode === 'compact' &&
             ((activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine)) ||
                 (isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy));
@@ -1780,6 +2006,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             }
         }
         
+        if (isDairyCompactExcel) {
+            const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
+            headers.splice(0, headers.length, ...nextHeaders);
+        }
+        
         // ایجاد workbook و worksheet
         const wb = XLSX.utils.book_new();
         const wsData: any[][] = [];
@@ -1802,7 +2033,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     
                     // بررسی اینکه آیا این ستون عددی است (مثل تناژ، کرایه، ارزش بار)
                     const numericHeaders = ['کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
-                    const isNumericColumn = numericHeaders.some(h => col.header.includes(h));
+                    const isNumericColumn = numericHeaders.some(h => col.header.includes(h)) && col.header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
 
                     if (col.header === 'کل تناژ (کیلوگرم)' || col.header.includes('کل تناژ')) {
                         const sum = sumDestinationTonnageKg(ann.destinations);
@@ -1888,6 +2119,16 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     row.push(value);
                 }
             });
+
+            if (isDairyCompactExcel) {
+                const freightAlreadyInRow = visibleCols.some((col: any) => col.header === DAIRY_DEST_FREIGHT_EXCEL_HEADER);
+                if (!freightAlreadyInRow) {
+                    const insertAt = headers.indexOf(DAIRY_DEST_FREIGHT_EXCEL_HEADER);
+                    if (insertAt >= 0) {
+                        row.splice(insertAt, 0, formatDairyDestinationFreightCostsText(ann));
+                    }
+                }
+            }
             
             // برای Full Dairy/Ambient، مقاصد را اضافه می‌کنیم
             if (isFullDairyAmbientMode) {
@@ -1954,7 +2195,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         // تنظیم فرمت اعداد برای ستون‌های عددی
         const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
         headers.forEach((header, colIdx) => {
-            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header.includes(h));
+            const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
             if (isNumericColumn) {
                 // برای تمام ردیف‌های داده، فرمت عددی تنظیم می‌کنیم
                 for (let row = 1; row <= excelExportAnnouncements.length; row++) {
@@ -2101,6 +2342,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
             }
 
+            const isDairyCompactExcelDownload =
+                mode === 'compact' &&
+                ((activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine)) ||
+                    (isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy));
+            if (isDairyCompactExcelDownload) {
+                const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
+                headers.splice(0, headers.length, ...nextHeaders);
+            }
+
             if (!headers.includes('ردیف')) {
                 headers.unshift('ردیف');
             }
@@ -2126,7 +2376,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             // Helper to get value for header - استفاده از همان منطق generateExcelExport
             const getValueForHeader = (header: string, ann: FreightAnnouncement, idx: number): any => {
                 const numericHeaders = ['کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'];
-                const isNumericColumn = numericHeaders.some(h => header.includes(h));
+                const isNumericColumn = numericHeaders.some(h => header.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
+
+                if (header === DAIRY_DEST_FREIGHT_EXCEL_HEADER) {
+                    return formatDairyDestinationFreightCostsText(ann);
+                }
                 
                 if (header === 'انتخاب') {
                     return '';
@@ -2291,7 +2545,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                     };
                     const header = headers[colNumber - 1];
-                    const isDestCol = isDairyDestinationsColumn(header) || header === 'مقصد';
+                    const isDestCol = isDairyDestinationsColumn(header) || header === 'مقصد' || header === DAIRY_DEST_FREIGHT_EXCEL_HEADER;
                     cell.alignment = {
                         horizontal: 'right',
                         vertical: isDestCol ? 'top' : 'middle',
@@ -2299,7 +2553,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     };
                     
                     // Format numbers
-                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header?.includes(h));
+                    const isNumericColumn = ['تناژ', 'کرایه', 'ارزش بار', 'کرایه کل', 'تعداد کارتن', 'تعداد پالت', 'مبلغ کرایه', 'کارتن', 'پالت'].some(h => header?.includes(h)) && header !== DAIRY_DEST_FREIGHT_EXCEL_HEADER;
                     if (isNumericColumn && typeof cell.value === 'number') {
                         // برای اطمینان از نمایش صحیح اعداد بزرگ بدون نماد علمی
                         // استفاده از فرمت عددی با جداکننده هزارگان
@@ -2323,6 +2577,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 let maxLength = header.length;
                 if (isDairyDestinationsColumn(header)) {
                     worksheet.getColumn(idx + 1).width = 55;
+                    return;
+                }
+                if (header === DAIRY_DEST_FREIGHT_EXCEL_HEADER) {
+                    worksheet.getColumn(idx + 1).width = 22;
                     return;
                 }
                 excelExportAnnouncements.forEach(ann => {
@@ -2587,7 +2845,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                     همه
                                                 </button>
                                             </div>
-                                            {allColumns.map((col) => (
+                                            {allColumns.filter((col: any) => !col.excelOnly).map((col) => (
                                                 <label
                                                     key={col.header}
                                                     className="flex items-center gap-2 py-1 px-1 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-700"
@@ -2756,7 +3014,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 </div>
 
                 <div
-                    className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${isDairyCompactTable ? ' transport-live-dairy-compact-wrap' : ''}`}
+                    className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${isDairyCompactTable ? ' transport-live-dairy-compact-wrap' : ''}${isWarehouseKeeper ? ' warehouse-keeper-ops' : ''}`}
                     data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
                     style={{ WebkitOverflowScrolling: 'touch' }}
                 >
@@ -2797,7 +3055,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد دوم</th>
                                         <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد سوم</th>
                                         <th colSpan={fullDestSubColCount} className="p-2 text-center border-x">مقصد چهارم</th>
-                                        <th rowSpan={2} className="p-2 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations" style={{width: '180px'}}>عملیات</th>
+                                        <th rowSpan={2} className="p-2 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations" style={{width: '180px'}}>{isWarehouseKeeper ? 'عملیات بارگیری' : 'عملیات'}</th>
                                     </tr>
                                     <tr>
                                         {[1, 2, 3, 4].map(i => (
@@ -2835,7 +3093,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                             {renderSortableHeader(col.header)}
                                         </th>
                                     ))}
-                                    <th className="p-1.5 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations whitespace-normal leading-tight">عملیات</th>
+                                    <th className="p-1.5 text-center align-middle sticky -left-px bg-gray-50 freight-sticky-corner col-operations whitespace-normal leading-tight">{isWarehouseKeeper ? 'عملیات بارگیری' : 'عملیات'}</th>
                                 </tr>
                                 <tr className="bg-slate-100/80">
                                     {canPerformActions && <th className="p-1 sticky left-0 bg-slate-100 freight-sticky-corner col-checkbox" />}
@@ -3007,7 +3265,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 const pendingBillRow = isPendingBillOfLadingTab(activeLine);
                                 const bolRegistered = hasBillOfLadingNumber(ann);
                                 const returnedFromCarrier = isReturnedFromCarrier(ann);
-                                const rowColorClass = pendingBillRow
+                                const rowColorClass = isWarehouseKeeper
+                                    ? (ann.loadingStatus === 'completed'
+                                        ? 'bg-slate-300 hover:bg-slate-400'
+                                        : ann.loadingStatus === 'in_progress'
+                                          ? 'bg-yellow-200 hover:bg-yellow-300'
+                                          : 'bg-white hover:bg-slate-50')
+                                    : pendingBillRow
                                     ? bolRegistered
                                         ? 'bg-green-100 hover:bg-green-200'
                                         : 'bg-red-50 hover:bg-red-100'
@@ -3020,7 +3284,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                       : isAssigned
                                         ? 'bg-green-50 hover:bg-green-100'
                                         : 'bg-yellow-50 hover:bg-yellow-100';
-                                const rowStickyBg = selectedIds.has(ann.id)
+                                const rowStickyBg = isWarehouseKeeper
+                                    ? (ann.loadingStatus === 'completed'
+                                        ? '#cbd5e1'
+                                        : ann.loadingStatus === 'in_progress'
+                                          ? '#fef08a'
+                                          : '#ffffff')
+                                    : selectedIds.has(ann.id)
                                     ? '#f0f9ff'
                                     : pendingBillRow
                                       ? bolRegistered
@@ -3087,7 +3357,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                         ))
                                     )}
 
-                                    <td className="p-1 text-center align-middle sticky -left-px z-10 col-operations" style={{ backgroundColor: rowStickyBg }}>
+                                    <td className="p-1 text-center align-middle sticky -left-px z-10 col-operations overflow-visible" style={{ backgroundColor: rowStickyBg }}>
                                         <div className="flex gap-1 flex-wrap justify-center">
                                             {isPersonalTransportUser && isHandoffAtCarrier && (
                                                 <div className="w-full text-[10px] text-purple-800 leading-tight mb-1 px-1">
@@ -3153,6 +3423,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                                 </button>
                                             )}
                                             {onOpenHistory && !isCarrierUser && <button onClick={() => onOpenHistory(ann.id, ann.announcementCode)} title="مشاهده تاریخچه تغییرات" className="flex items-center gap-1 px-2 py-1 bg-sky-100 text-sky-700 rounded-md text-xs hover:bg-sky-200"><HistoryIcon className="w-4 h-4"/><span>تاریخچه</span></button>}
+                                            {renderWarehouseOps(ann)}
                                         </div>
                                     </td>
                                 </tr>
@@ -3168,6 +3439,18 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
              {selectedAnnouncement && dialog === 'transfer' && <DestinationTransferDialog allAnnouncements={liveAnnouncements} sourceAnnouncement={selectedAnnouncement} onClose={handleCloseDialog} onSave={props.onTransferDestination} />}
              </React.Suspense>
              {selectedAnnouncement && dialog === 'change' && <ChangeRequestDialog announcement={selectedAnnouncement} onClose={handleCloseDialog} onSubmit={props.onChangeRequest} />}
+             {lisDialogAnn && (
+             <React.Suspense fallback={null}>
+                <WarehouseLisCodeDialog
+                    announcement={lisDialogAnn}
+                    onClose={() => setLisDialogAnn(null)}
+                    onSaved={() => {
+                        window.dispatchEvent(new CustomEvent('announcements-updated'));
+                        onRefresh && onRefresh();
+                    }}
+                />
+             </React.Suspense>
+             )}
              {referDialogAnns && referDialogAnns.length > 0 && onReferToCarrier && (
                 <CarrierReferDialog
                     announcements={referDialogAnns}
@@ -3281,6 +3564,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 }
                 .transport-live-fit-table .col-checkbox { width: 2rem; }
                 .transport-live-fit-table .col-operations { width: 10.5rem; }
+                .warehouse-keeper-ops .transport-live-fit-table .col-operations { width: 9.5rem; }
                 .transport-live-fit-table th input { min-width: 0; width: 100%; max-width: 100%; }
                 .transport-live-dairy-compact-wrap[data-sticky-rows='compact'] {
                     overflow-x: hidden;
@@ -3317,7 +3601,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     min-height: 1.35rem;
                 }
                 .transport-live-dairy-compact .col-checkbox { width: 1.75rem; }
-                .transport-live-dairy-compact .col-operations { width: 9%; min-width: 0; vertical-align: middle; }
+                .transport-live-dairy-compact .col-operations { width: 9%; min-width: 0; vertical-align: middle; overflow: visible; }
+                .warehouse-keeper-ops .transport-live-dairy-compact .col-operations { width: 14%; min-width: 8rem; overflow: visible; }
                 .transport-live-dairy-compact .col-row { width: 2%; white-space: nowrap; vertical-align: middle; }
                 .transport-live-dairy-compact .col-creator { width: 6%; vertical-align: middle; }
                 .transport-live-dairy-compact .col-vehicle-type { width: 4%; white-space: nowrap; vertical-align: middle; }
@@ -3445,7 +3730,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [foundPersonalVehicle, setFoundPersonalVehicle] = useState<any | null | 'not_found'>(null);
     const [personalFormMode, setPersonalFormMode] = useState<'simple' | 'detailed'>('simple');
     const [destinations, setDestinations] = useState<Destination[]>([]);
-    const [costMode, setCostMode] = useState<'manual' | 'auto'>('auto'); // پیش‌فرض: خودکار
+    const [costMode, setCostMode] = useState<'manual' | 'auto'>('manual');
     const [autoTotalCost, setAutoTotalCost] = useState(''); // فقط string با فرمت (مثل "1,234,567")
     const [displayFreightCosts, setDisplayFreightCosts] = useState<{ [key: string]: string }>({});
     
@@ -3655,14 +3940,14 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
             } else if (existingTotalCost > 0) {
                 const formatted = formatNumericInputDisplay(String(Math.round(existingTotalCost)));
                 setAutoTotalCost(formatted);
-                setCostMode('auto');
+                setCostMode('manual');
             } else {
                 const fromAnnouncementTotal = parseNumericField(announcement.totalFreightCost);
                 if (fromAnnouncementTotal > 0) {
                     setAutoTotalCost(
                         formatNumericInputDisplay(String(Math.round(fromAnnouncementTotal)))
                     );
-                    setCostMode('auto');
+                    setCostMode('manual');
                 } else {
                     setCostMode('manual');
                     setAutoTotalCost('');
@@ -3944,8 +4229,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 return;
             }
             const bl = blNumber.trim();
-            // برای کاربر ترابری شرکت، کرایه وجود ندارد (null)
-            onUpdateAssignment(announcement.id, {
+            const saved = await onUpdateAssignment(announcement.id, {
                 driverId: foundCompanyDriver.id, 
                 vehicleId: foundVehicle.id, 
                 billOfLadingNumber: bl || undefined, 
@@ -3957,6 +4241,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 assignedDriverContact: foundCompanyDriver.mobile,
                 assignedVehiclePlate: formatCompanyVehiclePlate(foundVehicle),
             });
+            if (saved === false) return;
         } else if (
             currentUser.role === UserRole.Transportation_Personal_Vehicle_User ||
             currentUser.role === UserRole.CarrierUser
@@ -4086,7 +4371,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 return;
             }
 
-            onUpdateAssignment(announcement.id, {
+            const saved = await onUpdateAssignment(announcement.id, {
                 driverId: isDairyAmbientIsolated ? undefined : foundPersonalDriver?.id,
                 vehicleId: isDairyAmbientIsolated ? undefined : foundPersonalVehicle?.id,
                 assignmentFormMode: isDairyAmbientIsolated ? 'simple' : personalFormMode,
@@ -4100,7 +4385,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 destinations,
                 totalFreightCost: personalTotalCost,
                 tariffFreightCost: tariffAmount > 0 ? tariffAmount : undefined,
-                billOfLadingNumber: isSavingCarrierNameOnly ? undefined : blNumber,
+                billOfLadingNumber: blNumber.trim() || undefined,
                 assignmentType: 'personal',
                 notes: notes,
                 assignedDriverName: personalDriverDetails.name.trim(),
@@ -4114,6 +4399,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                           : announcement.carrierName
                       : undefined,
             });
+            if (saved === false) return;
         }
         onClose();
     };
@@ -4662,15 +4948,19 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 {destinations.map((dest, i) => (
                                     <div key={dest.id} className="grid grid-cols-5 gap-2 items-center text-sm p-1">
                                         <div className="col-span-2">
-                                            <strong>مقصد {i + 1}:</strong> {dest.city}{' '}
-                                            (
-                                            {isIceCreamAnnouncement
-                                                ? [
-                                                    announcement.cartonCount != null ? `${Number(announcement.cartonCount).toLocaleString('fa-IR')} کارتن` : null,
-                                                    announcement.palletCount != null ? `${Number(announcement.palletCount).toLocaleString('fa-IR')} پالت` : null,
-                                                  ].filter(Boolean).join(' / ') || '-'
-                                                : `${dest.tonnage ? formatTonnageKg(parseNumericField(dest.tonnage)) : 0} کیلوگرم`}
-                                            )
+                                            {isIceCreamAnnouncement ? (
+                                                <>
+                                                    <strong>مقصد {i + 1}:</strong> {dest.city}{' '}
+                                                    (
+                                                    {[
+                                                        announcement.cartonCount != null ? `${Number(announcement.cartonCount).toLocaleString('fa-IR')} کارتن` : null,
+                                                        announcement.palletCount != null ? `${Number(announcement.palletCount).toLocaleString('fa-IR')} پالت` : null,
+                                                    ].filter(Boolean).join(' / ') || '-'}
+                                                    )
+                                                </>
+                                            ) : (
+                                                <span>{formatAssignmentDestinationFreightCaption(announcement, dest, i)}</span>
+                                            )}
                                         </div>
                                         <div className="col-span-3 flex items-center gap-2"><label>کرایه:</label><input 
                                             type="text" 
@@ -4723,9 +5013,7 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                             </div>
                              <div className="text-right font-bold pt-2 border-t">کرایه کل: {typeof totalPersonalCost === 'number' ? totalPersonalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : String(totalPersonalCost)} ریال</div>
                         </fieldset>
-                        {!isAmbientCarrierPhase && (
                         <div><label className="text-sm">شماره بارنامه</label><input value={blNumber} onChange={e => setBlNumber(e.target.value)} className="input-style mt-1" /></div>
-                        )}
                         {(isCarrierAssignmentUser || isPersonalAssignmentUser) && (
                         <div>
                             <label className="text-sm">

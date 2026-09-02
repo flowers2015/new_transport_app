@@ -57,6 +57,7 @@ export enum View {
     FinalizePermissionManagement = 'finalize-permission-management',
     PlanningManagerApprovalPermissionManagement = 'planning-manager-approval-permission-management',
     DebugDriverCalculations = 'debug-driver-calculations',
+    WarehouseManagement = 'warehouse-management',
 }
 
 export enum UserRole {
@@ -84,6 +85,7 @@ export enum UserRole {
     Viewer = 'بیننده',
     /** پرسنل بازرسی — مشاهده پیگیری زنده + مدیریت منابع GPS */
     Inspection = 'بازرسی',
+    WarehouseKeeper = 'انباردار',
 }
 
 export enum RepairStatus {
@@ -734,6 +736,12 @@ export interface FreightAnnouncement {
     history: AnnouncementHistory[];
     /** کارمند برنامه‌ریزی پس از «بار مانده» مجدداً برای تایید مدیر ارسال کرده */
     isReannouncement?: boolean;
+    /** وضعیت بارگیری انبار */
+    loadingStatus?: "not_started" | "in_progress" | "completed" | null;
+    loadingStartedAt?: string | null;
+    loadingEndedAt?: string | null;
+    cartonCountWarehouse?: number | null;
+    weightKg?: number | null;
 }
 
 export interface FreightTransaction {

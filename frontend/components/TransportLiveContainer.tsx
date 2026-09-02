@@ -30,6 +30,8 @@ import {
     matchesFreightLine,
     isPendingBillOfLading,
 } from '../utils/freightDisplay';
+import { isInspectionRole, isFreightViewOnlyRole } from '../utils/roleAccess';
+import { confirmBillOfLadingNotDuplicate } from '../utils/billOfLadingDuplicate';
 
 const dedupeAnnouncementsById = (items: FreightAnnouncement[]): FreightAnnouncement[] => {
     const seen = new Set<string>();
@@ -268,6 +270,9 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                                   : null,
                         priority: a.priority,
                         products: a.products || [],
+                        loadingStatus: a.loading_status || a.loadingStatus || null,
+                        loadingStartedAt: a.loading_started_at || a.loadingStartedAt || null,
+                        loadingEndedAt: a.loading_ended_at || a.loadingEndedAt || null,
                         platformArrivalTime: a.platform_arrival_time || a.platformArrivalTime,
                         announcementWeekDay: a.announcement_week_day || a.announcementWeekDay || undefined,
                         deliveryDate: a.delivery_date || a.deliveryDate,
@@ -916,6 +921,16 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     });
 
     const onUpdateAssignment = async (announcementId: string, assignment: any) => {
+        if (isFreightViewOnlyRole(currentUser?.role)) {
+            alert('نقش مالی حمل فقط مجاز به مشاهده پیگیری اعلام بار است.');
+            return false;
+        }
+        const bolNumber = String(assignment?.billOfLadingNumber || '').trim();
+        if (bolNumber) {
+            const allowed = await confirmBillOfLadingNotDuplicate(bolNumber, announcementId);
+            if (!allowed) return false;
+        }
+
         // Optimistic Update: فوراً UI را به‌روزرسانی کن
         const originalAnnouncements = [...announcements];
         setAnnouncements(prev => applyOptimisticUpdate(prev, announcementId, {
@@ -1012,9 +1027,11 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
             if (assignment.assignmentType === 'company') {
                 window.dispatchEvent(new CustomEvent('dispatch-board:update'));
             }
+            return true;
         } catch (e) { 
             console.error('❌ [TransportLive] Assignment error:', e);
             // در صورت خطا، rollback انجام شده است
+            return false;
         }
     };
 
@@ -1553,6 +1570,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onForward = async (announcementId: string | string[]) => {
+        if (isFreightViewOnlyRole(currentUser?.role)) {
+            alert('نقش مالی حمل فقط مجاز به مشاهده پیگیری اعلام بار است.');
+            return;
+        }
         const ids = Array.isArray(announcementId) ? announcementId : [announcementId];
         try {
             const token = localStorage.getItem('token');
@@ -1754,6 +1775,10 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
     };
 
     const onCancel = async (announcementId: string) => {
+        if (isFreightViewOnlyRole(currentUser?.role)) {
+            alert('نقش مالی حمل فقط مجاز به مشاهده پیگیری اعلام بار است.');
+            return;
+        }
         const ann = announcements.find((a) => a.id === announcementId);
         const code = ann?.announcementCode || announcementId;
         if (

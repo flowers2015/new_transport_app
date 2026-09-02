@@ -71,6 +71,7 @@ const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./c
 const DebugDriverCalculations = React.lazy(() => import('./components/DebugDriverCalculations'));
 const ViewerPortal = React.lazy(() => import('./viewer/ViewerPortal'));
 const TransportUpcomingFreight = React.lazy(() => import('./transport/TransportUpcomingFreight'));
+const WarehouseManagement = React.lazy(() => import('./components/WarehouseManagement'));
 
 const getDefaultViewForRole = (role?: UserRole | null): View => {
     switch (role) {
@@ -92,6 +93,8 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
         case UserRole.Viewer:
             return View.TransportLive;
         case UserRole.Inspection:
+            return View.TransportLive;
+        case UserRole.WarehouseKeeper:
             return View.TransportLive;
         default:
             return View.Dashboard;
@@ -149,6 +152,7 @@ const App: React.FC = () => {
             case 'insurance': return UserRole.InsuranceExpert;
             case 'viewer': return UserRole.Viewer;
             case 'inspector': return UserRole.Inspection;
+            case 'warehouse_keeper': return UserRole.WarehouseKeeper;
             case 'carrier_user': return UserRole.CarrierUser;
             default: return null;
         }
@@ -750,6 +754,10 @@ const App: React.FC = () => {
                 return <PlanningManagerApprovalPermissionManagement />;
             
             // Add cases for other views here as they are implemented
+            case View.WarehouseManagement:
+                console.log('[App] Render view:', View.WarehouseManagement);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                return <WarehouseManagement />;
             // e.g., case View.InvoiceDetail: ...
 
             default:

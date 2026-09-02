@@ -104,7 +104,7 @@ const Header: React.FC<HeaderProps> = ({
       // Planning Section - برنامه ریزی (اولین برای PlanningEmployee)
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager] },
       // Freight Management Section - اعلام بار
-      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance, UserRole.Inspection], special: 'blinking' },
+      { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance, UserRole.Inspection, UserRole.WarehouseKeeper], special: 'blinking' },
       { view: View.GpsResourceManagement, label: 'منابع GPS', roles: [UserRole.Inspection] },
       { view: View.CarrierManagement, label: 'تعریف باربری', roles: [UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.AmbientBaleNotifySettings, label: 'اعلان بله فروتلند', roles: [UserRole.Transportation_Personal_Vehicle_User, UserRole.Admin] },
@@ -164,6 +164,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.PlanningManagerApprovalPermissionManagement, label: 'مجوز تاییدیه مدیران برنامه‌ریزی', icon: '✅' },
       { view: View.AuditTrail, label: 'تاریخچه تراکنش‌ها', icon: '📋' },
       { view: View.BaleAdminSettings, label: 'تنظیمات بله', icon: '🤖' },
+      { view: View.WarehouseManagement, label: 'مدیریت انبارها', icon: '📦' },
       { view: View.TransportReports, label: 'گزارش‌ها (Metabase)', icon: '📊' },
       { view: View.SupportTickets, label: 'مدیریت تیکت‌ها', icon: '🎫' },
     ];
