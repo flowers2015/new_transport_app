@@ -786,7 +786,16 @@ async function getPeriodTours(req, res) {
         COALESCE(fa.vehicle_type, dc.vehicle_code, '') as vehicle_type,
         COALESCE(
           (
-            SELECT json_agg(json_build_object('city', fd.city, 'representative_name', fd.representative_name) ORDER BY fd.created_at ASC)
+            SELECT json_agg(json_build_object(
+              'city', fd.city,
+              'representative_name', fd.representative_name,
+              'province', COALESCE((
+                SELECT dr.province FROM dispatch_routes dr
+                WHERE LOWER(TRIM(dr.city)) = LOWER(TRIM(fd.city))
+                ORDER BY dr.is_active DESC NULLS LAST
+                LIMIT 1
+              ), '')
+            ) ORDER BY fd.created_at ASC)
             FROM freight_destinations fd
             WHERE fd.freight_announcement_id = fa.id
           ),
@@ -844,15 +853,28 @@ async function getPeriodTours(req, res) {
       fixedAllowance: row.queue_type === 'fixed_allowance'
         ? (parseInt(row.fixed_allowance) || parseInt(row.tour_cost) || 0)
         : 0,
+      tourCost: parseInt(row.tour_cost) || 0,
       foodCost: parseInt(row.food_cost) || 0,
       fuelCost: parseInt(row.fuel_cost) || 0,
       tollCost: parseInt(row.toll_cost) || 0,
+      loadingCost: parseInt(row.loading_cost) || 0,
       billOfLadingCost: parseInt(row.bill_of_lading_cost) || 0,
       returnCargoCost: parseInt(row.return_cargo_cost) || 0,
+      returnInterBranchCargoCost: parseInt(row.return_inter_branch_cargo_cost) || 0,
       returnBillOfLadingCost: parseInt(row.return_bill_of_lading_cost) || 0,
       multiUnloadCost: parseInt(row.multi_unload_cost) || 0,
+      multiUnloadCount: parseInt(row.multi_unload_count) || 0,
       excessMissionCost: parseInt(row.excess_mission_cost) || 0,
+      depotCargoHandlingCost: parseInt(row.depot_cargo_handling_cost) || 0,
+      depotKilometerRate: parseInt(row.depot_kilometer_rate) || 0,
+      depotMissionCost: parseInt(row.depot_mission_cost) || 0,
       helperDriverCost: parseInt(row.helper_driver_cost) || 0,
+      helperDriverId: row.helper_driver_id || '',
+      helperDriverEmployeeId: row.helper_driver_employee_id || '',
+      helperDriverName: row.helper_driver_name || '',
+      helperDriverAllowance: parseInt(row.helper_driver_allowance) || 0,
+      helperDriverFoodCost: parseInt(row.helper_driver_food_cost) || 0,
+      helperDriverExcessMissionCost: parseInt(row.helper_driver_excess_mission_cost) || 0,
       totalCost: parseInt(row.total_cost) || 0,
       commissionStatus: row.commission_status,
       };

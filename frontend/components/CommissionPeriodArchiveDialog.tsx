@@ -1,10 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
+    aggregateBreakdownByDriver,
     buildCommissionSummaries,
+    buildGeoDispatchCostRows,
     buildTourDetailsFromCalculations,
+    buildVehicleTypePivot,
     DriverCommissionSummary,
     DriverTourDetail,
     MileageRegulation,
+    sumHelperDriverBreakdown,
+    sumMainDriverBreakdown,
+    TourCostBreakdown,
+    emptyTourCostBreakdown,
 } from '../utils/commissionSummary';
 import { downloadStyledExcelWorkbook } from '../utils/excelExport';
 import { getApiUrl } from '../utils/apiConfig';
@@ -57,6 +64,141 @@ function summaryToRow(s: DriverCommissionSummary) {
         s.totalCommission,
         s.fixedAllowance,
     ];
+}
+
+function summariesToRowsWithTotal(list: DriverCommissionSummary[]) {
+    const rows = list.map(summaryToRow);
+    if (list.length === 0) return rows;
+    rows.push([
+        '',
+        'جمع کل',
+        '',
+        '',
+        list.reduce((s, r) => s + r.totalTourCount, 0),
+        list.reduce((s, r) => s + r.trailerTourCount, 0),
+        list.reduce((s, r) => s + r.tenWheelerTourCount, 0),
+        list.reduce((s, r) => s + r.totalKilometers, 0),
+        list.reduce((s, r) => s + r.totalCommission, 0),
+        list.reduce((s, r) => s + r.fixedAllowance, 0),
+    ]);
+    return rows;
+}
+
+const COST_DETAIL_HEADERS = [
+    'کد پرسنلی',
+    'نام راننده',
+    'خودرو غالب',
+    'نوع صف',
+    'تعداد تور',
+    'تور تریلی',
+    'تور ده‌چرخ',
+    'کل پیمایش (کیلومتر)',
+    'مجموع هزینه سفر راننده اصلی (ریال)',
+    'مجموع هزینه سفر راننده کمکی (ریال)',
+    'اجرت / پورسانت تور (ریال)',
+    'اجرت ثابت (ریال)',
+    'هزینه غذا (ریال)',
+    'هزینه سوخت (ریال)',
+    'هزینه عوارض (ریال)',
+    'هزینه بارگیری (ریال)',
+    'هزینه بارنامه (ریال)',
+    'هزینه بار برگشتی (ریال)',
+    'هزینه بار برگشتی بین شعب (ریال)',
+    'هزینه بارنامه برگشتی (ریال)',
+    'هزینه چندجا تخلیه (ریال)',
+    'هزینه ماموریت مازاد (ریال)',
+    'جابجایی بار دپو (ریال)',
+    'اجرت دپو (ریال)',
+    'حق ماموریت دپو (ریال)',
+    'اجرت راننده کمکی (ریال)',
+    'غذای راننده کمکی (ریال)',
+    'ماموریت مازاد راننده کمکی (ریال)',
+];
+
+function costBreakdownCells(b: TourCostBreakdown) {
+    const main = sumMainDriverBreakdown(b);
+    const helper = sumHelperDriverBreakdown(b);
+    return [
+        main,
+        helper,
+        b.porsantTourCost,
+        b.fixedAllowance,
+        b.foodCost,
+        b.fuelCost,
+        b.tollCost,
+        b.loadingCost,
+        b.billOfLadingCost,
+        b.returnCargoCost,
+        b.returnInterBranchCargoCost,
+        b.returnBillOfLadingCost,
+        b.multiUnloadCost,
+        b.excessMissionCost,
+        b.depotCargoHandlingCost,
+        b.depotAllowanceCost,
+        b.depotMissionCost,
+        b.helperAllowance,
+        b.helperFood,
+        b.helperExcessMission,
+    ];
+}
+
+function costDetailRow(s: DriverCommissionSummary, b: TourCostBreakdown) {
+    return [
+        s.employeeId,
+        s.driverName,
+        s.dominantVehicleLabel,
+        s.queueTypeLabel,
+        s.totalTourCount,
+        s.trailerTourCount,
+        s.tenWheelerTourCount,
+        s.totalKilometers,
+        ...costBreakdownCells(b),
+    ];
+}
+
+function costDetailRowsWithTotal(
+    list: DriverCommissionSummary[],
+    byDriver: Map<string, TourCostBreakdown>
+) {
+    const rows = list.map((s) => costDetailRow(s, byDriver.get(s.driverId) || emptyTourCostBreakdown()));
+    if (list.length === 0) return rows;
+    const total = list.reduce((acc, s) => {
+        const b = byDriver.get(s.driverId) || emptyTourCostBreakdown();
+        return {
+            tours: acc.tours + s.totalTourCount,
+            trailer: acc.trailer + s.trailerTourCount,
+            ten: acc.ten + s.tenWheelerTourCount,
+            km: acc.km + s.totalKilometers,
+            b: {
+                porsantTourCost: acc.b.porsantTourCost + b.porsantTourCost,
+                fixedAllowance: acc.b.fixedAllowance + b.fixedAllowance,
+                foodCost: acc.b.foodCost + b.foodCost,
+                fuelCost: acc.b.fuelCost + b.fuelCost,
+                tollCost: acc.b.tollCost + b.tollCost,
+                loadingCost: acc.b.loadingCost + b.loadingCost,
+                billOfLadingCost: acc.b.billOfLadingCost + b.billOfLadingCost,
+                returnCargoCost: acc.b.returnCargoCost + b.returnCargoCost,
+                returnInterBranchCargoCost: acc.b.returnInterBranchCargoCost + b.returnInterBranchCargoCost,
+                returnBillOfLadingCost: acc.b.returnBillOfLadingCost + b.returnBillOfLadingCost,
+                multiUnloadCost: acc.b.multiUnloadCost + b.multiUnloadCost,
+                excessMissionCost: acc.b.excessMissionCost + b.excessMissionCost,
+                depotCargoHandlingCost: acc.b.depotCargoHandlingCost + b.depotCargoHandlingCost,
+                depotAllowanceCost: acc.b.depotAllowanceCost + b.depotAllowanceCost,
+                depotMissionCost: acc.b.depotMissionCost + b.depotMissionCost,
+                helperAllowance: acc.b.helperAllowance + b.helperAllowance,
+                helperFood: acc.b.helperFood + b.helperFood,
+                helperExcessMission: acc.b.helperExcessMission + b.helperExcessMission,
+            } as TourCostBreakdown,
+        };
+    }, {
+        tours: 0,
+        trailer: 0,
+        ten: 0,
+        km: 0,
+        b: emptyTourCostBreakdown(),
+    });
+    rows.push(['', 'جمع کل', '', '', total.tours, total.trailer, total.ten, total.km, ...costBreakdownCells(total.b)]);
+    return rows;
 }
 
 function filterSummariesByTab(data: DriverCommissionSummary[], tab: ArchiveTab) {
@@ -130,12 +272,9 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
     const handleExportExcel = async () => {
         if (!selectedPeriod || rawCalcs.length === 0) return;
 
-        const trailerRows = summaries
-            .filter((s) => s.commissionBase === 'تریلی')
-            .map(summaryToRow);
-        const tenWheelerRows = summaries
-            .filter((s) => s.commissionBase === 'ده چرخ')
-            .map(summaryToRow);
+        const trailerList = summaries.filter((s) => s.commissionBase === 'تریلی');
+        const tenWheelerList = summaries.filter((s) => s.commissionBase === 'ده چرخ');
+        const breakdownByDriver = aggregateBreakdownByDriver(rawCalcs);
         const detailRows = tourDetails.map((t) => [
             t.employeeId,
             t.driverName,
@@ -147,12 +286,76 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
             t.totalKilometers,
             t.fixedAllowance,
         ]);
+        const pivotRows = buildVehicleTypePivot(rawCalcs).map((r) => [
+            r.vehicleType,
+            r.tourCount,
+            r.returnTourCount,
+            r.totalKilometers,
+            r.mainDriverCost,
+            r.helperTourCount,
+            r.helperCost,
+        ]);
+
+        let cityProvinceMap: Map<string, string> | undefined;
+        try {
+            const token = localStorage.getItem('token');
+            const cityRes = await fetch(getApiUrl('cities'), {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (cityRes.ok) {
+                const cities = await cityRes.json();
+                cityProvinceMap = new Map();
+                (Array.isArray(cities) ? cities : []).forEach((c: { city?: string; province?: string }) => {
+                    const city = String(c.city || '').trim();
+                    const province = String(c.province || '').trim();
+                    if (city && province) {
+                        cityProvinceMap!.set(city.replace(/\s+/g, ' ').toLowerCase(), province);
+                    }
+                });
+            }
+        } catch {
+            cityProvinceMap = undefined;
+        }
+
+        const geoRows = buildGeoDispatchCostRows(rawCalcs, cityProvinceMap).map((r) => [
+            r.level,
+            r.province,
+            r.city,
+            r.tourCount,
+            r.kilometers,
+            r.dispatchCost,
+            r.costPerKm,
+        ]);
 
         await downloadStyledExcelWorkbook({
             fileName: `بایگانی_${selectedPeriod.periodName.replace(/\s/g, '_')}.xlsx`,
+            numericColumnMatchers: [
+                'تناژ',
+                'کرایه',
+                'ارزش',
+                'مبلغ',
+                'کارتن',
+                'تعداد',
+                'ریال',
+                'کیلو',
+                'پیمایش',
+                'اجرت',
+                'تور',
+                'هزینه',
+                'سوخت',
+                'غذا',
+            ],
             sheets: [
-                { sheetName: 'پیمایش تریلی', headers: SUMMARY_HEADERS, rows: trailerRows },
-                { sheetName: 'پیمایش ده چرخ', headers: SUMMARY_HEADERS, rows: tenWheelerRows },
+                {
+                    sheetName: 'پیمایش تریلی',
+                    headers: SUMMARY_HEADERS,
+                    rows: summariesToRowsWithTotal(trailerList),
+                },
+                {
+                    sheetName: 'پیمایش ده چرخ',
+                    headers: SUMMARY_HEADERS,
+                    rows: summariesToRowsWithTotal(tenWheelerList),
+                },
                 {
                     sheetName: 'ریز تورها',
                     headers: [
@@ -167,6 +370,42 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                         'اجرت ثابت (ریال)',
                     ],
                     rows: detailRows,
+                },
+                {
+                    sheetName: 'هزینه تریلی',
+                    headers: COST_DETAIL_HEADERS,
+                    rows: costDetailRowsWithTotal(trailerList, breakdownByDriver),
+                },
+                {
+                    sheetName: 'هزینه ده چرخ',
+                    headers: COST_DETAIL_HEADERS,
+                    rows: costDetailRowsWithTotal(tenWheelerList, breakdownByDriver),
+                },
+                {
+                    sheetName: 'پیوت نوع خودرو',
+                    headers: [
+                        'نوع خودرو',
+                        'تعداد تور',
+                        'تعداد تور برگشتی',
+                        'پیمایش کل (کیلومتر)',
+                        'هزینه راننده اصلی (ریال)',
+                        'تعداد تور با راننده کمکی',
+                        'هزینه راننده کمکی (ریال)',
+                    ],
+                    rows: pivotRows,
+                },
+                {
+                    sheetName: 'هزینه اعزام استان-شهر',
+                    headers: [
+                        'سطح',
+                        'استان',
+                        'شهر',
+                        'تعداد تور',
+                        'پیمایش کل (کیلومتر)',
+                        'مجموع هزینه اعزام بدون دپو (ریال)',
+                        'هزینه به ازای کیلومتر (ریال)',
+                    ],
+                    rows: geoRows,
                 },
             ],
         });
