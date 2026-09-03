@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { User, Driver, Vehicle, FreightAnnouncement, DriverAllowanceCalculation, DriverTourDetail } from '../types';
 import { getApiUrl } from '../utils/apiConfig';
-import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali, toBillOfLadingDateString, formatBillOfLadingDateDisplay } from '../utils/jalali';
+import { formatJalali, formatJalaliDateTime, parseJalaliDateString, gregorianToJalali, toBillOfLadingDateString, formatBillOfLadingDateDisplay, maskJalaliDateTyping } from '../utils/jalali';
 import {
     buildInvoiceDownloadFilename,
     buildInvoiceFilenameFromContext,
@@ -476,6 +476,8 @@ function preserveRecordedTourCosts(
 const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = ({ currentUser }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const [lastDataUpdatedAt, setLastDataUpdatedAt] = useState<Date | null>(null);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
@@ -493,7 +495,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
     const [calculations, setCalculations] = useState<DriverCalculationRow[]>([]);
     
     // نوع فیلتر تاریخ (تاریخ صدور بارنامه یا تاریخ محاسبه)
-    const [dateFilterType, setDateFilterType] = useState<'billOfLading' | 'calculation'>('billOfLading');
+    const [dateFilterType, setDateFilterType] = useState<'billOfLading' | 'calculation' | 'assignment'>('billOfLading');
     
     // فیلتر تاریخ (که با دکمه جستجو اعمال می‌شود)
     const [startDate, setStartDate] = useState<string>('');
@@ -1061,6 +1063,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             const enrichedAnnouncements = await enrichAnnouncementsWithRouteMileage(companyAnnouncements);
             setAnnouncements(enrichedAnnouncements);
             setRefreshTrigger((t) => t + 1);
+            setLastDataUpdatedAt(new Date());
             
         } catch (err: any) {
             console.error('❌ [TransportFinanceCalculation] Failed to fetch data:', err);
@@ -1957,7 +1960,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     if (endDate && jalaliDate > endDate) return false;
                     
                     return true;
-                } else {
+                }
+                if (dateFilterType === 'assignment') {
+                    const assignmentDates = calc.tours
+                        .map((t) => String(t.assignmentDate || '').trim())
+                        .filter(Boolean);
+                    if (assignmentDates.length === 0) return false;
+                    return assignmentDates.some((jalaliDate) => {
+                        if (startDate && jalaliDate < startDate) return false;
+                        if (endDate && jalaliDate > endDate) return false;
+                        return true;
+                    });
+                }
                     // فیلتر بر اساس تاریخ محاسبه
                     const calculationDates = calc.tours
                         .map(t => t.calculationDate)
@@ -1972,7 +1986,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     if (endDate && firstDate > endDate) return false;
                     
                     return true;
-                }
             });
         }
 
@@ -2210,6 +2223,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             if (startDate && jalaliDate < startDate) return;
                             if (endDate && jalaliDate > endDate) return;
                         }
+                    } else if (dateFilterType === 'assignment') {
+                        const jalaliDate = String(tour.assignmentDate || '').trim();
+                        if (!jalaliDate) return;
+                        if (startDate || endDate) {
+                            if (startDate && jalaliDate < startDate) return;
+                            if (endDate && jalaliDate > endDate) return;
+                        }
                     } else {
                         // فیلتر بر اساس تاریخ محاسبه
                         if (!tour.calculationDate) return;
@@ -2233,8 +2253,13 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     totalTours += 1;
                 } else {
-                    // تورهای محاسبه نشده: همه را در نظر بگیر (حتی بدون تاریخ)
-                    // فیلتر تاریخ برای تورهای محاسبه نشده اعمال نمی‌شود
+                    // تورهای محاسبه نشده: برای تاریخ تخصیص همان فیلتر اعمال می‌شود
+                    if (dateFilterType === 'assignment' && (startDate || endDate)) {
+                        const jalaliDate = String(tour.assignmentDate || '').trim();
+                        if (!jalaliDate) return;
+                        if (startDate && jalaliDate < startDate) return;
+                        if (endDate && jalaliDate > endDate) return;
+                    }
                     unrecordedTours += 1;
                     totalTours += 1;
                 }
@@ -2845,6 +2870,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 approvedMissionDays: tour.approvedMissionDays ?? (tour as any).approved_mission_days ?? 0,
                 excess_mission_days: tour.excessMissionDays ?? (tour as any).excess_mission_days ?? 0,
                 excessMissionDays: tour.excessMissionDays ?? (tour as any).excess_mission_days ?? 0,
+                notes: tour.notes || '',
             };
             
             // ساخت PaymentRecord
@@ -3012,10 +3038,6 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         }
         if ((tour as any).isPaid) {
             alert('تور پرداخت‌شده قابل رد مالی نیست.');
-            return;
-        }
-        if ((tour as any).isFinanceException) {
-            alert('تور استثنایی را نمی‌توان با رد مالی بست.');
             return;
         }
         setFinanceRejectTarget({
@@ -3290,6 +3312,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 helperDriverExcessKilometers: (tour as any).helperDriverExcessKilometers ?? (tour as any).helper_driver_excess_kilometers ?? 0,
                 helper_driver_excess_mission_days: (tour as any).helperDriverExcessMissionDays ?? (tour as any).helper_driver_excess_mission_days ?? 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays ?? (tour as any).helper_driver_excess_mission_days ?? 0,
+                notes: tour.notes || '',
             };
             
             console.log('🔍 [handleExportTourInvoiceImage] tourAsCalc ساخته شد:', {
@@ -4429,14 +4452,14 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         
                         {/* بخش فیلتر تاریخ */}
                         <div className="flex gap-1.5 items-end bg-green-50 p-2 rounded border border-green-200">
-                            <div className="min-w-[100px]">
+                            <div className="min-w-[130px]">
                                 <label className="block text-xs font-semibold text-green-800 mb-0.5">
                                     نوع فیلتر
                                 </label>
                                 <select
                                     value={dateFilterType}
                                     onChange={(e) => {
-                                        setDateFilterType(e.target.value as 'billOfLading' | 'calculation');
+                                        setDateFilterType(e.target.value as 'billOfLading' | 'calculation' | 'assignment');
                                         setTempStartDate('');
                                         setTempEndDate('');
                                     }}
@@ -4444,6 +4467,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 >
                                     <option value="billOfLading">تاریخ صدور بارنامه</option>
                                     <option value="calculation">تاریخ محاسبه</option>
+                                    <option value="assignment">تاریخ تخصیص</option>
                                 </select>
                             </div>
                             <div className="min-w-[90px]">
@@ -4530,6 +4554,28 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         {/* دکمه toggle برای Excel */}
                         <div className="flex gap-1 items-end">
                             <button
+                                type="button"
+                                onClick={async () => {
+                                    if (refreshing) return;
+                                    setRefreshing(true);
+                                    try {
+                                        await fetchData({ silent: true });
+                                    } finally {
+                                        setRefreshing(false);
+                                    }
+                                }}
+                                disabled={refreshing}
+                                className="px-2 py-1.5 bg-sky-600 text-white rounded text-xs hover:bg-sky-700 font-medium whitespace-nowrap disabled:opacity-60"
+                                title="بارگذاری آخرین تورها و محاسبات"
+                            >
+                                {refreshing ? 'در حال به‌روزرسانی...' : 'به‌روزرسانی'}
+                            </button>
+                            {lastDataUpdatedAt && (
+                                <span className="text-[11px] text-slate-500 whitespace-nowrap pb-1">
+                                    آخرین به‌روزرسانی: {formatJalaliDateTime(lastDataUpdatedAt)}
+                                </span>
+                            )}
+                            <button
                                 onClick={() => setShowExcelButtons(!showExcelButtons)}
                                 className="px-2 py-1.5 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 font-medium whitespace-nowrap"
                                 title={showExcelButtons ? "مخفی کردن خروجی Excel" : "نمایش خروجی Excel"}
@@ -4586,7 +4632,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                 خلاصه تورها در بازه فیلتر شده
                             </h2>
                             <span className="text-xs text-sky-700">
-                                مبنا: {dateFilterType === 'billOfLading' ? 'تاریخ صدور بارنامه' : 'تاریخ محاسبه'} و فیلترهای بالا
+                                مبنا: {dateFilterType === 'billOfLading' ? 'تاریخ صدور بارنامه' : dateFilterType === 'assignment' ? 'تاریخ تخصیص' : 'تاریخ محاسبه'} و فیلترهای بالا
                             </span>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
@@ -5069,13 +5115,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                             <td className="p-2 border-l border-slate-200">
                                     <input
                                         type="text"
+                                        inputMode="numeric"
+                                        dir="ltr"
                                         value={inputDialogData.billOfLadingDate || ''}
                                         onChange={(e) => setInputDialogData({
                                             ...inputDialogData,
-                                            billOfLadingDate: e.target.value
+                                            billOfLadingDate: maskJalaliDateTyping(e.target.value)
                                         })}
                                                     className="w-full px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-sky-500 focus:border-sky-500"
-                                        placeholder="1403/01/01"
+                                        placeholder="14050908 یا 1405/09/08"
+                                        maxLength={10}
                                         required
                                     />
                                             </td>
@@ -6235,7 +6284,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                         <li><strong>تورهای پرداخت شده:</strong> پس از پرداخت، تورها همچنان قابل ویرایش هستند و می‌توانید اطلاعات آن‌ها را تغییر دهید. صورتحساب‌های پرداخت شده همیشه آخرین نسخه محاسبات را نمایش می‌دهند.</li>
                                         <li><strong>قفل بعد از بستن دوره:</strong> پس از بستن دوره مالی در صفحه "محاسبه پورسانت ماهانه"، تمام تورهای آن دوره قفل می‌شوند و دیگر قابل ویرایش نیستند. این قفل تا زمان باز شدن دوره توسط مدیر سیستم ادامه دارد.</li>
                                         <li><strong>اولویت قفل دوره:</strong> اگر تور در دوره بسته شده باشد، حتی اگر پرداخت شده باشد، امکان ویرایش وجود ندارد.</li>
-                                        <li><strong>رد مالی:</strong> تور اجرا نشده یا ناقص را می‌توانید «رد مالی» کنید. تور از ردیف تورهای راننده و آمار نوبت/خیلی‌دور حذف می‌شود ولی در تاریخچه با برچسب می‌ماند. برای سفر ناقص واقعی، بعد از رد، «تور استثنایی» ثبت کنید.</li>
+                                        <li><strong>رد مالی:</strong> تور اجرا نشده یا ناقص — از جمله تور استثنایی مالی — را می‌توانید «رد مالی» کنید. تور از ردیف تورهای راننده و آمار نوبت/خیلی‌دور حذف می‌شود ولی در تاریخچه با برچسب می‌ماند. برای سفر ناقص واقعی، بعد از رد، در صورت نیاز «تور استثنایی» جدید ثبت کنید.</li>
                                         <li><strong>ورود به کارتابل:</strong> فقط تورهای <strong>نهایی‌شده (Finalized)</strong> — نه «در حال حمل».</li>
                                     </ul>
                                 </div>
@@ -6619,9 +6668,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                                     }
                                                                     
                                                                     const calcRow = calculations.find(c => c.driverName === selectedDriverName);
-                                                                    const canFinanceReject =
-                                                                        isTransportFinance &&
-                                                                        !(tour as any).isFinanceException;
+                                                                    const canFinanceReject = isTransportFinance;
 
                                                                     return (
                                                                         <>

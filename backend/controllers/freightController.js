@@ -9047,11 +9047,6 @@ async function rejectFinanceTour(req, res) {
       return res.status(400).json({ message: 'این تور قبلاً رد مالی شده است.' });
     }
 
-    if (ann.announcement_source === 'finance_exception') {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'تور استثنایی را نمی‌توان با رد مالی بست.' });
-    }
-
     if (ann.status !== 'Finalized') {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'فقط تورهای نهایی‌شده قابل رد مالی هستند.' });

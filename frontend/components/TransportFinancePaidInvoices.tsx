@@ -60,6 +60,7 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // صفحه‌بندی
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [itemsPerPage, setItemsPerPage] = useState<number>(30);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     
     // انتخاب روش صورتحساب (دیفالت: روش 1)
     const [invoiceLayout, setInvoiceLayout] = useState<InvoiceLayoutType>(InvoiceLayoutType.STANDARD_ACCOUNTING);
@@ -165,6 +166,35 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
         const startIndex = (currentPage - 1) * itemsPerPage;
         return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredRecords, currentPage, itemsPerPage]);
+
+    const pageIds = useMemo(() => paginatedRecords.map((r) => r.id), [paginatedRecords]);
+    const allPageSelected =
+        pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+    const selectedRecords = useMemo(
+        () => filteredRecords.filter((r) => selectedIds.has(r.id)),
+        [filteredRecords, selectedIds]
+    );
+
+    const toggleRecordSelected = (id: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectCurrentPage = () => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (allPageSelected) {
+                pageIds.forEach((id) => next.delete(id));
+            } else {
+                pageIds.forEach((id) => next.add(id));
+            }
+            return next;
+        });
+    };
 
     // تولید PDF یکجا از تصاویر صورتحساب‌های پرداخت شده
     const exportAllInvoicesToPDF = async () => {
@@ -704,10 +734,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
     // تولید ZIP از تصاویر صورتحساب‌های پرداخت شده (یک تصویر برای هر تور)
     const exportAllInvoicesToImagesZip = async () => {
         console.log('🖼️ [ZIP_IMAGES] ========== شروع تولید ZIP تصاویر (یک تصویر برای هر تور) ==========');
-        console.log('🖼️ [ZIP_IMAGES] filteredRecords.length:', filteredRecords.length);
+        const recordsToExport = selectedRecords;
+        console.log('🖼️ [ZIP_IMAGES] recordsToExport.length:', recordsToExport.length);
         
-        if (filteredRecords.length === 0) {
-            alert('هیچ صورتحساب پرداخت شده‌ای برای تولید تصاویر وجود ندارد.');
+        if (recordsToExport.length === 0) {
+            alert('ابتدا ردیف‌های مورد نظر را در جدول انتخاب کنید.');
             return;
         }
 
@@ -730,10 +761,10 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
             let failCount = 0;
             
             // برای هر رکورد پرداخت شده
-            for (let i = 0; i < filteredRecords.length; i++) {
-                const record = filteredRecords[i];
+            for (let i = 0; i < recordsToExport.length; i++) {
+                const record = recordsToExport[i];
                 
-                console.log(`🖼️ [ZIP_IMAGES] ========== پردازش رکورد ${i + 1}/${filteredRecords.length} ==========`);
+                console.log(`🖼️ [ZIP_IMAGES] ========== پردازش رکورد ${i + 1}/${recordsToExport.length} ==========`);
                 console.log(`🖼️ [ZIP_IMAGES] Driver: ${record.driverName}, Employee ID: ${record.employeeId}`);
                 
                 try {
@@ -4844,11 +4875,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                         <div className="flex gap-2 items-end">
                             <button
                                 onClick={exportAllInvoicesToImagesZip}
-                                disabled={filteredRecords.length === 0}
+                                disabled={selectedRecords.length === 0}
                                 className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="دانلود تصاویر صورتحساب (روش 3: سبک جزئیات تور)"
+                                title="دانلود تصویر فقط برای ردیف‌های انتخاب‌شده"
                             >
-                                دانلود تصاویر
+                                دانلود تصاویر{selectedRecords.length > 0 ? ` (${selectedRecords.length.toLocaleString('fa-IR')})` : ''}
                             </button>
                             <button
                                 onClick={exportToExcel}
@@ -4880,6 +4911,11 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     </div>
                     <div className="text-sm text-slate-600">
                         نمایش {((currentPage - 1) * itemsPerPage) + 1} تا {Math.min(currentPage * itemsPerPage, filteredRecords.length)} از {filteredRecords.length} ردیف
+                        {selectedRecords.length > 0 && (
+                            <span className="mr-2 text-orange-700">
+                                — {selectedRecords.length.toLocaleString('fa-IR')} ردیف انتخاب‌شده
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -4888,6 +4924,15 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                     <table className="w-full text-sm text-right border-collapse">
                         <thead>
                             <tr className="bg-slate-700 text-white border-b">
+                                <th className="p-3 text-center border-l border-slate-600 w-10">
+                                    <input
+                                        type="checkbox"
+                                        checked={allPageSelected}
+                                        onChange={toggleSelectCurrentPage}
+                                        title="انتخاب همه ردیف‌های این صفحه"
+                                        className="h-4 w-4 cursor-pointer"
+                                    />
+                                </th>
                                 <th className="p-3 text-right border-l border-slate-600">ردیف</th>
                                 <th className="p-3 text-right border-l border-slate-600">کد پرسنلی</th>
                                 <th className="p-3 text-right border-l border-slate-600">نام و نام خانوادگی</th>
@@ -4908,7 +4953,15 @@ const TransportFinancePaidInvoices: React.FC<TransportFinancePaidInvoicesProps> 
                                     : '-';
                                 
                                 return (
-                                    <tr key={record.id} className="border-b border-slate-300 bg-white hover:bg-slate-50">
+                                    <tr key={record.id} className={`border-b border-slate-300 hover:bg-slate-50 ${selectedIds.has(record.id) ? 'bg-orange-50' : 'bg-white'}`}>
+                                        <td className="p-3 border-l border-slate-200 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.has(record.id)}
+                                                onChange={() => toggleRecordSelected(record.id)}
+                                                className="h-4 w-4 cursor-pointer"
+                                            />
+                                        </td>
                                         <td className="p-3 border-l border-slate-200 text-center font-medium">
                                             {((currentPage - 1) * itemsPerPage) + index + 1}
                                         </td>

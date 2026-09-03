@@ -84,12 +84,18 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
     const [driverHistoryRows, setDriverHistoryRows] = useState<
         Array<{ period: PeriodInfo; summary: DriverCommissionSummary }>
     >([]);
+    const [tourDetailDriver, setTourDetailDriver] = useState<DriverCommissionSummary | null>(null);
 
     const summaries = useMemo(
         () => buildCommissionSummaries(rawCalcs, mileageRegulations),
         [rawCalcs, mileageRegulations]
     );
     const tourDetails = useMemo(() => buildTourDetailsFromCalculations(rawCalcs), [rawCalcs]);
+
+    const driverPeriodTours = useMemo(() => {
+        if (!tourDetailDriver) return [];
+        return tourDetails.filter((t) => t.driverId === tourDetailDriver.driverId);
+    }, [tourDetailDriver, tourDetails]);
 
     const filteredSummaries = useMemo(() => {
         let list = filterSummariesByTab(summaries, archiveTab);
@@ -118,6 +124,7 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
         setSelectedPeriod(null);
         setRawCalcs([]);
         setDriverHistoryRows([]);
+        setTourDetailDriver(null);
     };
 
     const handleExportExcel = async () => {
@@ -216,6 +223,7 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
     if (!open) return null;
 
     return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-6xl max-h-[92vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-4">
@@ -427,12 +435,13 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                                         <th className="p-2 border">تور</th>
                                         <th className="p-2 border">کل پیمایش</th>
                                         <th className="p-2 border">اجرت</th>
+                                        <th className="p-2 border">ریز تور</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredSummaries.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} className="p-6 text-center text-slate-500">
+                                            <td colSpan={9} className="p-6 text-center text-slate-500">
                                                 راننده‌ای در این تب نیست.
                                             </td>
                                         </tr>
@@ -453,6 +462,15 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                                                 <td className="p-2 border text-left text-blue-700">
                                                     {(s.totalCommission + s.fixedAllowance).toLocaleString('fa-IR')}
                                                 </td>
+                                                <td className="p-2 border text-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setTourDetailDriver(s)}
+                                                        className="px-2 py-1 bg-slate-100 text-slate-800 rounded text-xs hover:bg-slate-200 border border-slate-300"
+                                                    >
+                                                        مشاهده
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))
                                     )}
@@ -463,6 +481,106 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                 )}
             </div>
         </div>
+
+            {tourDetailDriver && (
+                <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-5xl max-h-[85vh] overflow-y-auto">
+                        <h3 className="text-lg font-bold text-slate-800 mb-1">
+                            ریز تورهای {tourDetailDriver.driverName}
+                        </h3>
+                        <p className="text-sm text-slate-500 mb-4">
+                            کد پرسنلی: {tourDetailDriver.employeeId || '—'}
+                            {selectedPeriod
+                                ? ` — دوره ${selectedPeriod.periodName} (${selectedPeriod.startDate} — ${selectedPeriod.endDate})`
+                                : ''}
+                        </p>
+                        {driverPeriodTours.length === 0 ? (
+                            <p className="text-center text-slate-500 py-8">توری برای این راننده در این دوره نیست.</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-600 text-white">
+                                            <th className="p-2 border">ردیف</th>
+                                            <th className="p-2 border">شماره بارنامه</th>
+                                            <th className="p-2 border">تاریخ</th>
+                                            <th className="p-2 border">مقاصد</th>
+                                            <th className="p-2 border">نوع خودرو</th>
+                                            <th className="p-2 border">نوع صف</th>
+                                            <th className="p-2 border">پیمایش</th>
+                                            <th className="p-2 border">اجرت ثابت</th>
+                                            <th className="p-2 border">جمع هزینه</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {driverPeriodTours.map((tour, idx) => (
+                                            <tr key={tour.id || `${tour.announcementId}-${idx}`} className="hover:bg-slate-50">
+                                                <td className="p-2 border text-center">{idx + 1}</td>
+                                                <td className="p-2 border">{tour.billOfLadingNumber || '—'}</td>
+                                                <td className="p-2 border text-center">{tour.billOfLadingDate || '—'}</td>
+                                                <td className="p-2 border">{tour.destinations || '—'}</td>
+                                                <td className="p-2 border">{tour.vehicleType || '—'}</td>
+                                                <td className="p-2 border text-center">
+                                                    <span
+                                                        className={`inline-flex items-center px-1 py-0.5 rounded text-xs ${
+                                                            tour.queueType === 'fixed_allowance'
+                                                                ? 'bg-blue-100 text-blue-800'
+                                                                : 'bg-green-100 text-green-800'
+                                                        }`}
+                                                    >
+                                                        {tour.queueTypeLabel}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2 border text-left">
+                                                    {tour.totalKilometers.toLocaleString('fa-IR')}
+                                                </td>
+                                                <td className="p-2 border text-left">
+                                                    {tour.fixedAllowance.toLocaleString('fa-IR')}
+                                                </td>
+                                                <td className="p-2 border text-left">
+                                                    {tour.totalCost.toLocaleString('fa-IR')}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="bg-slate-100 font-bold">
+                                            <td colSpan={6} className="p-2 border text-right">
+                                                جمع ({driverPeriodTours.length} تور)
+                                            </td>
+                                            <td className="p-2 border text-left">
+                                                {driverPeriodTours
+                                                    .reduce((sum, t) => sum + t.totalKilometers, 0)
+                                                    .toLocaleString('fa-IR')}
+                                            </td>
+                                            <td className="p-2 border text-left">
+                                                {driverPeriodTours
+                                                    .reduce((sum, t) => sum + t.fixedAllowance, 0)
+                                                    .toLocaleString('fa-IR')}
+                                            </td>
+                                            <td className="p-2 border text-left">
+                                                {driverPeriodTours
+                                                    .reduce((sum, t) => sum + t.totalCost, 0)
+                                                    .toLocaleString('fa-IR')}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        )}
+                        <div className="flex justify-end mt-4">
+                            <button
+                                type="button"
+                                onClick={() => setTourDetailDriver(null)}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 

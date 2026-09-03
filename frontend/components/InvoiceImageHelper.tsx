@@ -109,6 +109,7 @@ export interface InvoiceData {
         depotMissionCost?: number;
     }>;
     helperCalculationsByEmployeeId?: Map<string, any[]>;
+    notes?: string;
 }
 
 // Helper function برای تبدیل داده‌ها به فرمت افقی
@@ -637,7 +638,15 @@ export const convertToInvoiceDataFormatHorizontal = (
         return tourObj;
     });
 
-    return { blocks, tourData, helperCalculationsByEmployeeId };
+    const notes = Array.from(
+        new Set(
+            calculations
+                .map((calc: any) => String(calc.notes || '').trim())
+                .filter(Boolean)
+        )
+    ).join('\n');
+
+    return { blocks, tourData, helperCalculationsByEmployeeId, notes };
 };
 
 // Helper function برای formatJalali
@@ -1417,36 +1426,36 @@ export const renderInvoiceLayoutHorizontal = (
                                         مبلغ قابل پرداخت: <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{mainBlock.summary.payableAmount.toLocaleString('fa-IR')}</span> ریال
                                     </td>
                                 </tr>
-                                {/* هزینه‌های راننده کمکی */}
-                                {helperBlocks.map((helperBlock, helperIdx) => {
-                                    // فرمت title: "راننده کمکی - کدپرسنلی: ${employeeId} - ${name}"
-                                    const helperEmployeeIdMatch = helperBlock.title.match(/کدپرسنلی:\s*(\d+)/);
-                                    const helperEmployeeId = helperEmployeeIdMatch?.[1] || '';
-                                    // استخراج نام که بعد از آخرین " - " می‌آید
-                                    const nameMatch = helperBlock.title.match(/-\s*([^-]+)$/);
-                                    const helperName = nameMatch?.[1]?.trim() || '';
-                                    const helperCost = helperBlock.summary?.totalTripCost || 0;
-                                    if (helperCost === 0) return null;
+                                {/* جمع هزینه راننده اصلی + کمکی (به‌جای ردیف جداگانه هزینه کمکی) */}
+                                {(() => {
+                                    const helperTotal = helperBlocks.reduce(
+                                        (sum, block) => sum + (block.summary?.totalTripCost || 0),
+                                        0
+                                    );
+                                    if (helperTotal <= 0) return null;
+                                    const combined =
+                                        (mainBlock.summary.totalTripCost || 0) + helperTotal;
                                     return (
-                                        <tr key={helperIdx} style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
+                                        <tr style={{ direction: 'rtl', unicodeBidi: 'isolate' }}>
                                             <td style={{
                                                 border: '2px solid #1e3a8a',
                                                 borderTop: 'none',
                                                 padding: '12px 20px',
-                                                backgroundColor: '#bfdbfe',
+                                                backgroundColor: '#dbeafe',
                                                 textAlign: 'center',
                                                 direction: 'rtl',
                                                 unicodeBidi: 'isolate',
                                                 fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                                                fontWeight: 'bold',
                                                 fontSize: '14px',
                                                 color: '#1e3a8a',
                                                 lineHeight: '1.8',
                                             }}>
-                                                هزینه راننده کمکی: {helperName} - {helperEmployeeId} - <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed', fontWeight: 'bold' }}>{helperCost.toLocaleString('fa-IR')}</span> ریال
+                                                جمع کل هزینه (راننده اصلی + کمکی): <span style={{ marginLeft: '15px', display: 'inline-block' }}></span><span style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{combined.toLocaleString('fa-IR')}</span> ریال
                                             </td>
                                         </tr>
                                     );
-                                })}
+                                })()}
                             </tbody>
                         </table>
                     </div>
@@ -1946,6 +1955,41 @@ export const renderInvoiceLayoutHorizontal = (
                         </div>
                     );
                 })}
+                
+                {Boolean(invoiceData.notes && invoiceData.notes.trim()) && (
+                    <div style={{
+                        width: '100%',
+                        maxWidth: '100%',
+                        marginTop: '16px',
+                        border: '2px solid #1e3a8a',
+                        borderRadius: '8px',
+                        padding: '12px 16px',
+                        boxSizing: 'border-box',
+                        textAlign: 'right',
+                        direction: 'rtl',
+                        unicodeBidi: 'isolate',
+                        fontFamily: "'Vazirmatn', 'Tahoma', sans-serif",
+                        backgroundColor: '#ffffff',
+                    }}>
+                        <div style={{
+                            fontWeight: 'bold',
+                            fontSize: '14px',
+                            color: '#1e3a8a',
+                            marginBottom: '8px',
+                        }}>
+                            توضیحات
+                        </div>
+                        <div style={{
+                            fontSize: '13px',
+                            color: '#1e293b',
+                            lineHeight: '1.8',
+                            whiteSpace: 'pre-wrap',
+                            wordWrap: 'break-word',
+                        }}>
+                            {invoiceData.notes}
+                        </div>
+                    </div>
+                )}
                 
             </div>
         </div>

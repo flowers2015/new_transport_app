@@ -173,6 +173,26 @@ function looksLikeJalaliDateString(value: string): boolean {
     return y >= 1200 && y <= 1600;
 }
 
+/** هنگام تایپ تاریخ شمسی: 14050908 → 1405/09/08 */
+export function maskJalaliDateTyping(raw: string): string {
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    let digits = '';
+    for (const ch of String(raw || '')) {
+        if (ch >= '0' && ch <= '9') digits += ch;
+        else {
+            const pi = persian.indexOf(ch);
+            const ai = arabic.indexOf(ch);
+            if (pi >= 0) digits += String(pi);
+            else if (ai >= 0) digits += String(ai);
+        }
+        if (digits.length >= 8) break;
+    }
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 4)}/${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}/${digits.slice(4, 6)}/${digits.slice(6, 8)}`;
+}
+
 /** تاریخ صدور بارنامه → رشته شمسی YYYY/MM/DD (بدون تبدیل اشتباه به میلادی) */
 export function toBillOfLadingDateString(value: Date | string | null | undefined): string | undefined {
     if (value == null || value === '') return undefined;
