@@ -523,6 +523,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                 destinations: t.destinations,
                 vehicle_type: t.vehicleType,
                 vehicle_code: t.vehicleType,
+                line_type: t.lineType,
                 queue_type: t.queueType,
                 approved_kilometers: t.approvedKilometers,
                 excess_kilometers: t.excessKilometers,

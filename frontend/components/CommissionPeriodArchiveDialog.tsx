@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
     aggregateBreakdownByDriver,
+    buildLineVehicleStatRows,
     buildCommissionSummaries,
     buildGeoDispatchCostRows,
     buildTourDetailsFromCalculations,
@@ -95,7 +96,7 @@ const COST_DETAIL_HEADERS = [
     'کل پیمایش (کیلومتر)',
     'مجموع هزینه سفر راننده اصلی (ریال)',
     'مجموع هزینه سفر راننده کمکی (ریال)',
-    'اجرت / پورسانت تور (ریال)',
+    'اجرت / پورسانت دوره (ریال)',
     'اجرت ثابت (ریال)',
     'هزینه غذا (ریال)',
     'هزینه سوخت (ریال)',
@@ -274,7 +275,7 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
 
         const trailerList = summaries.filter((s) => s.commissionBase === 'تریلی');
         const tenWheelerList = summaries.filter((s) => s.commissionBase === 'ده چرخ');
-        const breakdownByDriver = aggregateBreakdownByDriver(rawCalcs);
+        const breakdownByDriver = aggregateBreakdownByDriver(rawCalcs, summaries);
         const detailRows = tourDetails.map((t) => [
             t.employeeId,
             t.driverName,
@@ -325,6 +326,18 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
             r.kilometers,
             r.dispatchCost,
             r.costPerKm,
+            r.costPerTour,
+        ]);
+        const lineVehicleRows = buildLineVehicleStatRows(rawCalcs).map((r) => [
+            r.line,
+            r.vehicleType,
+            r.tourCount,
+            r.returnTourCount,
+            r.helperTourCount,
+            r.band0to1500,
+            r.band1500to2750,
+            r.band2750to4000,
+            r.band4000plus,
         ]);
 
         await downloadStyledExcelWorkbook({
@@ -404,8 +417,24 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                         'پیمایش کل (کیلومتر)',
                         'مجموع هزینه اعزام بدون دپو (ریال)',
                         'هزینه به ازای کیلومتر (ریال)',
+                        'هزینه به ازای تعداد تور (ریال)',
                     ],
                     rows: geoRows,
+                },
+                {
+                    sheetName: 'تور لاین و کیلومتر',
+                    headers: [
+                        'لاین',
+                        'نوع خودرو',
+                        'تعداد تور',
+                        'تعداد تور برگشتی',
+                        'تعداد تور راننده کمکی',
+                        'تور ۰ تا ۱۵۰۰',
+                        'تور ۱۵۰۰ تا ۲۷۵۰',
+                        'تور ۲۷۵۰ تا ۴۰۰۰',
+                        'تور بیش از ۴۰۰۰',
+                    ],
+                    rows: lineVehicleRows,
                 },
             ],
         });

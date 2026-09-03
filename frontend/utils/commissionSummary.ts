@@ -134,8 +134,7 @@ export function tourHasHelperFromCalc(calc: Record<string, unknown>): boolean {
     const employeeId = String(
         calc.helper_driver_employee_id ?? calc.helperDriverEmployeeId ?? ''
     ).trim();
-    const name = String(calc.helper_driver_name ?? calc.helperDriverName ?? '').trim();
-    return Boolean(id || employeeId || name) || getHelperCostFromCalc(calc) > 0;
+    return Boolean(id || employeeId);
 }
 
 export function getMainDriverCostFromCalc(calc: Record<string, unknown>): number {
@@ -203,15 +202,17 @@ export function getTourCostBreakdown(calc: Record<string, unknown>): TourCostBre
     const queue = String(calc.queue_type ?? calc.queueType ?? 'porsant');
     const tourCost = n(calc, 'tour_cost', 'tourCost');
     const storedFixed = n(calc, 'fixed_allowance', 'fixedAllowance');
-    const helperAllowance = n(calc, 'helper_driver_allowance', 'helperDriverAllowance');
-    const helperFood = n(calc, 'helper_driver_food_cost', 'helperDriverFoodCost');
-    const helperExcessMission = n(calc, 'helper_driver_excess_mission_cost', 'helperDriverExcessMissionCost');
+    const hasHelper = tourHasHelperFromCalc(calc);
+    const helperAllowance = hasHelper ? n(calc, 'helper_driver_allowance', 'helperDriverAllowance') : 0;
+    const helperFood = hasHelper ? n(calc, 'helper_driver_food_cost', 'helperDriverFoodCost') : 0;
+    const helperExcessMission = hasHelper
+        ? n(calc, 'helper_driver_excess_mission_cost', 'helperDriverExcessMissionCost')
+        : 0;
     const helperParts = helperAllowance + helperFood + helperExcessMission;
-    const helperStored = n(calc, 'helper_driver_cost', 'helperDriverCost');
-    const helperRemainder = Math.max(0, helperStored - helperParts);
+    const helperStored = hasHelper ? n(calc, 'helper_driver_cost', 'helperDriverCost') : 0;
 
     return {
-        porsantTourCost: queue === 'fixed_allowance' ? 0 : tourCost,
+        porsantTourCost: 0,
         fixedAllowance: queue === 'fixed_allowance' ? storedFixed || tourCost : 0,
         foodCost: n(calc, 'food_cost', 'foodCost'),
         fuelCost: n(calc, 'fuel_cost', 'fuelCost'),
@@ -226,9 +227,9 @@ export function getTourCostBreakdown(calc: Record<string, unknown>): TourCostBre
         depotCargoHandlingCost: n(calc, 'depot_cargo_handling_cost', 'depotCargoHandlingCost'),
         depotAllowanceCost: n(calc, 'depot_kilometer_rate', 'depotKilometerRate'),
         depotMissionCost: n(calc, 'depot_mission_cost', 'depotMissionCost'),
-        helperAllowance: helperAllowance + helperRemainder,
-        helperFood,
-        helperExcessMission,
+        helperAllowance: helperParts > 0 ? helperAllowance : helperStored,
+        helperFood: helperParts > 0 ? helperFood : 0,
+        helperExcessMission: helperParts > 0 ? helperExcessMission : 0,
     };
 }
 
@@ -317,6 +318,7 @@ export interface GeoCostRow {
     kilometers: number;
     dispatchCost: number;
     costPerKm: number;
+    costPerTour: number;
 }
 
 export function buildGeoDispatchCostRows(
@@ -347,6 +349,7 @@ export function buildGeoDispatchCostRows(
     }
 
     const perKm = (agg: Agg) => (agg.kilometers > 0 ? Math.round(agg.dispatchCost / agg.kilometers) : 0);
+    const perTour = (agg: Agg) => (agg.tourCount > 0 ? Math.round(agg.dispatchCost / agg.tourCount) : 0);
     const toRow = (
         level: GeoCostRow['level'],
         province: string,
@@ -360,6 +363,7 @@ export function buildGeoDispatchCostRows(
         kilometers: agg.kilometers,
         dispatchCost: agg.dispatchCost,
         costPerKm: perKm(agg),
+        costPerTour: perTour(agg),
     });
 
     const provinceList = Array.from(provinces.entries()).sort((a, b) => perKm(b[1]) - perKm(a[1]));
@@ -384,7 +388,8 @@ export function buildGeoDispatchCostRows(
 }
 
 export function aggregateBreakdownByDriver(
-    calculations: Record<string, unknown>[]
+    calculations: Record<string, unknown>[],
+    summaries: DriverCommissionSummary[] = []
 ): Map<string, TourCostBreakdown> {
     const map = new Map<string, TourCostBreakdown>();
     for (const calc of calculations) {
@@ -394,7 +399,106 @@ export function aggregateBreakdownByDriver(
         const prev = map.get(driverId);
         map.set(driverId, prev ? addTourCostBreakdown(prev, next) : next);
     }
+    summaries.forEach((summary) => {
+        const existing = map.get(summary.driverId) || emptyTourCostBreakdown();
+        existing.porsantTourCost = summary.totalCommission;
+        map.set(summary.driverId, existing);
+    });
     return map;
+}
+
+export function resolveLineLabel(calc: Record<string, unknown>): string {
+    const raw = String(calc.line_type ?? calc.lineType ?? '').trim();
+    if (!raw) return 'نامشخص';
+    const v = raw.toLowerCase();
+    if (v === 'icecream' || raw.includes('بستنی')) return 'بستنی';
+    if (v === 'dairy' || raw.includes('پاستوریزه')) return 'پاستوریزه';
+    if (v === 'ambient' || raw.includes('فروتلند') || raw.includes('لبنیات')) return 'لبنیات-فروتلند';
+    return raw;
+}
+
+export type KmBandKey = '0-1500' | '1500-2750' | '2750-4000' | '4000+';
+
+export function getKmBand(km: number): KmBandKey {
+    if (km <= 1500) return '0-1500';
+    if (km <= 2750) return '1500-2750';
+    if (km <= 4000) return '2750-4000';
+    return '4000+';
+}
+
+export interface LineVehicleStatRow {
+    line: string;
+    vehicleType: string;
+    tourCount: number;
+    returnTourCount: number;
+    helperTourCount: number;
+    band0to1500: number;
+    band1500to2750: number;
+    band2750to4000: number;
+    band4000plus: number;
+}
+
+const LINE_ORDER = ['بستنی', 'پاستوریزه', 'لبنیات-فروتلند', 'نامشخص'];
+
+function emptyLineVehicleStat(line: string, vehicleType: string): LineVehicleStatRow {
+    return {
+        line,
+        vehicleType,
+        tourCount: 0,
+        returnTourCount: 0,
+        helperTourCount: 0,
+        band0to1500: 0,
+        band1500to2750: 0,
+        band2750to4000: 0,
+        band4000plus: 0,
+    };
+}
+
+function addLineVehicleStat(target: LineVehicleStatRow, source: LineVehicleStatRow) {
+    target.tourCount += source.tourCount;
+    target.returnTourCount += source.returnTourCount;
+    target.helperTourCount += source.helperTourCount;
+    target.band0to1500 += source.band0to1500;
+    target.band1500to2750 += source.band1500to2750;
+    target.band2750to4000 += source.band2750to4000;
+    target.band4000plus += source.band4000plus;
+}
+
+export function buildLineVehicleStatRows(calculations: Record<string, unknown>[]): LineVehicleStatRow[] {
+    const map = new Map<string, LineVehicleStatRow>();
+    for (const calc of calculations) {
+        const line = resolveLineLabel(calc);
+        const vehicleType = categorizeVehicleType(resolveVehicleType(calc));
+        const key = `${line}|||${vehicleType}`;
+        const row = map.get(key) || emptyLineVehicleStat(line, vehicleType);
+        row.tourCount += 1;
+        if (getReturnCargoCostFromCalc(calc) > 0) row.returnTourCount += 1;
+        if (tourHasHelperFromCalc(calc)) row.helperTourCount += 1;
+        const band = getKmBand(getDispatchKilometersFromCalc(calc));
+        if (band === '0-1500') row.band0to1500 += 1;
+        else if (band === '1500-2750') row.band1500to2750 += 1;
+        else if (band === '2750-4000') row.band2750to4000 += 1;
+        else row.band4000plus += 1;
+        map.set(key, row);
+    }
+
+    const rows: LineVehicleStatRow[] = [];
+    const grand = emptyLineVehicleStat('جمع کل', '');
+    LINE_ORDER.forEach((line) => {
+        const lineRows = VEHICLE_CATEGORY_ORDER.map((v) => map.get(`${line}|||${v}`)).filter(
+            (row): row is LineVehicleStatRow => Boolean(row) && row.tourCount > 0
+        );
+        if (lineRows.length === 0) return;
+        const lineTotal = emptyLineVehicleStat(line, 'جمع لاین');
+        lineRows.forEach((row) => {
+            rows.push(row);
+            addLineVehicleStat(lineTotal, row);
+            addLineVehicleStat(grand, row);
+        });
+        rows.push(lineTotal);
+    });
+    if (grand.tourCount > 0) rows.push(grand);
+    return rows;
 }
 
 export interface VehicleTypePivotRow {

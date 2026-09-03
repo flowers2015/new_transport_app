@@ -783,6 +783,7 @@ async function getPeriodTours(req, res) {
         d.employee_id,
         fa.announcement_code,
         fa.loading_date,
+        fa.line_type,
         COALESCE(fa.vehicle_type, dc.vehicle_code, '') as vehicle_type,
         COALESCE(
           (
@@ -845,6 +846,7 @@ async function getPeriodTours(req, res) {
         loadingDate: row.loading_date,
         destinations: destinations,
         vehicleType: row.vehicle_type || row.vehicle_code || '',
+        lineType: row.line_type || '',
         queueType: row.queue_type,
       approvedKilometers: parseInt(row.approved_kilometers) || 0,
       excessKilometers: parseInt(row.excess_kilometers) || 0,
