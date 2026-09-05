@@ -950,6 +950,7 @@ export interface DriverPreferenceAssignment {
     assignedAt: string;
     assignedAtJalali?: string | null;
     queuePosition?: number | null;
+    queueEntryId?: string | null;
     vehicleCode?: string | null;
     isCancelled?: boolean;
     freightStatus?: string | null;
@@ -967,6 +968,7 @@ export interface DriverPreferencePeerAssignment {
     employeeId?: string | null;
     stage?: string | null;
     queuePosition?: number | null;
+    queueEntryId?: string | null;
     queueType?: 'far' | 'near' | 'workshop' | 'external' | 'leave' | 'other';
     lineType?: string | null;
     vehicleType?: string | null;

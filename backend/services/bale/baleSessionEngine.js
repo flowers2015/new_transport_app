@@ -55,7 +55,7 @@ async function loadSession(sessionId) {
 async function getActiveSessions() {
   const { rows } = await pool.query(
     `SELECT * FROM bale_sessions
-     WHERE status IN ('running', 'awaiting_admin', 'awaiting_confirm')
+     WHERE status IN ('running', 'awaiting_admin', 'awaiting_confirm', 'assigning')
      ORDER BY vehicle_category NULLS LAST, updated_at DESC`
   );
   return rows;
@@ -69,7 +69,7 @@ async function getActiveSession() {
 async function getActiveSessionForCategory(vehicleCategory) {
   const { rows } = await pool.query(
     `SELECT * FROM bale_sessions
-     WHERE status IN ('running', 'awaiting_admin', 'awaiting_confirm')
+     WHERE status IN ('running', 'awaiting_admin', 'awaiting_confirm', 'assigning')
        AND vehicle_category IS NOT DISTINCT FROM $1
      ORDER BY updated_at DESC LIMIT 1`,
     [vehicleCategory || null]
@@ -974,7 +974,51 @@ async function buildTurnMessage(session, entry, eligible) {
   );
 }
 
-async function advanceToCurrentTurn(sessionId, depth = 0) {
+async function resumeCurrentTurn(sessionId) {
+  let session = await loadSession(sessionId);
+  if (!session) throw new Error('جلسه یافت نشد');
+  if (['completed', 'stopped', 'assigning'].includes(session.status)) {
+    throw new Error('این جلسه قابل ازسرگیری نیست.');
+  }
+
+  const current = currentTurnEntry(session);
+  const driverId = queueEntryDriverId(current);
+  const driverName = current?.driver?.name || current?.driver_name || '—';
+
+  await refreshSessionAnnouncements(sessionId);
+  const { queue } = await syncQueueFromServer(sessionId);
+  let index = session.current_turn_index || 0;
+  if (driverId) {
+    const found = queue.findIndex(e => queueEntryDriverId(e) === driverId);
+    if (found >= 0) index = found;
+  }
+  if (queue.length === 0) {
+    await finishQueueIfDone(sessionId);
+    throw new Error('صف نوبت خالی است — باری برای ادامه نمانده یا راننده‌ای در صف نیست.');
+  }
+
+  await updateSession(sessionId, {
+    current_turn_index: index,
+    status: 'running',
+    pending_selection: null,
+    turn_deadline_at: null,
+    current_turn_message_id: null,
+    current_turn_chat_id: null,
+  });
+  await logEvent(sessionId, 'turn_resumed', { driverId, index });
+  await announceToGroup(
+    session,
+    `▶️ ادامه از همین‌جا — ${session.vehicle_category || '—'}\n👤 ${driverName}\nلیست بار به‌روز شد و دوباره اعلام می‌شود.`
+  );
+
+  const advanced = await advanceToCurrentTurn(sessionId, 0, { skipQueueSync: true });
+  if (!advanced) {
+    throw new Error('ازسرگیری انجام نشد — نوبت جاری بار مجاز ندارد یا chat راننده نیست.');
+  }
+  return advanced;
+}
+
+async function advanceToCurrentTurn(sessionId, depth = 0, options = {}) {
   if (depth > 30) {
     console.warn('⚠️ [bale] advanceToCurrentTurn max depth', sessionId);
     return null;
@@ -984,7 +1028,7 @@ async function advanceToCurrentTurn(sessionId, depth = 0) {
   if (!session || session.status === 'completed' || session.status === 'stopped') return null;
   if (session.status === 'assigning') return null;
 
-  if (depth === 0) {
+  if (depth === 0 && !options.skipQueueSync) {
     await syncQueueFromServer(sessionId);
     session = await loadSession(sessionId);
   }
@@ -1216,15 +1260,11 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
   const session = await findSessionForInbound(chatId);
   console.log('📩 [bale] inbound:', { chatId, text, status: session?.status, sessionId: session?.id });
   if (!session) {
-    if (!looksLikeDriverSelectionAttempt(text)) {
-      return { handled: false };
-    }
-    const active = await getActiveSessions();
-    if (active.length > 0) {
-      await baleApi.sendMessage(chatId, 'الان نوبت شما در هیچ جلسه فعالی نیست.');
-    } else {
-      await baleApi.sendMessage(chatId, 'جلسه فعال اعلام بار نیست.');
-    }
+    // شماره تکراری بعد از ثبت تخصیص / اتمام جلسه — پیام گیج‌کننده نفرست
+    return { handled: Boolean(looksLikeDriverSelectionAttempt(text)) };
+  }
+
+  if (session.status === 'assigning') {
     return { handled: true };
   }
 
@@ -1471,7 +1511,11 @@ async function handleCallback(callbackQuery) {
       : JSON.parse(session.pending_selection)
     : null;
 
-  if (action === 'bale_confirm' && pending) {
+  if (action === 'bale_confirm') {
+    if (!pending) {
+      await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'قبلاً ثبت شده');
+      return { handled: true };
+    }
     await baleApi.safeAnswerCallbackQuery(callbackQuery.id);
     try {
       const assignResult = await completeAssignment(session, pending, 'driver');
@@ -1786,12 +1830,25 @@ async function stopAllSessions() {
 async function manualAssign(sessionId, body, userId) {
   const session = await loadSession(sessionId);
   if (!session) throw new Error('جلسه یافت نشد');
+  const announcements = parseAnnouncements(session);
+  const queue = parseQueueSnapshot(session);
+  const announcementId = body.freightAnnouncementId || body.announcementId;
+  const ann = announcements.find(a => String(a.id) === String(announcementId));
+  if (!ann) throw new Error('بار انتخاب‌شده در لیست اعلام این جلسه نیست.');
+
+  const driverId = body.driverId;
+  const entry =
+    queue.find(e => String(queueEntryDriverId(e)) === String(driverId)) ||
+    queue.find(e => String(e.id) === String(body.queueEntryId));
+  if (!entry) throw new Error('راننده در صف همین جلسه نیست.');
+
   const selection = {
-    announcementId: body.freightAnnouncementId,
-    destinationId: body.destinationId,
-    driverId: body.driverId,
-    vehicleId: body.vehicleId,
-    queueEntryId: body.queueEntryId,
+    announcementId: ann.id,
+    destinationId: body.destinationId || ann.destination?.id || ann.destinationId,
+    driverId: queueEntryDriverId(entry),
+    vehicleId: body.vehicleId || entry.vehicleId || entry.vehicle_id,
+    queueEntryId: body.queueEntryId || entry.id,
+    rowNumber: announcements.findIndex(a => String(a.id) === String(ann.id)) + 1,
   };
   await completeAssignment(session, selection, 'admin_manual');
   return loadSession(sessionId);
@@ -1801,7 +1858,7 @@ async function processWebhookUpdate(update) {
   if (update.callback_query) {
     return handleCallback(update.callback_query);
   }
-  const msg = update.message;
+  const msg = update.message || update.edited_message;
   if (!msg?.text) return { handled: false };
   return handleTextMessage(msg.chat.id, msg.text, msg.from?.id, msg.chat);
 }
@@ -1888,6 +1945,7 @@ module.exports = {
   stopAllSessions,
   skipCurrentTurn,
   extendCurrentTurn,
+  resumeCurrentTurn,
   manualAssign,
   processWebhookUpdate,
   seedTestDrivers,

@@ -1,5 +1,6 @@
 const pool = require('../../db');
 const { vehicleMatchesCategory } = require('../dispatch/dispatchVehicleCategory');
+const { getRuntimeSettings } = require('./baleSettings');
 
 const DISPATCH_CATEGORIES = ['تریلی', 'مینی تریلی', 'ده چرخ'];
 
@@ -17,7 +18,24 @@ async function loadChannelRows() {
   return rows;
 }
 
-function buildPlansFromRows(rows) {
+function buildPlansFromRows(rows, { environment } = {}) {
+  const production = environment === 'production';
+
+  if (!production) {
+    const pilot = rows.find(
+      r => r.slot_number === 1 && r.chat_id != null && r.is_active !== false
+    );
+    if (pilot) {
+      return DISPATCH_CATEGORIES.map(category => ({
+        category,
+        slot: 1,
+        chatId: String(pilot.chat_id),
+        pilotCombined: true,
+      }));
+    }
+    return [];
+  }
+
   const plans = [];
   for (const category of DISPATCH_CATEGORIES) {
     const dedicated = rows.find(
@@ -35,25 +53,12 @@ function buildPlansFromRows(rows) {
       });
     }
   }
-
-  if (plans.length > 0) return plans;
-
-  const pilot = rows.find(r => r.slot_number === 1 && r.chat_id != null && r.is_active !== false);
-  if (pilot) {
-    return DISPATCH_CATEGORIES.map(category => ({
-      category,
-      slot: 1,
-      chatId: String(pilot.chat_id),
-      pilotCombined: true,
-    }));
-  }
-
-  return [];
+  return plans;
 }
 
 async function getDispatchChannelPlans() {
-  const rows = await loadChannelRows();
-  return buildPlansFromRows(rows);
+  const [rows, runtime] = await Promise.all([loadChannelRows(), getRuntimeSettings()]);
+  return buildPlansFromRows(rows, runtime);
 }
 
 function describeChannelBlocker(rows, { vehicleCategory, slot } = {}) {

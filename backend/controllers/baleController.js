@@ -69,34 +69,50 @@ async function webhook(req, res) {
   }
 }
 
+let botInfoCache = { at: 0, bot: null };
+const BOT_INFO_CACHE_MS = 5 * 60 * 1000;
+
+async function getBotInfoCached(light) {
+  if (!baleApi.isConfigured()) return null;
+  if (botInfoCache.bot && Date.now() - botInfoCache.at < BOT_INFO_CACHE_MS) {
+    return botInfoCache.bot;
+  }
+  if (light) return botInfoCache.bot;
+  try {
+    const bot = await Promise.race([
+      baleApi.getMe(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 700)),
+    ]);
+    botInfoCache = { at: Date.now(), bot };
+    return bot;
+  } catch (e) {
+    return botInfoCache.bot || { error: e.message };
+  }
+}
+
 async function getStatus(req, res) {
   try {
+    const light = String(req.query.light || '') === '1';
     const configured = baleApi.isConfigured();
-    let bot = null;
-    if (configured) {
-      try {
-        bot = await baleApi.getMe();
-      } catch (e) {
-        bot = { error: e.message };
-      }
-    }
-    const activeSessions = await sessionEngine.getActiveSessions();
-    const runtime = await getRuntimeSettings();
-    const { rows: channels } = await pool.query(
-      `SELECT slot_number, chat_id, vehicle_category, label, is_active
-       FROM bale_channels ORDER BY slot_number`
-    );
-    const [channelPlans, categoryQueues] = await Promise.all([
-      getDispatchChannelPlans(),
-      getCategoryQueueCounts(),
-    ]);
+    const [bot, activeSessions, runtime, channelResult, channelPlans, categoryQueues] =
+      await Promise.all([
+        getBotInfoCached(light),
+        sessionEngine.getActiveSessions(),
+        getRuntimeSettings(),
+        pool.query(
+          `SELECT slot_number, chat_id, vehicle_category, label, is_active
+           FROM bale_channels ORDER BY slot_number`
+        ),
+        getDispatchChannelPlans(),
+        getCategoryQueueCounts(),
+      ]);
     res.json({
       configured,
       bot,
       runtime,
       activeSession: activeSessions[0] ? mapSession(activeSessions[0]) : null,
       activeSessions: activeSessions.map(mapSession),
-      channels,
+      channels: channelResult.rows,
       channelPlans,
       categoryQueues,
     });
@@ -418,6 +434,22 @@ async function skipTurn(req, res) {
   }
 }
 
+async function resumeTurn(req, res) {
+  try {
+    const resolved = await resolveSessionFromRequest(req);
+    if (resolved.error) {
+      return res.status(resolved.status).json({
+        message: resolved.error,
+        sessionIds: resolved.sessionIds,
+      });
+    }
+    const updated = await sessionEngine.resumeCurrentTurn(resolved.session.id);
+    res.json(mapSession(updated));
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
 async function extendTurn(req, res) {
   try {
     const resolved = await resolveSessionFromRequest(req);
@@ -731,6 +763,7 @@ module.exports = {
   startSession,
   stopSession,
   skipTurn,
+  resumeTurn,
   extendTurn,
   manualAssign,
   getSessionLogs,

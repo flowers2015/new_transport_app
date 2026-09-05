@@ -16,6 +16,8 @@ const formatDistance = (km?: number | null) => {
 
 type DayQueueEntry = {
     queuePosition: number | null;
+    fromQueue: boolean;
+    assignedAt?: string;
     vehicleCode: string | null;
     driverName: string;
     destination: string;
@@ -27,6 +29,40 @@ type DayQueueEntry = {
     routeBucket?: 'veryFar' | 'far' | 'near' | string;
     queueType?: 'far' | 'near' | string;
 };
+
+function isFromQueue(queuePosition?: number | null, queueEntryId?: string | null) {
+    if (queueEntryId) return true;
+    return queuePosition != null && Number(queuePosition) >= 1;
+}
+
+function assignTimeMs(entry: DayQueueEntry) {
+    if (!entry.assignedAt) return 0;
+    const t = new Date(entry.assignedAt).getTime();
+    return Number.isNaN(t) ? 0 : t;
+}
+
+function formatAssignTime(iso?: string) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function cargoLabel(entry: DayQueueEntry) {
+    if (entry.routeBucket === 'veryFar' || entry.isVeryFar) return 'بار: خیلی‌دور';
+    if (entry.routeBucket === 'far') return 'بار: دور';
+    if (entry.routeBucket === 'near') return 'بار: نزدیک';
+    return null;
+}
+
+function queueLabel(entry: DayQueueEntry) {
+    if (!entry.fromQueue || entry.queuePosition == null || Number(entry.queuePosition) < 1) {
+        return 'صف: خارج از نوبت';
+    }
+    if (entry.queueType === 'far') return 'صف: دور';
+    if (entry.queueType === 'near') return 'صف: نزدیک';
+    return 'صف: از نوبت';
+}
 
 type DayRow = {
     key: string;
@@ -132,6 +168,8 @@ function buildDayTable(
         }
         pushEntry(category, item.assignedAt, item.assignedAtJalali, column, {
             queuePosition: item.queuePosition ?? null,
+            fromQueue: isFromQueue(item.queuePosition, item.queueEntryId),
+            assignedAt: item.assignedAt,
             vehicleCode: item.vehicleCode || null,
             driverName: targetDriverName,
             destination: item.destinationCity || item.originCity || '',
@@ -165,6 +203,8 @@ function buildDayTable(
         const column = columnForItem(queueType, null);
         pushEntry(peerCat, peer.assignedAt, peer.assignedAtJalali, column, {
             queuePosition: peer.queuePosition ?? null,
+            fromQueue: isFromQueue(peer.queuePosition, peer.queueEntryId),
+            assignedAt: peer.assignedAt,
             vehicleCode: vehicleCode || null,
             driverName: peerName,
             destination,
@@ -192,11 +232,25 @@ function buildDayTable(
         return out;
     };
 
-    const sortEntries = (list: DayQueueEntry[]) =>
-        [...list].sort((a, b) => {
-            if (a.isTarget !== b.isTarget) return a.isTarget ? -1 : 1;
-            return (a.queuePosition ?? 999) - (b.queuePosition ?? 999);
-        });
+    const organizeBucket = (list: DayQueueEntry[]) => {
+        const deduped = dedupeBucket(list);
+        const cancelled = deduped.filter(e => e.certainty === 'cancelled');
+        const active = deduped.filter(e => e.certainty !== 'cancelled');
+        const inQueue = active.filter(e => e.fromQueue);
+        const outside = active.filter(e => !e.fromQueue);
+
+        const byQueueThenTime = (a: DayQueueEntry, b: DayQueueEntry) => {
+            const pa = a.queuePosition ?? 9999;
+            const pb = b.queuePosition ?? 9999;
+            if (pa !== pb) return pa - pb;
+            return assignTimeMs(a) - assignTimeMs(b);
+        };
+
+        inQueue.sort(byQueueThenTime);
+        outside.sort((a, b) => assignTimeMs(a) - assignTimeMs(b));
+        cancelled.sort((a, b) => assignTimeMs(a) - assignTimeMs(b));
+        return [...inQueue, ...outside, ...cancelled];
+    };
 
     const categoryOrder = ['تریلی', 'مینی تریلی', 'ده چرخ', 'نامشخص'];
     const byCategory = new Map<string, DayRow[]>();
@@ -205,8 +259,8 @@ function buildDayTable(
         if (!day.far.some(e => e.isTarget) && !day.near.some(e => e.isTarget)) continue;
         const normalized: DayRow = {
             ...day,
-            far: sortEntries(dedupeBucket(day.far)),
-            near: sortEntries(dedupeBucket(day.near)),
+            far: organizeBucket(day.far),
+            near: organizeBucket(day.near),
         };
         const list = byCategory.get(day.category) || [];
         list.push(normalized);
@@ -308,36 +362,37 @@ function StatsBar({ stats }: { stats: DriverPreferenceStats }) {
 }
 
 function QueueEntryLine({ entry }: { entry: DayQueueEntry }) {
-    const certaintyLabel =
-        entry.certainty === 'cancelled'
+    const cancelled = entry.certainty === 'cancelled';
+    const pending = entry.certainty === 'pending';
+    const slotLabel =
+        cancelled
             ? 'لغو'
-            : entry.certainty === 'pending'
-              ? 'موقت'
-              : entry.certainty === 'finalized'
-                ? null
-                : null;
-    const routeLabel =
-        entry.routeBucket === 'veryFar'
-            ? 'مسیر خیلی‌دور'
-            : entry.routeBucket === 'far'
-              ? 'مسیر دور'
-              : entry.routeBucket === 'near'
-                ? 'مسیر نزدیک'
-                : null;
+            : entry.queuePosition != null && Number(entry.queuePosition) >= 1
+              ? String(entry.queuePosition)
+              : 'خارج از نوبت';
+    const timeLabel = formatAssignTime(entry.assignedAt);
+    const cargo = cargoLabel(entry);
+    const queue = cancelled ? null : queueLabel(entry);
 
     return (
         <div
             className={`text-[10px] leading-relaxed py-0.5 border-b border-slate-100 last:border-0 ${
-                entry.isTarget
-                    ? entry.certainty === 'cancelled'
-                        ? 'text-rose-900 bg-rose-50/70 -mx-1 px-1 rounded'
-                        : entry.certainty === 'pending'
-                          ? 'text-amber-950 bg-amber-50/70 -mx-1 px-1 rounded'
-                          : 'text-amber-950 bg-amber-50/60 -mx-1 px-1 rounded'
-                    : 'text-slate-600'
+                cancelled
+                    ? 'text-slate-400 bg-slate-50/80 -mx-1 px-1 rounded'
+                    : entry.isTarget
+                      ? pending
+                        ? 'text-amber-950 bg-amber-50/70 -mx-1 px-1 rounded'
+                        : 'text-amber-950 bg-amber-50/60 -mx-1 px-1 rounded'
+                      : 'text-slate-600'
             }`}
         >
-            <span className="font-semibold">{entry.queuePosition ?? '—'}</span>
+            <span className="font-semibold">{slotLabel}</span>
+            {timeLabel && (
+                <>
+                    <span className="text-slate-400 mx-1">·</span>
+                    <span className="text-slate-500 tabular-nums">{timeLabel}</span>
+                </>
+            )}
             <span className="text-slate-400 mx-1">·</span>
             <span className="font-medium">{entry.driverName}</span>
             {entry.vehicleCode && (
@@ -352,29 +407,16 @@ function QueueEntryLine({ entry }: { entry: DayQueueEntry }) {
                 <>
                     <span className="text-slate-400 mx-1">·</span>
                     <span>
-                        {entry.isVeryFar && <span className="text-amber-700">خیلی‌دور </span>}
                         {entry.destination}
                         {entry.tripKm != null ? ` (${formatDistance(entry.tripKm)})` : ''}
                     </span>
                 </>
             )}
-            {(certaintyLabel || routeLabel) && (
+            {(pending || cargo || queue) && (
                 <div className="text-[9px] text-slate-500 mt-0.5 flex flex-wrap gap-1">
-                    {certaintyLabel && (
-                        <span
-                            className={
-                                entry.certainty === 'cancelled'
-                                    ? 'text-rose-700'
-                                    : 'text-amber-700'
-                            }
-                        >
-                            {certaintyLabel}
-                        </span>
-                    )}
-                    {routeLabel && <span>{routeLabel}</span>}
-                    {entry.queueType && (
-                        <span>نوبت {entry.queueType === 'far' ? 'دور' : 'نزدیک'}</span>
-                    )}
+                    {pending && !cancelled && <span className="text-amber-700">موقت</span>}
+                    {cargo && <span>{cargo}</span>}
+                    {queue && <span>{queue}</span>}
                 </div>
             )}
         </div>
@@ -574,7 +616,7 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
                         نوبت‌های روزانه (به تفکیک دسته خودرو)
                     </h3>
                     <div className="text-[10px] text-slate-500">
-                        فقط هم‌دسته‌های همان روز — نوبت · نام · کد خودرو · مقصد
+                        ترتیب هر ستون: شماره نوبت، سپس ساعت تخصیص. بدون شماره = خارج از نوبت. لغو جدا و خاکستری.
                     </div>
                 </div>
                 <DayQueueTable groups={categoryGroups} />

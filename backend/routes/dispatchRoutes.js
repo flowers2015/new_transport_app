@@ -9,6 +9,7 @@ const {
   getStageCandidates,
   assignFreight,
   getDriverPreferences,
+  getDriverLastTrip,
   getBoard,
   searchVehicles,
   searchDrivers,
@@ -73,6 +74,13 @@ router.get(
   authenticateToken,
   authorizeRole(transportRoles),
   getDriverPreferences
+);
+
+router.get(
+  '/drivers/:driverId/last-trip',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  getDriverLastTrip
 );
 
 router.get(

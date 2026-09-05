@@ -112,6 +112,7 @@ function mapAssignmentRow(row, timestampToJalaliDate) {
           ? Number(row.distance_km)
           : null,
     queuePosition: row.queue_position ?? null,
+    queueEntryId: row.queue_entry_id || null,
     vehicleCode: row.vehicle_code || null,
     assignedAt: row.created_at,
     assignedAtJalali: row.assigned_at_jalali || timestampToJalaliDate(row.created_at),

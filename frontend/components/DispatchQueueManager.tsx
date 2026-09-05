@@ -41,6 +41,18 @@ type RowEditor = {
     submitting: boolean;
 };
 
+type DriverLastTrip = {
+    found: boolean;
+    destinationCity?: string | null;
+    originCity?: string | null;
+    routeCategory?: string | null;
+    distanceCategory?: string | null;
+    roundTripKm?: number | null;
+    createdAt?: string;
+    lastPathType?: 'far' | 'near' | null;
+    suggestedQueueType?: 'far' | 'near' | null;
+};
+
 type PositionEditState = {
     value: string;
     saving: boolean;
@@ -876,6 +888,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const [queueData, setQueueData] = useState<QueueGroup>({});
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [registerQueueTab, setRegisterQueueTab] = useState<'far' | 'near'>('far');
+    const [registerRow, setRegisterRow] = useState<RowEditor>(() =>
+        createRow(presetCategories[0] || { key: 'trailer', label: 'تریلی' }, 'far')
+    );
+    const [registerLastTrip, setRegisterLastTrip] = useState<DriverLastTrip | null>(null);
+    const [registerLastTripLoading, setRegisterLastTripLoading] = useState(false);
     const [activeCategoryKey, setActiveCategoryKey] = useState(presetCategories[0]?.key || '');
     const [loadingQueue, setLoadingQueue] = useState(false);
     const [positionEdits, setPositionEdits] = useState<Record<string, PositionEditState>>({});
@@ -925,13 +942,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         });
     };
 
+    const applyRowPatch = (row: RowEditor, patch: Partial<RowEditor> | ((row: RowEditor) => RowEditor)) =>
+        typeof patch === 'function' ? patch(row) : { ...row, ...patch };
+
     const updateRow = (rowId: string, patch: Partial<RowEditor> | ((row: RowEditor) => RowEditor)) => {
         setRows(prev =>
-            prev.map(row => {
-                if (row.id !== rowId) return row;
-                return typeof patch === 'function' ? patch(row) : { ...row, ...patch };
-            })
+            prev.map(row => (row.id !== rowId ? row : applyRowPatch(row, patch)))
         );
+        setRegisterRow(prev => (prev.id !== rowId ? prev : applyRowPatch(prev, patch)));
     };
 
     const loadDriverPreferences = async (
@@ -1255,6 +1273,55 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         } catch (error) {
             console.error('Driver search failed', error);
             updateRow(rowId, { driverResults: [], driverSearching: false });
+        }
+    };
+
+    const handleRegisterSubmit = async () => {
+        const row = registerRow;
+        if (!row.selectedVehicle || !row.selectedDriver) {
+            alert('لطفاً خودرو و راننده را انتخاب کنید.');
+            return;
+        }
+        const queueType = registerQueueTab;
+        setRegisterRow(prev => ({ ...prev, submitting: true, queueType }));
+        try {
+            const res = await fetch(getApiUrl('dispatch/queue'), {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    vehicleId: row.selectedVehicle.id,
+                    driverId: row.selectedDriver.id,
+                    vehicleCategory: row.categoryKey || row.selectedVehicle.vehicleCategory || '',
+                    queueType,
+                    notes: row.notes || undefined,
+                }),
+            });
+            if (!res.ok) {
+                const errorText = await res.text();
+                let errorMessage = 'ثبت نوبت ناموفق بود.';
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    if (errorJson.message) errorMessage = errorJson.message;
+                } catch {
+                    errorMessage = errorText || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
+            const category = presetCategories.find(c => c.key === row.categoryKey) || {
+                key: row.categoryKey,
+                label: row.categoryLabel,
+            };
+            setRegisterRow(createRow(category, queueType));
+            setRegisterLastTrip(null);
+            window.dispatchEvent(new CustomEvent('dispatch-board:update'));
+            setTimeout(() => {
+                fetchQueue().catch(err => {
+                    console.error('خطا در به‌روزرسانی لیست نوبت‌ها:', err);
+                });
+            }, 100);
+        } catch (error: any) {
+            alert(error?.message || 'ثبت نوبت ناموفق بود.');
+            setRegisterRow(prev => ({ ...prev, submitting: false }));
         }
     };
 
@@ -1626,6 +1693,38 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         [rows, activeCategoryKey]
     );
 
+    useEffect(() => {
+        const driverId = registerRow.selectedDriver?.id;
+        if (!isDrawerOpen || !driverId) {
+            if (!driverId) setRegisterLastTrip(null);
+            return;
+        }
+        let cancelled = false;
+        setRegisterLastTripLoading(true);
+        fetch(getApiUrl(`dispatch/drivers/${driverId}/last-trip`), { headers })
+            .then(res => {
+                if (!res.ok) throw new Error('last-trip');
+                return res.json() as Promise<DriverLastTrip>;
+            })
+            .then(data => {
+                if (cancelled) return;
+                setRegisterLastTrip(data);
+                if (data.suggestedQueueType === 'far' || data.suggestedQueueType === 'near') {
+                    setRegisterQueueTab(data.suggestedQueueType);
+                    setRegisterRow(prev => ({ ...prev, queueType: data.suggestedQueueType as DispatchQueueType }));
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setRegisterLastTrip({ found: false });
+            })
+            .finally(() => {
+                if (!cancelled) setRegisterLastTripLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [registerRow.selectedDriver?.id, isDrawerOpen, headers]);
+
     const activeFarEntries = useMemo(() => {
         if (!activeCategoryLabel) return [];
         const bucket = queueData[activeCategoryLabel];
@@ -1951,6 +2050,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         <button
                             onClick={() => {
                                 setActiveCategoryKey(preset.key);
+                                setRegisterRow(createRow(preset, 'far'));
+                                setRegisterQueueTab('far');
+                                setRegisterLastTrip(null);
                                 setIsDrawerOpen(true);
                             }}
                             className={`px-3 py-1 text-xs rounded-md text-white hover:opacity-90 ${categoryAccentClasses[preset.key] || 'bg-sky-600'}`}
@@ -2010,21 +2112,23 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         return parts.join(' ');
     };
 
-    const renderRowEditor = (row: RowEditor, siblingsCount: number, queueTypeLabel: string) => (
+    const renderRowEditor = (row: RowEditor, siblingsCount: number, queueTypeLabel?: string) => (
         <div key={row.id} className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
-            <div className="flex items-center justify-between text-[10px] text-slate-500">
-                <span>{queueTypeLabel}</span>
-                {siblingsCount > 1 && (
-                    <button
-                        onClick={() =>
-                            setRows(prev => prev.filter(existing => existing.id !== row.id))
-                        }
-                        className="text-red-500 hover:text-red-600"
-                    >
-                        حذف
-                    </button>
-                )}
-            </div>
+            {queueTypeLabel && (
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>{queueTypeLabel}</span>
+                    {siblingsCount > 1 && (
+                        <button
+                            onClick={() =>
+                                setRows(prev => prev.filter(existing => existing.id !== row.id))
+                            }
+                            className="text-red-500 hover:text-red-600"
+                        >
+                            حذف
+                        </button>
+                    )}
+                </div>
+            )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="relative">
                     <label className="text-[10px] font-medium text-slate-600">خودرو</label>
@@ -2158,15 +2262,17 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     />
                 </div>
             </div>
-            <div className="flex items-center justify-end gap-2 text-[10px]">
-                <button
-                    onClick={() => handleRowSubmit(row.id)}
-                    disabled={row.submitting}
-                    className="px-3 py-1 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-                >
-                    {row.submitting ? '...' : 'ذخیره'}
-                </button>
-            </div>
+            {queueTypeLabel && (
+                <div className="flex items-center justify-end gap-2 text-[10px]">
+                    <button
+                        onClick={() => handleRowSubmit(row.id)}
+                        disabled={row.submitting}
+                        className="px-3 py-1 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                        {row.submitting ? '...' : 'ذخیره'}
+                    </button>
+                </div>
+            )}
         </div>
     );
 
@@ -2384,7 +2490,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 {presetCategories.map(category => (
                                     <button
                                         key={category.key}
-                                        onClick={() => setActiveCategoryKey(category.key)}
+                                        onClick={() => {
+                                            setActiveCategoryKey(category.key);
+                                            setRegisterRow(prev => ({
+                                                ...prev,
+                                                categoryKey: category.key,
+                                                categoryLabel: category.label,
+                                            }));
+                                        }}
                                         className={`px-2.5 py-1 rounded-full text-xs transition ${
                                             activeCategoryKey === category.key
                                                 ? categoryAccentClasses[category.key] || 'bg-slate-600 text-white'
@@ -2401,33 +2514,103 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 </div>
                             ) : (
                                 <>
+                                    {renderRowEditor(registerRow, 1)}
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 space-y-1">
+                                        {!registerRow.selectedDriver ? (
+                                            <p className="text-slate-500">
+                                                اول راننده را انتخاب کنید تا آخرین مسیرش نشان داده شود.
+                                            </p>
+                                        ) : registerLastTripLoading ? (
+                                            <p className="text-slate-500">در حال خواندن آخرین مسیر...</p>
+                                        ) : registerLastTrip?.found ? (
+                                            <>
+                                                <p>
+                                                    آخرین مسیر:{' '}
+                                                    <strong>
+                                                        {registerLastTrip.originCity || '—'} →{' '}
+                                                        {registerLastTrip.destinationCity || 'نامشخص'}
+                                                    </strong>
+                                                    {registerLastTrip.roundTripKm
+                                                        ? ` • ${Math.round(Number(registerLastTrip.roundTripKm))} کیلومتر`
+                                                        : ''}
+                                                </p>
+                                                <p>
+                                                    {registerLastTrip.lastPathType === 'near' ||
+                                                    registerLastTrip.lastPathType === 'far' ? (
+                                                        <>
+                                                            از مسیر{' '}
+                                                            <strong>
+                                                                {registerLastTrip.lastPathType === 'near'
+                                                                    ? 'نزدیک'
+                                                                    : 'دور'}
+                                                            </strong>{' '}
+                                                            آمده — باید در نوبت{' '}
+                                                            <strong>
+                                                                {registerLastTrip.suggestedQueueType === 'near'
+                                                                    ? 'نزدیک'
+                                                                    : 'دور'}
+                                                            </strong>{' '}
+                                                            قرار بگیرد.
+                                                        </>
+                                                    ) : (
+                                                        'نوع آخرین مسیر مشخص نشد — نوبت را خودتان انتخاب کنید.'
+                                                    )}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="text-slate-500">
+                                                آخرین مسیر ثبت‌شده‌ای پیدا نشد — نوبت را خودتان انتخاب کنید.
+                                            </p>
+                                        )}
+                                    </div>
                                     <div className="flex rounded-lg border border-slate-200 p-0.5 text-xs">
                                         <button
                                             type="button"
-                                            onClick={() => setRegisterQueueTab('far')}
+                                            onClick={() => {
+                                                setRegisterQueueTab('far');
+                                                setRegisterRow(prev => ({ ...prev, queueType: 'far' }));
+                                            }}
                                             className={`flex-1 rounded-md py-1.5 transition ${
                                                 registerQueueTab === 'far'
                                                     ? 'bg-sky-600 text-white'
-                                                    : 'text-slate-600 hover:bg-slate-50'
+                                                    : 'bg-slate-200 text-slate-400'
                                             }`}
                                         >
                                             {queueTypeLabels.far}
+                                            {registerLastTrip?.suggestedQueueType === 'far'
+                                                ? ' — پیشنهادی'
+                                                : ''}
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setRegisterQueueTab('near')}
+                                            onClick={() => {
+                                                setRegisterQueueTab('near');
+                                                setRegisterRow(prev => ({ ...prev, queueType: 'near' }));
+                                            }}
                                             className={`flex-1 rounded-md py-1.5 transition ${
                                                 registerQueueTab === 'near'
                                                     ? 'bg-emerald-600 text-white'
-                                                    : 'text-slate-600 hover:bg-slate-50'
+                                                    : 'bg-slate-200 text-slate-400'
                                             }`}
                                         >
                                             {queueTypeLabels.near}
+                                            {registerLastTrip?.suggestedQueueType === 'near'
+                                                ? ' — پیشنهادی'
+                                                : ''}
                                         </button>
                                     </div>
-                                    {registerQueueTab === 'far'
-                                        ? renderFormSection('far', activeFarRows)
-                                        : renderFormSection('near', activeNearRows)}
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleRegisterSubmit()}
+                                            disabled={registerRow.submitting}
+                                            className="px-4 py-1.5 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                                        >
+                                            {registerRow.submitting
+                                                ? '...'
+                                                : `ثبت در نوبت ${queueTypeLabels[registerQueueTab]}`}
+                                        </button>
+                                    </div>
                                 </>
                             )}
                         </div>

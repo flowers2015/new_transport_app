@@ -16,7 +16,7 @@ const reportImageUpload = multer({
 router.post('/webhook', baleController.webhook);
 
 router.get('/status', authenticateToken, authorizeRole(transportRoles), baleController.getStatus);
-router.put('/settings/runtime', authenticateToken, authorizeRole(adminRoles), baleController.updateRuntimeSettings);
+router.put('/settings/runtime', authenticateToken, authorizeRole(transportRoles), baleController.updateRuntimeSettings);
 router.put('/channels/:slot', authenticateToken, authorizeRole(adminRoles), baleController.updateChannel);
 router.get('/drivers/outreach', authenticateToken, authorizeRole(transportRoles), baleController.listDriverOutreach);
 router.put('/drivers/:driverId/outreach', authenticateToken, authorizeRole(transportRoles), baleController.upsertDriverOutreach);
@@ -27,6 +27,7 @@ router.post('/webhook/register', authenticateToken, authorizeRole(adminRoles), b
 router.post('/sessions/start', authenticateToken, authorizeRole(transportRoles), baleController.startSession);
 router.post('/sessions/stop', authenticateToken, authorizeRole(transportRoles), baleController.stopSession);
 router.post('/sessions/skip-turn', authenticateToken, authorizeRole(transportRoles), baleController.skipTurn);
+router.post('/sessions/resume-turn', authenticateToken, authorizeRole(transportRoles), baleController.resumeTurn);
 router.post('/sessions/extend-turn', authenticateToken, authorizeRole(transportRoles), baleController.extendTurn);
 router.post('/sessions/manual-assign', authenticateToken, authorizeRole(transportRoles), baleController.manualAssign);
 router.get('/sessions/:sessionId/logs', authenticateToken, authorizeRole(transportRoles), baleController.getSessionLogs);

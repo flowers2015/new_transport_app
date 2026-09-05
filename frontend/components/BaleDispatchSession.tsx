@@ -11,17 +11,40 @@ type BaleChannel = {
     is_active: boolean;
 };
 
+type QueueEntry = {
+    id?: string;
+    driverId?: string;
+    driver_id?: string;
+    vehicleId?: string;
+    vehicle_id?: string;
+    driver?: { name?: string; employeeId?: string };
+    driver_name?: string;
+};
+
+type SessionAnnouncement = {
+    id: string;
+    lineType?: string;
+    originCity?: string;
+    origin_city?: string;
+    destinationCities?: string;
+    destination?: { id?: string; city?: string };
+    destinationId?: string;
+    brand?: string;
+};
+
 type BaleSession = {
     id: string;
     status: string;
     mode: string;
     modeLabel: string;
     stage: string;
+    stageLabel?: string;
     vehicleCategory: string | null;
     currentTurnIndex: number;
     turnTimeoutSec: number;
     turnDeadlineAt: string | null;
-    queueSnapshot: unknown[];
+    queueSnapshot: unknown[] | string;
+    eligibleAnnouncements?: unknown[] | string;
 };
 
 type RuntimeEnvironment = 'test' | 'production';
@@ -50,11 +73,53 @@ type BaleStatus = {
 };
 
 const MODES = [
-    { value: 'manual', label: 'دستی' },
     { value: 'hybrid', label: 'هیبرید' },
-    { value: 'semi_auto', label: 'نیمه‌خودکار' },
-    { value: 'auto', label: 'خودکار' },
+    { value: 'manual', label: 'دستی' },
 ];
+
+const STATUS_FA: Record<string, string> = {
+    running: 'در حال اعلام',
+    awaiting_confirm: 'منتظر تأیید راننده',
+    awaiting_admin: 'منتظر تصمیم شما',
+    assigning: 'در حال ثبت تخصیص',
+};
+
+function parseJsonArray<T>(raw: unknown): T[] {
+    if (Array.isArray(raw)) return raw as T[];
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
+function queueDriverId(entry: QueueEntry | undefined): string {
+    return String(entry?.driverId || entry?.driver_id || '');
+}
+
+function queueDriverName(entry: QueueEntry | undefined): string {
+    return entry?.driver?.name || entry?.driver_name || '—';
+}
+
+function announcementLine(ann: SessionAnnouncement, index: number): string {
+    const dest = ann.destinationCities || ann.destination?.city || '—';
+    const origin = ann.originCity || ann.origin_city || '—';
+    return `${index + 1}. ${ann.lineType || 'بار'} — ${origin} → ${dest}`;
+}
+
+function formatRemain(deadlineAt: string | null | undefined, now: number): string {
+    if (!deadlineAt) return '—';
+    const ms = new Date(deadlineAt).getTime() - now;
+    if (ms <= 0) return '۰:۰۰';
+    const total = Math.ceil(ms / 1000);
+    const min = Math.floor(total / 60);
+    const sec = total % 60;
+    return `${min}:${String(sec).padStart(2, '0')}`;
+}
 
 const CATEGORY_SLOTS = [
     { slot: 2, category: 'تریلی', label: 'تریلی', channelLabel: 'کانال تریلی (اسلات ۲)' },
@@ -64,18 +129,86 @@ const CATEGORY_SLOTS = [
 
 const EXTEND_MINUTE_OPTIONS = [2, 4, 6] as const;
 
-const RUNTIME_OPTIONS: { value: RuntimeEnvironment; label: string; hint: string }[] = [
+const WORKSPACE_TABS: { value: RuntimeEnvironment; label: string; hint: string }[] = [
     {
         value: 'test',
-        label: 'پایلوت / تست',
-        hint: 'یک گروه مشترک، chat مشترک رانندگان، ابزار seed',
+        label: 'تستی',
+        hint: 'گروه مشترک، ابزار seed، لینک تست راننده',
     },
     {
         value: 'production',
-        label: 'عملیاتی / واقعی',
-        hint: 'هر راننده chat اختصاصی — کانال جدا برای هر دسته',
+        label: 'عملیاتی',
+        hint: 'کانال واقعی هر دسته و chat اختصاصی راننده',
     },
 ];
+
+const WORKSPACE_STORAGE_KEY = 'bale-dispatch-workspace';
+const DRIVERS_TABLE_HIDDEN_KEY = 'bale-dispatch-drivers-hidden';
+const CATEGORY_SETTINGS_KEY = 'bale-dispatch-category-settings';
+
+type CategorySessionSettings = {
+    mode: string;
+    stage: string;
+    turnTimeoutSec: number;
+};
+
+const DEFAULT_CATEGORY_SETTINGS: CategorySessionSettings = {
+    mode: 'hybrid',
+    stage: 'stage1',
+    turnTimeoutSec: 180,
+};
+
+function defaultAllCategorySettings(): Record<string, CategorySessionSettings> {
+    return Object.fromEntries(
+        CATEGORY_SLOTS.map(({ category }) => [category, { ...DEFAULT_CATEGORY_SETTINGS }])
+    );
+}
+
+function readCategorySettings(): Record<string, CategorySessionSettings> {
+    const base = defaultAllCategorySettings();
+    try {
+        const raw = localStorage.getItem(CATEGORY_SETTINGS_KEY);
+        if (!raw) return base;
+        const parsed = JSON.parse(raw) as Record<string, Partial<CategorySessionSettings>>;
+        CATEGORY_SLOTS.forEach(({ category }) => {
+            const row = parsed[category];
+            if (!row) return;
+            const mode =
+                row.mode === 'manual' || row.mode === 'hybrid'
+                    ? row.mode
+                    : DEFAULT_CATEGORY_SETTINGS.mode;
+            base[category] = {
+                mode,
+                stage: row.stage || DEFAULT_CATEGORY_SETTINGS.stage,
+                turnTimeoutSec: Number(row.turnTimeoutSec) || DEFAULT_CATEGORY_SETTINGS.turnTimeoutSec,
+            };
+        });
+    } catch {
+        /* ignore */
+    }
+    return base;
+}
+
+function readStoredWorkspace(): RuntimeEnvironment {
+    try {
+        return localStorage.getItem(WORKSPACE_STORAGE_KEY) === 'production' ? 'production' : 'test';
+    } catch {
+        return 'test';
+    }
+}
+
+function readDriversTableHidden(tab: RuntimeEnvironment): boolean {
+    try {
+        return localStorage.getItem(`${DRIVERS_TABLE_HIDDEN_KEY}-${tab}`) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function driverLinkStatus(d: DriverOutreach): string {
+    if (!d.outreach_chat_id) return 'بدون لینک';
+    return d.is_test_simulation ? 'تست' : 'عملیاتی';
+}
 
 interface Props {
     currentUser: User;
@@ -91,10 +224,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [authExpired, setAuthExpired] = useState(false);
-    const [mode, setMode] = useState('hybrid');
-    const [stage, setStage] = useState('stage1');
-    const [turnTimeoutSec, setTurnTimeoutSec] = useState(180);
-    const [runtimeEnv, setRuntimeEnv] = useState<RuntimeEnvironment>('test');
+    const [categorySettings, setCategorySettings] = useState(readCategorySettings);
+    const [activeTab, setActiveTab] = useState<RuntimeEnvironment>(readStoredWorkspace);
     const [testChatId, setTestChatId] = useState('');
     const [groupChatId, setGroupChatId] = useState('');
     const [channelChatIds, setChannelChatIds] = useState<Record<number, string>>({});
@@ -104,10 +235,29 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [showRulesDialog, setShowRulesDialog] = useState(false);
     const [drivers, setDrivers] = useState<DriverOutreach[]>([]);
     const [driverFilter, setDriverFilter] = useState('');
+    const [driversTableHidden, setDriversTableHidden] = useState(() =>
+        readDriversTableHidden(readStoredWorkspace())
+    );
     const [editingChat, setEditingChat] = useState<Record<string, string>>({});
     const [savingDriverId, setSavingDriverId] = useState<string | null>(null);
+    const [assignOpenId, setAssignOpenId] = useState<string | null>(null);
+    const [assignDriverId, setAssignDriverId] = useState('');
+    const [assignAnnouncementId, setAssignAnnouncementId] = useState('');
+    const [nowTs, setNowTs] = useState(() => Date.now());
 
-    const isTestMode = runtimeEnv === 'test';
+    const isTestMode = activeTab === 'test';
+    const serverEnv = status?.runtime?.environment;
+    const tabMatchesServer = !serverEnv || serverEnv === activeTab;
+
+    useEffect(() => {
+        setDriversTableHidden(readDriversTableHidden(activeTab));
+        setDriverFilter('');
+    }, [activeTab]);
+
+    useEffect(() => {
+        const t = setInterval(() => setNowTs(Date.now()), 1000);
+        return () => clearInterval(t);
+    }, []);
 
     const loadDrivers = useCallback(async () => {
         const res = await apiFetch(getApiUrl('bale/drivers/outreach'), { skipAuthRedirect: true });
@@ -126,55 +276,67 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         setEditingChat(draft);
     }, []);
 
-    const loadStatus = useCallback(async () => {
-        if (authExpired) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await apiFetch(getApiUrl('bale/status'), { skipAuthRedirect: true });
-            if (isAuthFailureStatus(res.status)) {
-                setAuthExpired(true);
-                setError(
-                    'نشست شما منقضی شده. جلسه بله ممکن است روی سرور ادامه داشته باشد — از منو خارج شوید و دوباره وارد شوید.'
-                );
-                return;
+    const applyStatus = (data: BaleStatus) => {
+        setStatus(data);
+        const ch1 = data.channels?.find(c => c.slot_number === 1);
+        if (ch1?.chat_id) setGroupChatId(String(ch1.chat_id));
+        const ids: Record<number, string> = {};
+        CATEGORY_SLOTS.forEach(({ slot }) => {
+            const ch = data.channels?.find(c => c.slot_number === slot);
+            if (ch?.chat_id) ids[slot] = String(ch.chat_id);
+        });
+        setChannelChatIds(prev => ({ ...ids, ...prev }));
+        const sessions = data.activeSessions?.length
+            ? data.activeSessions
+            : data.activeSession
+              ? [data.activeSession]
+              : [];
+        setSelectedSessionId(prev => {
+            if (sessions.length === 0) return '';
+            if (sessions.find(s => s.id === prev)) return prev;
+            return sessions[0].id;
+        });
+    };
+
+    const loadStatus = useCallback(
+        async ({ silent = false, withDrivers = false } = {}) => {
+            if (authExpired) return;
+            if (!silent) setError(null);
+            try {
+                const path = silent ? 'bale/status?light=1' : 'bale/status';
+                const res = await apiFetch(getApiUrl(path), { skipAuthRedirect: true });
+                if (isAuthFailureStatus(res.status)) {
+                    setAuthExpired(true);
+                    setError(
+                        'نشست شما منقضی شده. جلسه بله ممکن است روی سرور ادامه داشته باشد — از منو خارج شوید و دوباره وارد شوید.'
+                    );
+                    return;
+                }
+                if (!res.ok) throw new Error(await readApiError(res));
+                applyStatus((await res.json()) as BaleStatus);
+                if (withDrivers) await loadDrivers();
+            } catch (e) {
+                if (!silent) setError(e instanceof Error ? e.message : 'خطا در بارگذاری');
+            } finally {
+                if (!silent) setLoading(false);
             }
-            if (!res.ok) throw new Error(await readApiError(res));
-            const data = (await res.json()) as BaleStatus;
-            setStatus(data);
-            if (data.runtime?.environment) setRuntimeEnv(data.runtime.environment);
-            const ch1 = data.channels?.find(c => c.slot_number === 1);
-            if (ch1?.chat_id) setGroupChatId(String(ch1.chat_id));
-            const ids: Record<number, string> = {};
-            CATEGORY_SLOTS.forEach(({ slot }) => {
-                const ch = data.channels?.find(c => c.slot_number === slot);
-                if (ch?.chat_id) ids[slot] = String(ch.chat_id);
-            });
-            setChannelChatIds(prev => ({ ...ids, ...prev }));
-            const sessions = data.activeSessions?.length
-                ? data.activeSessions
-                : data.activeSession
-                  ? [data.activeSession]
-                  : [];
-            setSelectedSessionId(prev => {
-                if (sessions.length === 0) return '';
-                if (sessions.find(s => s.id === prev)) return prev;
-                return sessions[0].id;
-            });
-            await loadDrivers();
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'خطا در بارگذاری');
-        } finally {
-            setLoading(false);
-        }
-    }, [authExpired, loadDrivers]);
+        },
+        [authExpired, loadDrivers]
+    );
 
     useEffect(() => {
         if (authExpired) return;
-        loadStatus();
-        const t = setInterval(loadStatus, 10000);
-        return () => clearInterval(t);
-    }, [loadStatus, authExpired]);
+        let cancelled = false;
+        (async () => {
+            await loadStatus({ silent: false, withDrivers: false });
+            if (!cancelled) void loadDrivers();
+        })();
+        const t = setInterval(() => void loadStatus({ silent: true, withDrivers: false }), 10000);
+        return () => {
+            cancelled = true;
+            clearInterval(t);
+        };
+    }, [loadStatus, loadDrivers, authExpired]);
 
     const activeSessions =
         status?.activeSessions?.length
@@ -194,6 +356,32 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         } finally {
             setBusy(false);
         }
+    };
+
+    const switchWorkspaceTab = async (tab: RuntimeEnvironment) => {
+        if (tab === activeTab && tabMatchesServer) return;
+        if (
+            tab !== activeTab &&
+            activeSessions.length > 0 &&
+            !window.confirm(
+                'جلسه‌هایی در محیط فعلی فعال‌اند. عوض کردن تب، حالت سرور را هم عوض می‌کند. ادامه می‌دهید؟'
+            )
+        ) {
+            return;
+        }
+        setActiveTab(tab);
+        try {
+            localStorage.setItem(WORKSPACE_STORAGE_KEY, tab);
+        } catch {
+            /* ignore */
+        }
+        await runAction(`فعال‌سازی ${tab === 'test' ? 'تستی' : 'عملیاتی'}`, async () => {
+            const res = await apiFetch(getApiUrl('bale/settings/runtime'), {
+                method: 'PUT',
+                body: JSON.stringify({ environment: tab }),
+            });
+            if (!res.ok) throw new Error(await readApiError(res));
+        });
     };
 
     const seedDrivers = () =>
@@ -240,14 +428,37 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!res.ok) throw new Error(await readApiError(res));
         });
 
+    const settingsFor = (vehicleCategory: string): CategorySessionSettings =>
+        categorySettings[vehicleCategory] || { ...DEFAULT_CATEGORY_SETTINGS };
+
+    const patchCategorySettings = (vehicleCategory: string, patch: Partial<CategorySessionSettings>) => {
+        setCategorySettings(prev => {
+            const next = {
+                ...prev,
+                [vehicleCategory]: {
+                    ...DEFAULT_CATEGORY_SETTINGS,
+                    ...prev[vehicleCategory],
+                    ...patch,
+                },
+            };
+            try {
+                localStorage.setItem(CATEGORY_SETTINGS_KEY, JSON.stringify(next));
+            } catch {
+                /* ignore */
+            }
+            return next;
+        });
+    };
+
     const startCategorySession = (vehicleCategory: string) =>
         runAction(`شروع ${vehicleCategory}`, async () => {
+            const settings = settingsFor(vehicleCategory);
             const res = await apiFetch(getApiUrl('bale/sessions/start'), {
                 method: 'POST',
                 body: JSON.stringify({
-                    mode,
-                    stage,
-                    turnTimeoutSec,
+                    mode: settings.mode,
+                    stage: settings.stage,
+                    turnTimeoutSec: settings.turnTimeoutSec,
                     vehicleCategory,
                 }),
             });
@@ -263,29 +474,30 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 );
                 if (!ok) return;
             }
-            const res = await apiFetch(getApiUrl('bale/sessions/start'), {
-                method: 'POST',
-                body: JSON.stringify({
-                    mode,
-                    stage,
-                    turnTimeoutSec,
-                    forceRestart: false,
-                }),
-            });
-            if (!res.ok) throw new Error(await readApiError(res));
-            const data = await res.json();
-            const notes: string[] = [`${data.started} جلسه شروع شد`];
-            if (data.pilotCombined) notes.push('(گروه مشترک — اسلات ۱)');
-            if (data.skipped?.length) {
-                notes.push(
-                    `رد شده: ${data.skipped.map((e: { category: string }) => e.category).join('، ')}`
-                );
+            const notes: string[] = [];
+            let started = 0;
+            for (const { category } of CATEGORY_SLOTS) {
+                if (activeSessions.some(s => s.vehicleCategory === category)) {
+                    notes.push(`${category}: از قبل فعال`);
+                    continue;
+                }
+                const settings = settingsFor(category);
+                const res = await apiFetch(getApiUrl('bale/sessions/start'), {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        mode: settings.mode,
+                        stage: settings.stage,
+                        turnTimeoutSec: settings.turnTimeoutSec,
+                        vehicleCategory: category,
+                    }),
+                });
+                if (!res.ok) {
+                    notes.push(`${category}: ${await readApiError(res)}`);
+                    continue;
+                }
+                started += 1;
             }
-            if (data.errors?.length) {
-                notes.push(
-                    `خطا: ${data.errors.map((e: { category: string; message: string }) => `${e.category}: ${e.message}`).join(' | ')}`
-                );
-            }
+            notes.unshift(`${started} جلسه شروع شد`);
             setSeedResult(notes.join(' — '));
         });
 
@@ -329,12 +541,59 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!res.ok) throw new Error(await readApiError(res));
         });
 
+    const resumeTurnForSession = (sessionId: string) =>
+        runAction('ادامه از همین‌جا', async () => {
+            const res = await apiFetch(getApiUrl('bale/sessions/resume-turn'), {
+                method: 'POST',
+                body: JSON.stringify({ sessionId }),
+            });
+            if (!res.ok) throw new Error(await readApiError(res));
+            setSeedResult('نوبت جاری دوباره اعلام شد');
+        });
+
+    const openAssignPanel = (session: BaleSession) => {
+        const q = parseJsonArray<QueueEntry>(session.queueSnapshot);
+        const loads = parseJsonArray<SessionAnnouncement>(session.eligibleAnnouncements);
+        const turn = q[session.currentTurnIndex];
+        setAssignOpenId(session.id);
+        setAssignDriverId(queueDriverId(turn) || queueDriverId(q[0]));
+        setAssignAnnouncementId(loads[0]?.id ? String(loads[0].id) : '');
+    };
+
+    const assignFromSession = (session: BaleSession) =>
+        runAction('تخصیص از جلسه', async () => {
+            const q = parseJsonArray<QueueEntry>(session.queueSnapshot);
+            const loads = parseJsonArray<SessionAnnouncement>(session.eligibleAnnouncements);
+            const entry = q.find(e => queueDriverId(e) === assignDriverId);
+            const ann = loads.find(a => String(a.id) === String(assignAnnouncementId));
+            if (!entry || !ann) throw new Error('راننده و بار را از لیست همین جلسه انتخاب کنید');
+            const res = await apiFetch(getApiUrl('bale/sessions/manual-assign'), {
+                method: 'POST',
+                body: JSON.stringify({
+                    sessionId: session.id,
+                    freightAnnouncementId: ann.id,
+                    destinationId: ann.destination?.id || ann.destinationId,
+                    driverId: queueDriverId(entry),
+                    vehicleId: entry.vehicleId || entry.vehicle_id,
+                    queueEntryId: entry.id,
+                }),
+            });
+            if (!res.ok) throw new Error(await readApiError(res));
+            setAssignOpenId(null);
+            setSeedResult(`بار به ${queueDriverName(entry)} تخصیص شد`);
+        });
+
     const session =
         activeSessions.find(s => s.id === selectedSessionId) || activeSessions[0] || null;
     const queue = Array.isArray(session?.queueSnapshot) ? session.queueSnapshot : [];
     const currentTurn = session ? queue[session.currentTurnIndex] : null;
 
-    const filteredDrivers = drivers.filter(d => {
+    const workspaceDrivers = drivers.filter(d => {
+        if (!d.outreach_chat_id) return true;
+        return isTestMode ? Boolean(d.is_test_simulation) : !d.is_test_simulation;
+    });
+
+    const filteredDrivers = workspaceDrivers.filter(d => {
         const q = driverFilter.trim().toLowerCase();
         if (!q) return true;
         return (
@@ -344,8 +603,37 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         );
     });
 
-    const linkedCount = drivers.filter(d => d.outreach_chat_id != null).length;
-    const testLinkedCount = drivers.filter(d => d.is_test_simulation).length;
+    const linkedCount = workspaceDrivers.filter(d => d.outreach_chat_id != null).length;
+    const showDriversTable = !driversTableHidden || Boolean(driverFilter.trim());
+
+    const toggleDriversTable = () => {
+        setDriversTableHidden(prev => {
+            const next = !prev;
+            try {
+                localStorage.setItem(`${DRIVERS_TABLE_HIDDEN_KEY}-${activeTab}`, next ? '1' : '0');
+            } catch {
+                /* ignore */
+            }
+            return next;
+        });
+    };
+
+    const exportDriversExcel = async () => {
+        const XLSX = await import('xlsx');
+        const rows = (driverFilter.trim() ? filteredDrivers : workspaceDrivers).map(d => ({
+            نام: d.driver_name || '',
+            'کد پرسنلی': d.employee_id || '',
+            chat_id: d.outreach_chat_id ?? '',
+            وضعیت: driverLinkStatus(d),
+            موبایل: d.mobile || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(
+            rows.length ? rows : [{ نام: '', 'کد پرسنلی': '', chat_id: '', وضعیت: '', موبایل: '' }]
+        );
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, isTestMode ? 'تستی' : 'عملیاتی');
+        XLSX.writeFile(wb, `رانندگان_بله_${isTestMode ? 'تستی' : 'عملیاتی'}.xlsx`);
+    };
 
     const sessionForCategory = (category: string) =>
         activeSessions.find(s => s.vehicleCategory === category);
@@ -379,6 +667,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     };
 
     const startBlockedReason = (slot: number, category: string) => {
+        if (!tabMatchesServer) {
+            return 'سرور روی تب دیگر است — روی همین تب کلیک کنید تا فعال شود.';
+        }
         const channelHint = channelReadyHint(slot, category);
         if (channelHint) return channelHint;
         const queueCount = queueCountForCategory(category);
@@ -392,9 +683,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6" dir="rtl">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-xl font-bold text-slate-800">جلسه اعلام بار (بله)</h1>
+                    <h1 className="text-xl font-bold text-slate-800">اعلام بار بله</h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        مدیریت نوبت، کانال‌ها و لینک رانندگان شرکتی
+                        تستی و عملیاتی جدا هستند — هر تب راننده، کانال و جلسه خودش را دارد
                     </p>
                 </div>
                 <button
@@ -415,18 +706,47 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 </button>
             </div>
 
-            <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-2">
-                <h2 className="font-semibold text-violet-900">حالت اجرا</h2>
-                <div className="text-sm">
-                    {RUNTIME_OPTIONS.find(o => o.value === runtimeEnv)?.label || runtimeEnv}
-                    <span className="text-xs text-slate-500 mr-2">
-                        — {RUNTIME_OPTIONS.find(o => o.value === runtimeEnv)?.hint}
-                    </span>
+            <div className="flex gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
+                {WORKSPACE_TABS.map(tab => {
+                    const selected = activeTab === tab.value;
+                    return (
+                        <button
+                            key={tab.value}
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void switchWorkspaceTab(tab.value)}
+                            className={`flex-1 min-w-[140px] rounded-lg px-4 py-3 text-right transition ${
+                                selected
+                                    ? tab.value === 'test'
+                                        ? 'bg-amber-500 text-white shadow'
+                                        : 'bg-sky-600 text-white shadow'
+                                    : 'bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                        >
+                            <div className="text-base font-bold">{tab.label}</div>
+                            <div className={`text-xs mt-0.5 ${selected ? 'text-white/90' : 'text-slate-500'}`}>
+                                {tab.hint}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+            {!tabMatchesServer && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm space-y-2">
+                    <p>
+                        سرور الان روی «{serverEnv === 'production' ? 'عملیاتی' : 'تستی'}» است.
+                        این تب هنوز فعال نشده — شروع جلسه روی محیط اشتباه می‌رود.
+                    </p>
+                    <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void switchWorkspaceTab(activeTab)}
+                        className="px-3 py-1.5 rounded-md bg-amber-700 text-white text-sm disabled:opacity-50"
+                    >
+                        فعال‌سازی تب {isTestMode ? 'تستی' : 'عملیاتی'}
+                    </button>
                 </div>
-                <p className="text-xs text-slate-500">
-                    تغییر حالت و شناسه کانال‌ها فقط از پنل ادمین (تنظیمات بله) انجام می‌شود.
-                </p>
-            </section>
+            )}
 
             {authExpired && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm space-y-2">
@@ -478,104 +798,135 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 <div>بازو: @{status.bot.username || status.bot.first_name || '—'}</div>
                             )}
                             <div>
-                                لینک رانندگان: {linkedCount} از {drivers.length}
-                                {testLinkedCount > 0 && (
-                                    <span className="text-amber-600 mr-2">
-                                        ({testLinkedCount} حالت تست)
-                                    </span>
-                                )}
+                                لینک رانندگان این تب: {linkedCount} از {workspaceDrivers.length}
                             </div>
                         </div>
                     </section>
 
                     <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <h2 className="font-semibold text-slate-700">رانندگان شرکتی — chat بله</h2>
-                            <input
-                                className="border rounded-md px-3 py-1.5 text-sm w-48"
-                                placeholder="جستجو نام / کد / chat"
-                                value={driverFilter}
-                                onChange={e => setDriverFilter(e.target.value)}
-                            />
+                        <h2 className="font-semibold text-slate-700">
+                            رانندگان {isTestMode ? 'تستی' : 'عملیاتی'} — chat بله
+                        </h2>
+                        <div className="flex flex-wrap items-end gap-2">
+                            <label className="text-sm flex-1 min-w-[220px]">
+                                جستجو
+                                <input
+                                    className="mt-1 border rounded-md px-3 py-2 text-sm w-full"
+                                    placeholder="نام، کد پرسنلی یا chat_id"
+                                    value={driverFilter}
+                                    onChange={e => setDriverFilter(e.target.value)}
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                onClick={toggleDriversTable}
+                                className="px-3 py-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+                            >
+                                {driversTableHidden ? 'نمایش جدول' : 'پنهان کردن جدول'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void exportDriversExcel()}
+                                className="px-3 py-2 rounded-md border border-emerald-600 text-emerald-700 text-sm hover:bg-emerald-50"
+                            >
+                                خروجی اکسل
+                            </button>
                         </div>
-                        <div className="rounded-lg border border-sky-100 bg-sky-50/60 p-3 text-xs text-sky-900 leading-relaxed space-y-1">
-                            <p className="font-medium">ثبت خودکار chat_id از راننده:</p>
-                            <p>
-                                ۱. راننده در بله به بازوی اعلام بار پیام بدهد:{' '}
-                                <code className="bg-white px-1 rounded ltr">/start کدپرسنلی</code>{' '}
-                                — مثلاً <code className="bg-white px-1 rounded ltr">/start 44983</code>
+                        {showDriversTable && (
+                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 p-3 text-xs text-sky-900 leading-relaxed space-y-1">
+                                <p className="font-medium">ثبت خودکار chat_id از راننده:</p>
+                                <p>
+                                    ۱. راننده در بله به بازوی اعلام بار پیام بدهد:{' '}
+                                    <code className="bg-white px-1 rounded ltr">/start کدپرسنلی</code>{' '}
+                                    — مثلاً <code className="bg-white px-1 rounded ltr">/start 44983</code>
+                                </p>
+                                <p>
+                                    ۲. یا پیام: <code className="bg-white px-1 rounded">ثبت 44983</code>
+                                </p>
+                                <p>
+                                    ۳. سیستم chat_id همان گفتگو را ذخیره می‌کند — نیازی به دستی نیست مگر
+                                    تست.
+                                </p>
+                                <p className="text-slate-600">
+                                    روش دستی: بعد از اولین پیام راننده به بازو، از getUpdates یا لاگ سرور
+                                    chat_id را بردارید و اینجا وارد کنید.
+                                </p>
+                            </div>
+                        )}
+                        {!showDriversTable ? (
+                            <p className="text-sm text-slate-500">
+                                جدول پنهان است ({linkedCount} لینک از {workspaceDrivers.length} راننده).
+                                برای پیدا کردن یک نفر جستجو کنید یا «نمایش جدول» را بزنید.
                             </p>
-                            <p>
-                                ۲. یا پیام: <code className="bg-white px-1 rounded">ثبت 44983</code>
-                            </p>
-                            <p>
-                                ۳. سیستم chat_id همان گفتگو را ذخیره می‌کند — نیازی به دستی نیست مگر
-                                تست.
-                            </p>
-                            <p className="text-slate-600">
-                                روش دستی: بعد از اولین پیام راننده به بازو، از getUpdates یا لاگ سرور
-                                chat_id را بردارید و اینجا وارد کنید.
-                            </p>
-                        </div>
-                        <div className="overflow-x-auto max-h-80 overflow-y-auto border rounded-lg">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 sticky top-0">
-                                    <tr>
-                                        <th className="text-right p-2 font-medium">نام</th>
-                                        <th className="text-right p-2 font-medium">کد پرسنلی</th>
-                                        <th className="text-right p-2 font-medium">chat_id</th>
-                                        <th className="text-right p-2 font-medium">وضعیت</th>
-                                        <th className="p-2 w-24" />
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredDrivers.map(d => (
-                                        <tr key={d.driver_id} className="border-t border-slate-100">
-                                            <td className="p-2">{d.driver_name || '—'}</td>
-                                            <td className="p-2 font-mono text-xs">{d.employee_id}</td>
-                                            <td className="p-2">
-                                                <input
-                                                    className="w-full min-w-[120px] border rounded px-2 py-1 text-xs ltr text-left"
-                                                    value={editingChat[d.driver_id] ?? ''}
-                                                    onChange={e =>
-                                                        setEditingChat(prev => ({
-                                                            ...prev,
-                                                            [d.driver_id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    placeholder="chat_id"
-                                                />
-                                            </td>
-                                            <td className="p-2 text-xs">
-                                                {!d.outreach_chat_id ? (
-                                                    <span className="text-red-600">بدون لینک</span>
-                                                ) : d.is_test_simulation ? (
-                                                    <span className="text-amber-600">تست</span>
-                                                ) : (
-                                                    <span className="text-emerald-600">عملیاتی</span>
-                                                )}
-                                            </td>
-                                            <td className="p-2">
-                                                <button
-                                                    type="button"
-                                                    disabled={busy || savingDriverId === d.driver_id}
-                                                    onClick={() => saveDriverOutreach(d)}
-                                                    className="text-xs px-2 py-1 rounded border hover:bg-slate-50 disabled:opacity-50"
-                                                >
-                                                    ذخیره
-                                                </button>
-                                            </td>
+                        ) : (
+                            <div className="overflow-x-auto max-h-80 overflow-y-auto border rounded-lg">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 sticky top-0">
+                                        <tr>
+                                            <th className="text-right p-2 font-medium">نام</th>
+                                            <th className="text-right p-2 font-medium">کد پرسنلی</th>
+                                            <th className="text-right p-2 font-medium">chat_id</th>
+                                            <th className="text-right p-2 font-medium">وضعیت</th>
+                                            <th className="p-2 w-24" />
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody>
+                                        {filteredDrivers.length === 0 ? (
+                                            <tr>
+                                                <td className="p-3 text-slate-500" colSpan={5}>
+                                                    راننده‌ای با این جستجو پیدا نشد.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredDrivers.map(d => (
+                                                <tr key={d.driver_id} className="border-t border-slate-100">
+                                                    <td className="p-2">{d.driver_name || '—'}</td>
+                                                    <td className="p-2 font-mono text-xs">{d.employee_id}</td>
+                                                    <td className="p-2">
+                                                        <input
+                                                            className="w-full min-w-[120px] border rounded px-2 py-1 text-xs ltr text-left"
+                                                            value={editingChat[d.driver_id] ?? ''}
+                                                            onChange={e =>
+                                                                setEditingChat(prev => ({
+                                                                    ...prev,
+                                                                    [d.driver_id]: e.target.value,
+                                                                }))
+                                                            }
+                                                            placeholder="chat_id"
+                                                        />
+                                                    </td>
+                                                    <td className="p-2 text-xs">
+                                                        {!d.outreach_chat_id ? (
+                                                            <span className="text-red-600">بدون لینک</span>
+                                                        ) : d.is_test_simulation ? (
+                                                            <span className="text-amber-600">تست</span>
+                                                        ) : (
+                                                            <span className="text-emerald-600">عملیاتی</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <button
+                                                            type="button"
+                                                            disabled={busy || savingDriverId === d.driver_id}
+                                                            onClick={() => saveDriverOutreach(d)}
+                                                            className="text-xs px-2 py-1 rounded border hover:bg-slate-50 disabled:opacity-50"
+                                                        >
+                                                            ذخیره
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </section>
 
                     {isTestMode && (
                         <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-4">
                             <h2 className="font-semibold text-amber-900">
-                                ابزار تست (فقط حالت پایلوت)
+                                ابزار تست (فقط تب تستی)
                             </h2>
                             <p className="text-xs text-slate-600">
                                 تا ۱۰ راننده صف — همه PV به یک chat_id. شناسایی با نوبت جاری هر جلسه.
@@ -619,247 +970,321 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     )}
 
                     <section
-                        className={`rounded-xl border p-4 space-y-4 ${
+                        className={`rounded-xl border p-4 space-y-3 ${
                             isTestMode
                                 ? 'border-amber-200 bg-amber-50/20'
                                 : 'border-sky-200 bg-sky-50/20'
                         }`}
                     >
-                        <h2 className="font-semibold text-slate-700">
-                            {isTestMode ? 'جلسه هر دسته (گروه مشترک تست)' : 'جلسه هر کانال عملیاتی'}
-                        </h2>
-                        <p className="text-xs text-slate-500">
-                            {isTestMode
-                                ? `هر دسته جلسه جدا دارد ولی همه در یک گروه (اسلات ۱ — chat: ${groupChatId || 'تنظیم نشده'}) اعلام می‌شوند.`
-                                : 'هر دسته خودرو کانال و جلسه مستقل دارد.'}
-                        </p>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                                <h2 className="font-semibold text-slate-700">
+                                    {isTestMode ? 'جلسه هر دسته (گروه مشترک تست)' : 'جلسه هر کانال عملیاتی'}
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {isTestMode
+                                        ? `هر دسته جلسه، مرحله و مهلت جدا دارد؛ اعلام در یک گروه (اسلات ۱ — ${groupChatId || 'تنظیم نشده'}).`
+                                        : 'هر دسته جلسه، مرحله و مهلت جدا دارد و منتظر دسته دیگر نمی‌ماند.'}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    disabled={busy || !tabMatchesServer}
+                                    onClick={startAllSessions}
+                                    className="px-3 py-1.5 rounded-md border border-emerald-600 text-emerald-700 text-sm disabled:opacity-50"
+                                >
+                                    شروع همه
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={busy || activeSessions.length === 0}
+                                    onClick={stopAllSessions}
+                                    className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
+                                >
+                                    توقف همه
+                                </button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {CATEGORY_SLOTS.map(({ slot, category, label, channelLabel }) => {
                             const catSession = sessionForCategory(category);
                             const isActive = Boolean(catSession);
                             const blockedReason = startBlockedReason(slot, category);
                             const queueCount = queueCountForCategory(category);
                             const channelPlan = channelPlanForCategory(category);
-                            const canOperateTurn =
+                            const settings = settingsFor(category);
+                            const canOperateTurn = Boolean(
                                 isActive &&
-                                catSession &&
-                                ['running', 'awaiting_confirm'].includes(catSession.status);
-                            const q = Array.isArray(catSession?.queueSnapshot)
-                                ? catSession.queueSnapshot
-                                : [];
-                            const turn = catSession
-                                ? (q[catSession.currentTurnIndex] as { driver?: { name?: string } } | undefined)
-                                : undefined;
+                                    catSession &&
+                                    ['running', 'awaiting_confirm', 'awaiting_admin'].includes(
+                                        catSession.status
+                                    )
+                            );
+                            const q = parseJsonArray<QueueEntry>(catSession?.queueSnapshot);
+                            const loads = parseJsonArray<SessionAnnouncement>(
+                                catSession?.eligibleAnnouncements
+                            );
+                            const turn = catSession ? q[catSession.currentTurnIndex] : undefined;
+                            const remain = formatRemain(catSession?.turnDeadlineAt, nowTs);
+                            const remainExpired =
+                                Boolean(catSession?.turnDeadlineAt) && remain === '۰:۰۰';
                             return (
                                 <div
                                     key={slot}
                                     className="rounded-lg border border-slate-200 bg-white p-3 space-y-2"
                                 >
-                                    <div className="flex flex-wrap items-start justify-between gap-2">
-                                        <div className="flex-1 min-w-[180px]">
-                                            <div className="font-medium text-sm">{label}</div>
-                                            <div className="text-xs text-slate-500">
-                                                {isTestMode
-                                                    ? 'گروه تست (اسلات ۱)'
-                                                    : channelLabel}
+                                    <div className="font-medium text-sm">{label}</div>
+                                    <div className="text-xs text-slate-500">
+                                        {isTestMode ? 'گروه تست (اسلات ۱)' : channelLabel}
+                                    </div>
+                                    <div className="text-xs text-slate-500 space-y-0.5">
+                                        {!isTestMode && (
+                                            <div className="font-mono ltr">
+                                                chat:{' '}
+                                                {channelPlan?.chatId ||
+                                                    channelChatIds[slot] ||
+                                                    '—'}
                                             </div>
-                                            <div className="text-xs text-slate-500 mt-0.5 space-y-0.5">
-                                                {!isTestMode && (
-                                                    <div className="font-mono ltr">
-                                                        chat:{' '}
-                                                        {channelPlan?.chatId ||
-                                                            channelChatIds[slot] ||
-                                                            '—'}
-                                                    </div>
-                                                )}
-                                                {queueCount != null && (
-                                                    <div>
-                                                        صف نوبت:{' '}
-                                                        {queueCount > 0 ? (
-                                                            <span className="text-emerald-700">
-                                                                {queueCount} راننده
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-red-600">خالی</span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {blockedReason && (
-                                                    <div className="text-amber-700">{blockedReason}</div>
+                                        )}
+                                        {queueCount != null && (
+                                            <div>
+                                                صف نوبت:{' '}
+                                                {queueCount > 0 ? (
+                                                    <span className="text-emerald-700">
+                                                        {queueCount} راننده
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-red-600">خالی</span>
                                                 )}
                                             </div>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                disabled={busy || isActive || Boolean(blockedReason)}
-                                                onClick={() => startCategorySession(category)}
-                                                className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
-                                                title={blockedReason || undefined}
-                                            >
-                                                شروع
-                                            </button>
-                                            <button
-                                                type="button"
-                                                disabled={busy || !isActive}
-                                                onClick={() => stopCategorySession(category)}
-                                                className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
-                                            >
-                                                توقف
-                                            </button>
-                                        </div>
+                                        )}
+                                        {blockedReason && (
+                                            <div className="text-amber-700">{blockedReason}</div>
+                                        )}
+                                    </div>
+                                    <label className="text-xs block">
+                                        حالت تصمیم
+                                        <select
+                                            className="mt-1 w-full border rounded-md px-2 py-1.5 text-sm"
+                                            value={settings.mode}
+                                            disabled={isActive}
+                                            onChange={e =>
+                                                patchCategorySettings(category, { mode: e.target.value })
+                                            }
+                                        >
+                                            {MODES.map(m => (
+                                                <option key={m.value} value={m.value}>
+                                                    {m.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="text-xs block">
+                                        مرحله شروع
+                                        <select
+                                            className="mt-1 w-full border rounded-md px-2 py-1.5 text-sm"
+                                            value={settings.stage}
+                                            disabled={isActive}
+                                            onChange={e =>
+                                                patchCategorySettings(category, { stage: e.target.value })
+                                            }
+                                        >
+                                            <option value="stage1">مرحله ۱ — خیلی‌دور</option>
+                                            <option value="stage2">مرحله ۲</option>
+                                        </select>
+                                    </label>
+                                    <label className="text-xs block">
+                                        مهلت نوبت (ثانیه)
+                                        <input
+                                            type="number"
+                                            className="mt-1 w-full border rounded-md px-2 py-1.5 text-sm"
+                                            value={settings.turnTimeoutSec}
+                                            disabled={isActive}
+                                            onChange={e =>
+                                                patchCategorySettings(category, {
+                                                    turnTimeoutSec: Number(e.target.value) || 180,
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={busy || isActive || Boolean(blockedReason)}
+                                            onClick={() => startCategorySession(category)}
+                                            className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
+                                            title={blockedReason || undefined}
+                                        >
+                                            شروع
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={busy || !isActive}
+                                            onClick={() => stopCategorySession(category)}
+                                            className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
+                                        >
+                                            توقف
+                                        </button>
                                     </div>
                                     {isActive && catSession && (
                                         <div className="text-xs text-sky-800 bg-sky-50 rounded-md p-2 space-y-1">
                                             <div>
-                                                وضعیت: <strong>{catSession.status}</strong>
-                                                {catSession.status === 'awaiting_admin' && (
-                                                    <span className="text-amber-600 mr-1">
-                                                        — منتظر اپراتور در تابلو
+                                                وضعیت:{' '}
+                                                <strong>
+                                                    {STATUS_FA[catSession.status] || catSession.status}
+                                                </strong>
+                                            </div>
+                                            <div>
+                                                مرحله: {catSession.stageLabel || catSession.stage}
+                                            </div>
+                                            <div>
+                                                نوبت الان:{' '}
+                                                <strong>{queueDriverName(turn)}</strong>
+                                                {q.length > 0 && (
+                                                    <span className="text-slate-500">
+                                                        {' '}
+                                                        ({(catSession.currentTurnIndex || 0) + 1} از{' '}
+                                                        {q.length})
                                                     </span>
                                                 )}
                                             </div>
-                                            <div>نوبت: {turn?.driver?.name || '—'}</div>
                                             <div>
-                                                انقضا:{' '}
-                                                {catSession.turnDeadlineAt
-                                                    ? new Date(catSession.turnDeadlineAt).toLocaleString('fa-IR')
-                                                    : '—'}
+                                                زمان مانده:{' '}
+                                                <strong className={remainExpired ? 'text-red-600' : ''}>
+                                                    {catSession.status === 'awaiting_admin' && remainExpired
+                                                        ? 'تمام شد'
+                                                        : remain}
+                                                </strong>
+                                            </div>
+                                            <div className="pt-1">
+                                                <div className="font-medium text-sky-900">
+                                                    بار اعلام‌شده ({loads.length})
+                                                </div>
+                                                {loads.length === 0 ? (
+                                                    <div className="text-amber-700">لیست بار خالی است</div>
+                                                ) : (
+                                                    <ul className="mt-1 max-h-28 overflow-y-auto space-y-0.5 text-slate-700">
+                                                        {loads.slice(0, 8).map((ann, i) => (
+                                                            <li key={String(ann.id || i)}>
+                                                                {announcementLine(ann, i)}
+                                                            </li>
+                                                        ))}
+                                                        {loads.length > 8 && (
+                                                            <li className="text-slate-500">
+                                                                و {loads.length - 8} بار دیگر
+                                                            </li>
+                                                        )}
+                                                    </ul>
+                                                )}
                                             </div>
                                         </div>
                                     )}
                                     {canOperateTurn && catSession && (
-                                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
-                                            <span className="text-xs text-slate-500">وقت اضافه:</span>
-                                            {EXTEND_MINUTE_OPTIONS.map(min => (
+                                        <div className="space-y-2 pt-1 border-t border-slate-100">
+                                            <div className="flex flex-wrap items-center gap-2">
                                                 <button
-                                                    key={min}
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() => resumeTurnForSession(catSession.id)}
+                                                    className="px-2 py-1 rounded border border-sky-400 text-sky-800 text-xs hover:bg-sky-50 disabled:opacity-50"
+                                                >
+                                                    ادامه از همین‌جا
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() => skipTurnForSession(catSession.id)}
+                                                    className="px-2 py-1 rounded border border-amber-300 text-amber-800 text-xs hover:bg-amber-50 disabled:opacity-50"
+                                                >
+                                                    رد نوبت
+                                                </button>
+                                                <button
                                                     type="button"
                                                     disabled={busy}
                                                     onClick={() =>
-                                                        extendTurnForSession(catSession.id, min)
+                                                        assignOpenId === catSession.id
+                                                            ? setAssignOpenId(null)
+                                                            : openAssignPanel(catSession)
                                                     }
-                                                    className="px-2 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 disabled:opacity-50"
+                                                    className="px-2 py-1 rounded border border-violet-300 text-violet-800 text-xs hover:bg-violet-50 disabled:opacity-50"
                                                 >
-                                                    +{min} دقیقه
+                                                    تخصیص به راننده
                                                 </button>
-                                            ))}
-                                            <button
-                                                type="button"
-                                                disabled={busy}
-                                                onClick={() => skipTurnForSession(catSession.id)}
-                                                className="px-2 py-1 rounded border border-amber-300 text-amber-800 text-xs hover:bg-amber-50 disabled:opacity-50"
-                                            >
-                                                رد نوبت
-                                            </button>
+                                            </div>
+                                            {catSession.status !== 'awaiting_admin' && (
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-xs text-slate-500">وقت اضافه:</span>
+                                                    {EXTEND_MINUTE_OPTIONS.map(min => (
+                                                        <button
+                                                            key={min}
+                                                            type="button"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                extendTurnForSession(catSession.id, min)
+                                                            }
+                                                            className="px-2 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 disabled:opacity-50"
+                                                        >
+                                                            +{min} دقیقه
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {assignOpenId === catSession.id && (
+                                                <div className="rounded-md border border-violet-200 bg-violet-50/50 p-2 space-y-2">
+                                                    <label className="text-xs block">
+                                                        راننده
+                                                        <select
+                                                            className="mt-1 w-full border rounded-md px-2 py-1.5 text-sm bg-white"
+                                                            value={assignDriverId}
+                                                            onChange={e => setAssignDriverId(e.target.value)}
+                                                        >
+                                                            {q.map(e => (
+                                                                <option
+                                                                    key={queueDriverId(e) || e.id}
+                                                                    value={queueDriverId(e)}
+                                                                >
+                                                                    {queueDriverName(e)}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </label>
+                                                    <label className="text-xs block">
+                                                        بار
+                                                        <select
+                                                            className="mt-1 w-full border rounded-md px-2 py-1.5 text-sm bg-white"
+                                                            value={assignAnnouncementId}
+                                                            onChange={e =>
+                                                                setAssignAnnouncementId(e.target.value)
+                                                            }
+                                                        >
+                                                            {loads.map((ann, i) => (
+                                                                <option key={String(ann.id)} value={String(ann.id)}>
+                                                                    {announcementLine(ann, i)}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </label>
+                                                    <button
+                                                        type="button"
+                                                        disabled={
+                                                            busy || !assignDriverId || !assignAnnouncementId
+                                                        }
+                                                        onClick={() => assignFromSession(catSession)}
+                                                        className="w-full px-2 py-1.5 rounded-md bg-violet-700 text-white text-xs disabled:opacity-50"
+                                                    >
+                                                        ثبت تخصیص در همین جلسه
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             );
                         })}
+                        </div>
                     </section>
 
-                    <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                        <h2 className="font-semibold text-slate-700">جلسه نوبت</h2>
-                        <div className="grid md:grid-cols-3 gap-3">
-                            <label className="text-sm">
-                                حالت تصمیم
-                                <select
-                                    className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
-                                    value={mode}
-                                    onChange={e => setMode(e.target.value)}
-                                >
-                                    {MODES.map(m => (
-                                        <option key={m.value} value={m.value}>
-                                            {m.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                            <label className="text-sm">
-                                مرحله شروع
-                                <select
-                                    className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
-                                    value={stage}
-                                    onChange={e => setStage(e.target.value)}
-                                >
-                                    <option value="stage1">مرحله ۱ — خیلی‌دور (نوبت دور)</option>
-                                    <option value="stage2">مرحله ۲</option>
-                                </select>
-                            </label>
-                            <label className="text-sm">
-                                مهلت نوبت (ثانیه)
-                                <input
-                                    type="number"
-                                    className="mt-1 w-full border rounded-md px-2 py-2 text-sm"
-                                    value={turnTimeoutSec}
-                                    onChange={e => setTurnTimeoutSec(Number(e.target.value) || 180)}
-                                />
-                            </label>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={startAllSessions}
-                                className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-700 text-sm disabled:opacity-50"
-                            >
-                                شروع همه کانال‌ها
-                            </button>
-                            {activeSessions.length > 0 && (
-                                <span className="text-xs text-amber-700 self-center">
-                                    {activeSessions.length} جلسه فعال — برای توقف یک کانال از دکمه
-                                    بالا استفاده کنید
-                                </span>
-                            )}
-                            <button
-                                type="button"
-                                disabled={busy || activeSessions.length === 0}
-                                onClick={stopAllSessions}
-                                className="px-4 py-2 rounded-md bg-red-600 text-white text-sm disabled:opacity-50"
-                            >
-                                توقف همه
-                            </button>
-                        </div>
-                        <p className="text-xs text-slate-500">
-                            تمدید نوبت و رد نوبت برای هر دسته در کارت همان دسته (بالا) است.
-                        </p>
-                    </section>
-
-                    {activeSessions.length > 0 && (
-                        <section className="rounded-xl border border-sky-200 bg-sky-50/50 p-4 space-y-3 text-sm">
-                            <h2 className="font-semibold text-sky-900">
-                                جلسات فعال ({activeSessions.length})
-                            </h2>
-                            {activeSessions.map(s => {
-                                const q = Array.isArray(s.queueSnapshot) ? s.queueSnapshot : [];
-                                const turn = q[s.currentTurnIndex] as
-                                    | { driver?: { name?: string } }
-                                    | undefined;
-                                return (
-                                    <div
-                                        key={s.id}
-                                        className={`rounded-lg border p-3 ${s.id === session?.id ? 'border-sky-400 bg-white' : 'border-slate-200 bg-white/60'}`}
-                                    >
-                                        <div className="font-medium text-sky-900">
-                                            {s.vehicleCategory || '—'}
-                                        </div>
-                                        <div>وضعیت: {s.status}</div>
-                                        <div>
-                                            حالت: {s.modeLabel} —{' '}
-                                            {(s as { stageLabel?: string }).stageLabel || s.stage}
-                                        </div>
-                                        <div>نوبت جاری: {turn?.driver?.name || '—'}</div>
-                                        <div>
-                                            انقضا:{' '}
-                                            {s.turnDeadlineAt
-                                                ? new Date(s.turnDeadlineAt).toLocaleString('fa-IR')
-                                                : '—'}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </section>
-                    )}
                 </>
             )}
 
