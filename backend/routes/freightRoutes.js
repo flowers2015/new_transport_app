@@ -177,7 +177,7 @@ router.put(
 router.get(
   '/:id/history',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'viewer', 'inspector', 'warehouse_keeper', 'admin']),
+  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'transport_user', 'personal_transport_user', 'finance', 'central_finance', 'transport_finance', 'viewer', 'inspector', 'warehouse_keeper', 'branch_finance_manager', 'auditor', 'admin']),
   getFreightAnnouncementHistory
 );
 

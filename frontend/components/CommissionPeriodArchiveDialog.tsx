@@ -340,6 +340,42 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
             r.band4000plus,
         ]);
 
+        const noteRows = (colCount: number, notes: string[]) => {
+            const blank = Array(colCount).fill('');
+            return [
+                blank,
+                ...notes.map((text) => {
+                    const row = Array(colCount).fill('');
+                    row[0] = text;
+                    return row;
+                }),
+            ];
+        };
+        const driverCostNotes = [
+            'موارد حساب‌نشده در هزینه این شیت:',
+            'اجرت/غذا/ماموریت مازاد کمکی روی توری که راننده کمکی ثبت نشده (فیلد ذخیره‌شده ولی در صورتحساب نیست)',
+            'پیش‌پرداخت راننده',
+            'هزینه غذای دپو',
+        ];
+        const pivotNotes = [
+            'موارد حساب‌نشده در ستون هزینه راننده اصلی این شیت:',
+            'اجرت / پورسانت دوره راننده اصلی (عدد کلی دوره است و به نوع خودرو پخش نشده)',
+            'اجرت/غذای کمکی روی تور بدون راننده کمکی',
+        ];
+        const geoNotes = [
+            'موارد حساب‌نشده در مجموع هزینه اعزام این شیت:',
+            'اجرت / پورسانت دوره راننده اصلی (عدد کلی چند تور است و به استان/شهر پخش نشده)',
+            'جابجایی بار دپو',
+            'اجرت دپو',
+            'حق ماموریت دپو',
+            'اجرت/غذای کمکی روی تور بدون راننده کمکی',
+            'پیش‌پرداخت راننده',
+        ];
+        const lineNotes = [
+            'این شیت هزینه حساب نمی‌کند؛ فقط تعداد تور است.',
+            'اجرت / پورسانت دوره، ریزهزینه تور، دپو و کمکی در این شیت نیامده‌اند.',
+        ];
+
         await downloadStyledExcelWorkbook({
             fileName: `بایگانی_${selectedPeriod.periodName.replace(/\s/g, '_')}.xlsx`,
             numericColumnMatchers: [
@@ -387,12 +423,18 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                 {
                     sheetName: 'هزینه تریلی',
                     headers: COST_DETAIL_HEADERS,
-                    rows: costDetailRowsWithTotal(trailerList, breakdownByDriver),
+                    rows: [
+                        ...costDetailRowsWithTotal(trailerList, breakdownByDriver),
+                        ...noteRows(COST_DETAIL_HEADERS.length, driverCostNotes),
+                    ],
                 },
                 {
                     sheetName: 'هزینه ده چرخ',
                     headers: COST_DETAIL_HEADERS,
-                    rows: costDetailRowsWithTotal(tenWheelerList, breakdownByDriver),
+                    rows: [
+                        ...costDetailRowsWithTotal(tenWheelerList, breakdownByDriver),
+                        ...noteRows(COST_DETAIL_HEADERS.length, driverCostNotes),
+                    ],
                 },
                 {
                     sheetName: 'پیوت نوع خودرو',
@@ -405,7 +447,7 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                         'تعداد تور با راننده کمکی',
                         'هزینه راننده کمکی (ریال)',
                     ],
-                    rows: pivotRows,
+                    rows: [...pivotRows, ...noteRows(7, pivotNotes)],
                 },
                 {
                     sheetName: 'هزینه اعزام استان-شهر',
@@ -419,7 +461,7 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                         'هزینه به ازای کیلومتر (ریال)',
                         'هزینه به ازای تعداد تور (ریال)',
                     ],
-                    rows: geoRows,
+                    rows: [...geoRows, ...noteRows(8, geoNotes)],
                 },
                 {
                     sheetName: 'تور لاین و کیلومتر',
@@ -434,7 +476,7 @@ const CommissionPeriodArchiveDialog: React.FC<Props> = ({
                         'تور ۲۷۵۰ تا ۴۰۰۰',
                         'تور بیش از ۴۰۰۰',
                     ],
-                    rows: lineVehicleRows,
+                    rows: [...lineVehicleRows, ...noteRows(9, lineNotes)],
                 },
             ],
         });

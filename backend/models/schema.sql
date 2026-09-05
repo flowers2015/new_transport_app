@@ -21,7 +21,10 @@ DO $$ BEGIN
     'allocation',
     'insurance',
     'viewer',
-    'inspector'
+    'inspector',
+    'warehouse_keeper',
+    'branch_finance_manager',
+    'auditor'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 

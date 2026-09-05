@@ -31,12 +31,13 @@ const {
 } = require('../controllers/allowanceRegulationController');
 
 const financeRoles = ['finance', 'central_finance', 'transport_finance', 'admin'];
+const financeReadRoles = [...financeRoles, 'auditor'];
 
 // Routes for Food Regulations
 router.get(
   '/food',
   authenticateToken,
-  authorizeRole(financeRoles),
+  authorizeRole(financeReadRoles),
   getFoodRegulations
 );
 router.post(
@@ -76,7 +77,7 @@ router.delete(
 router.get(
   '/mileage',
   authenticateToken,
-  authorizeRole(financeRoles),
+  authorizeRole(financeReadRoles),
   getMileageRegulations
 );
 router.post(

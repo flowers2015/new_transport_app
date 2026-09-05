@@ -5,6 +5,7 @@ import { formatJalaliDateTime } from '../utils/jalali';
 
 interface UserManagementProps {
   currentUser: User;
+  restrictedToFinance?: boolean;
 }
 
 interface UserData {
@@ -40,7 +41,18 @@ interface AdminAction {
   createdAt: string;
 }
 
-const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
+const FINANCE_ROLE = { value: 'finance', label: 'مالی شعب' };
+
+const emptyForm = (lockedRole = '') => ({
+  username: '',
+  email: '',
+  fullName: '',
+  password: '',
+  role: lockedRole,
+  branchId: '',
+});
+
+const UserManagement: React.FC<UserManagementProps> = ({ currentUser, restrictedToFinance = false }) => {
   const [users, setUsers] = useState<UserData[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,14 +72,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
   const [resetPasswordData, setResetPasswordData] = useState({ newPassword: '', reason: '' });
 
   // Form states
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    fullName: '',
-    password: '',
-    role: '',
-    branchId: ''
-  });
+  const [formData, setFormData] = useState(emptyForm(restrictedToFinance ? FINANCE_ROLE.value : ''));
   const [editReason, setEditReason] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
 
@@ -97,7 +102,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
     { value: 'insurance', label: 'کارشناس بیمه' },
     { value: 'inspector', label: 'بازرسی (مشاهده اعلام بار + منابع GPS)' },
     { value: 'warehouse_keeper', label: 'انباردار (بارگیری + ثبت کد LIS)' },
+    { value: 'branch_finance_manager', label: 'مدیر مالی شعب' },
+    { value: 'auditor', label: 'حسابرس' },
   ];
+  const availableRoles = restrictedToFinance ? [FINANCE_ROLE] : roles;
 
   // دریافت لیست کاربران
   const fetchUsers = async () => {
@@ -108,7 +116,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
         limit: '20'
       });
       if (searchTerm) params.append('search', searchTerm);
-      if (roleFilter) params.append('role', roleFilter);
+      if (restrictedToFinance) params.append('role', FINANCE_ROLE.value);
+      else if (roleFilter) params.append('role', roleFilter);
       if (branchFilter) params.append('branch_id', branchFilter);
 
       const res = await fetch(getApiUrl(`admin/users?${params}`), { headers });
@@ -176,7 +185,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
 
       alert('کاربر با موفقیت ایجاد شد');
       setShowAddDialog(false);
-      setFormData({ username: '', email: '', fullName: '', password: '', role: '', branchId: '' });
+      setFormData(emptyForm(restrictedToFinance ? FINANCE_ROLE.value : ''));
       fetchUsers();
     } catch (err: any) {
       alert(err.message);
@@ -215,7 +224,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
       setShowEditDialog(false);
       setSelectedUser(null);
       setEditReason('');
-      setFormData({ username: '', email: '', fullName: '', password: '', role: '', branchId: '' });
+      setFormData(emptyForm(restrictedToFinance ? FINANCE_ROLE.value : ''));
       fetchUsers();
     } catch (err: any) {
       alert(err.message);
@@ -261,7 +270,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
       email: user.email,
       fullName: user.fullName,
       password: '',
-      role: user.role,
+      role: restrictedToFinance ? FINANCE_ROLE.value : user.role,
       branchId: user.branchId || ''
     });
     setShowEditDialog(true);
@@ -332,16 +341,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
   return (
     <div className="p-6">
       <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">مدیریت کاربران</h1>
+        <h1 className="text-2xl font-bold">{restrictedToFinance ? 'تعریف مالی شعب' : 'مدیریت کاربران'}</h1>
         <div className="flex gap-2">
+          {!restrictedToFinance && (
           <button
             onClick={() => openAuditTrail()}
             className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
           >
             مشاهده لاگ تغییرات
           </button>
+          )}
           <button
-            onClick={() => setShowAddDialog(true)}
+            onClick={() => {
+              setFormData(emptyForm(restrictedToFinance ? FINANCE_ROLE.value : ''));
+              setShowAddDialog(true);
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             افزودن کاربر جدید
@@ -358,16 +372,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="px-4 py-2 border rounded flex-1"
         />
+        {!restrictedToFinance && (
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
           className="px-4 py-2 border rounded"
         >
           <option value="">همه نقش‌ها</option>
-          {roles.map(role => (
+          {availableRoles.map(role => (
             <option key={role.value} value={role.value}>{role.label}</option>
           ))}
         </select>
+        )}
         <select
           value={branchFilter}
           onChange={(e) => setBranchFilter(e.target.value)}
@@ -514,16 +530,25 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">نقش *</label>
+                {restrictedToFinance ? (
+                  <input
+                    type="text"
+                    value={FINANCE_ROLE.label}
+                    readOnly
+                    className="w-full px-3 py-2 border rounded bg-slate-100 text-slate-700"
+                  />
+                ) : (
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-3 py-2 border rounded"
                 >
                   <option value="">انتخاب نقش</option>
-                  {roles.map(role => (
+                  {availableRoles.map(role => (
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">شعبه</label>
@@ -543,7 +568,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
               <button
                 onClick={() => {
                   setShowAddDialog(false);
-                  setFormData({ username: '', email: '', fullName: '', password: '', role: '', branchId: '' });
+                  setFormData(emptyForm(restrictedToFinance ? FINANCE_ROLE.value : ''));
                 }}
                 className="px-4 py-2 border rounded"
               >
@@ -600,15 +625,24 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">نقش</label>
+                {restrictedToFinance ? (
+                  <input
+                    type="text"
+                    value={FINANCE_ROLE.label}
+                    readOnly
+                    className="w-full px-3 py-2 border rounded bg-slate-100 text-slate-700"
+                  />
+                ) : (
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-3 py-2 border rounded"
                 >
-                  {roles.map(role => (
+                  {availableRoles.map(role => (
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">شعبه</label>

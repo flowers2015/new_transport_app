@@ -86,6 +86,8 @@ export enum UserRole {
     /** پرسنل بازرسی — مشاهده پیگیری زنده + مدیریت منابع GPS */
     Inspection = 'بازرسی',
     WarehouseKeeper = 'انباردار',
+    BranchFinanceManager = 'مدیر مالی شعب',
+    Auditor = 'حسابرس',
 }
 
 export enum RepairStatus {

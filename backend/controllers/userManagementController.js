@@ -3,6 +3,12 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { createAdminActionsTable } = require('../migrations/create_admin_actions_table');
 
+const BRANCH_FINANCE_ROLE = 'finance';
+
+function isBranchFinanceManager(req) {
+  return req.user?.role === 'branch_finance_manager';
+}
+
 // Helper function برای تولید UUID
 function generateUUID() {
   return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
@@ -70,7 +76,8 @@ async function logAdminAction(req, actionType, tableName, recordId, oldValue, ne
  */
 async function getAllUsers(req, res) {
   try {
-    const { search, role, branch_id, page = 1, limit = 50 } = req.query;
+    const { search, branch_id, page = 1, limit = 50 } = req.query;
+    const role = isBranchFinanceManager(req) ? BRANCH_FINANCE_ROLE : req.query.role;
     const offset = (page - 1) * limit;
 
     // بررسی اینکه کدام ستون‌ها وجود دارند
@@ -255,7 +262,12 @@ async function createUser(req, res) {
     const { username, email, fullName, password, role, branchId } = req.body;
 
     // اعتبارسنجی ورودی‌ها
-    if (!username || !password || !role) {
+    if (isBranchFinanceManager(req) && role && role !== BRANCH_FINANCE_ROLE) {
+      return res.status(403).json({ message: 'فقط می‌توانید کاربر مالی شعب تعریف کنید.' });
+    }
+    const effectiveRole = isBranchFinanceManager(req) ? BRANCH_FINANCE_ROLE : role;
+
+    if (!username || !password || !effectiveRole) {
       return res.status(400).json({ message: 'فیلدهای username, password و role الزامی هستند' });
     }
     
@@ -298,7 +310,7 @@ async function createUser(req, res) {
 
     // ساخت query برای INSERT
     const insertColumns = ['id', 'username', 'password_hash', 'role'];
-    const insertValues = [generateUUID(), username, passwordHash, role];
+    const insertValues = [generateUUID(), username, passwordHash, effectiveRole];
     let valueIndex = insertValues.length + 1;
     
     if (hasEmail && email) {
@@ -322,7 +334,7 @@ async function createUser(req, res) {
     `);
     if (mustChangeCol.rows.length > 0) {
       insertColumns.push('must_change_password');
-      insertValues.push(String(role).toLowerCase() === 'viewer' ? false : true);
+      insertValues.push(String(effectiveRole).toLowerCase() === 'viewer' ? false : true);
     }
     
     const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
@@ -341,7 +353,7 @@ async function createUser(req, res) {
       'users',
       userId,
       null,
-      { username, email, fullName, role, branchId },
+      { username, email, fullName, role: effectiveRole, branchId },
       `ایجاد کاربر جدید: ${username}`
     );
 
@@ -374,6 +386,15 @@ async function updateUser(req, res) {
     }
 
     const oldUser = oldUserResult.rows[0];
+
+    if (isBranchFinanceManager(req)) {
+      if (oldUser.role !== BRANCH_FINANCE_ROLE) {
+        return res.status(403).json({ message: 'فقط کاربران مالی شعب قابل ویرایش هستند.' });
+      }
+      if (role && role !== BRANCH_FINANCE_ROLE) {
+        return res.status(403).json({ message: 'نقش مالی شعب قابل تغییر نیست.' });
+      }
+    }
     
     // بررسی اینکه کدام ستون‌ها وجود دارند
     const columnCheck = await pool.query(`
@@ -412,7 +433,7 @@ async function updateUser(req, res) {
       paramIndex++;
     }
 
-    if (role !== undefined) {
+    if (role !== undefined && !isBranchFinanceManager(req)) {
       updates.push(`role = $${paramIndex}`);
       params.push(role);
       paramIndex++;
@@ -527,6 +548,10 @@ async function deleteUser(req, res) {
     }
 
     const user = userResult.rows[0];
+
+    if (isBranchFinanceManager(req) && user.role !== BRANCH_FINANCE_ROLE) {
+      return res.status(403).json({ message: 'فقط کاربران مالی شعب قابل حذف هستند.' });
+    }
 
     // حذف کاربر (در حال حاضر hard delete - می‌توانید soft delete کنید)
     await pool.query('DELETE FROM users WHERE id = $1', [id]);

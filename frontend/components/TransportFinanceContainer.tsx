@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, View } from '../types';
+import { User, UserRole, View } from '../types';
 import TransportFinanceDashboard from './TransportFinanceDashboard';
 import TransportFinanceCalculation from './TransportFinanceCalculation';
 import MonthlyCommissionCalculation from './MonthlyCommissionCalculation';
@@ -25,7 +25,12 @@ const TransportFinanceContainer: React.FC<TransportFinanceContainerProps> = ({ c
 
     if (currentView === View.MonthlyCommissionCalculation) {
         console.log('✅ [TransportFinanceContainer] نمایش MonthlyCommissionCalculation');
-        return <MonthlyCommissionCalculation currentUser={currentUser} />;
+        return (
+            <MonthlyCommissionCalculation
+                currentUser={currentUser}
+                archiveOnly={currentUser.role === UserRole.Auditor}
+            />
+        );
     }
 
     if (currentView === View.AllowanceRegulation) {

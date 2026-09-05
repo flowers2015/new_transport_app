@@ -9,6 +9,6 @@ router.post('/login', login);
 router.post('/change-password', authenticateToken, changePassword);
 
 // ریست رمز عبور توسط ادمین (نیاز به authentication و admin role دارد)
-router.post('/reset-password', authenticateToken, authorizeRole(['admin']), resetPassword);
+router.post('/reset-password', authenticateToken, authorizeRole(['admin', 'branch_finance_manager']), resetPassword);
 
 module.exports = router;

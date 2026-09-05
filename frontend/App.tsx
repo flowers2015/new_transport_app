@@ -96,6 +96,10 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
             return View.TransportLive;
         case UserRole.WarehouseKeeper:
             return View.TransportLive;
+        case UserRole.BranchFinanceManager:
+            return View.UserManagement;
+        case UserRole.Auditor:
+            return View.MonthlyCommissionCalculation;
         default:
             return View.Dashboard;
     }
@@ -154,6 +158,8 @@ const App: React.FC = () => {
             case 'inspector': return UserRole.Inspection;
             case 'warehouse_keeper': return UserRole.WarehouseKeeper;
             case 'carrier_user': return UserRole.CarrierUser;
+            case 'branch_finance_manager': return UserRole.BranchFinanceManager;
+            case 'auditor': return UserRole.Auditor;
             default: return null;
         }
     };
@@ -694,7 +700,10 @@ const App: React.FC = () => {
                 return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinanceCalculation} onNavigate={handleNavigate} />;
             case View.MonthlyCommissionCalculation:
                 console.log('[App] Render view:', View.MonthlyCommissionCalculation);
-                return <TransportFinanceContainer currentUser={currentUser} currentView={View.MonthlyCommissionCalculation} onNavigate={handleNavigate} />;
+                if (currentUser?.role === UserRole.Auditor || currentUser?.role === UserRole.TransportationFinance || currentUser?.role === UserRole.Admin) {
+                    return <TransportFinanceContainer currentUser={currentUser} currentView={View.MonthlyCommissionCalculation} onNavigate={handleNavigate} />;
+                }
+                return <div className="p-8 text-center text-red-600">دسترسی به این بخش ندارید.</div>;
             case View.AllowanceRegulation:
                 console.log('[App] Render view:', View.AllowanceRegulation);
                 return <TransportFinanceContainer currentUser={currentUser} currentView={View.AllowanceRegulation} onNavigate={handleNavigate} />;
@@ -719,7 +728,15 @@ const App: React.FC = () => {
             case View.UserManagement:
                 console.log('[App] Render view:', View.UserManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
-                return <UserManagement currentUser={currentUser} />;
+                if (currentUser.role !== UserRole.Admin && currentUser.role !== UserRole.BranchFinanceManager) {
+                    return <div className="p-8 text-center text-red-600">دسترسی به مدیریت کاربران ندارید.</div>;
+                }
+                return (
+                    <UserManagement
+                        currentUser={currentUser}
+                        restrictedToFinance={currentUser.role === UserRole.BranchFinanceManager}
+                    />
+                );
             case View.CarrierManagement:
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
                 return <CarrierManagement currentUser={currentUser} />;

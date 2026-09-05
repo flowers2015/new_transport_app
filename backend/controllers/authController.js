@@ -261,6 +261,10 @@ async function resetPassword(req, res) {
       return res.status(404).json({ message: 'کاربر یافت نشد' });
     }
 
+    if (req.user?.role === 'branch_finance_manager' && user.role !== 'finance') {
+      return res.status(403).json({ message: 'فقط رمز کاربران مالی شعب قابل ریست است.' });
+    }
+
     // Hash کردن رمز جدید
     const passwordHash = await bcrypt.hash(newPassword, 10);
 

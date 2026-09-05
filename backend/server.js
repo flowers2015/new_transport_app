@@ -230,6 +230,7 @@ async function runStartupMigrations() {
     { name: 'user_warehouse_assignments', fn: require('./migrations/create_user_warehouse_assignments') },
     { name: 'warehouse_loading_columns', fn: require('./migrations/add_warehouse_loading_columns') },
     { name: 'warehouse_keeper_role', fn: require('./migrations/add_warehouse_keeper_role') },
+    { name: 'branch_finance_manager_auditor_roles', fn: require('./migrations/add_branch_finance_manager_and_auditor_roles') },
   ];
 
   for (const step of steps) {

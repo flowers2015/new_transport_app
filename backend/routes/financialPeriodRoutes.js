@@ -14,6 +14,7 @@ const { authenticateToken, authorizeRole } = require('../middleware/authMiddlewa
 
 // نقش‌های مالی
 const financeRoles = ['finance', 'central_finance', 'transport_finance', 'admin', 'مالی ترابری', 'مالی مرکزی'];
+const financeReadRoles = [...financeRoles, 'auditor', 'حسابرس'];
 // فقط ادمین می‌تونه دوره رو باز کنه
 const adminRoles = ['admin'];
 
@@ -21,7 +22,7 @@ const adminRoles = ['admin'];
 router.get(
   '/periods',
   authenticateToken,
-  authorizeRole(financeRoles),
+  authorizeRole(financeReadRoles),
   getFinancialPeriods
 );
 
@@ -29,7 +30,7 @@ router.get(
 router.get(
   '/periods/driver-history',
   authenticateToken,
-  authorizeRole(financeRoles),
+  authorizeRole(financeReadRoles),
   getDriverCommissionHistory
 );
 
@@ -37,7 +38,7 @@ router.get(
 router.get(
   '/periods/:periodId/tours',
   authenticateToken,
-  authorizeRole(financeRoles),
+  authorizeRole(financeReadRoles),
   getPeriodTours
 );
 

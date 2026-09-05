@@ -13,18 +13,15 @@ const { authenticateToken, authorizeRole } = require('../middleware/authMiddlewa
 // همه routes نیاز به authentication دارند
 router.use(authenticateToken);
 
-// فقط admin می‌تواند به این routes دسترسی داشته باشد
-router.use(authorizeRole(['admin']));
+router.use(authorizeRole(['admin', 'branch_finance_manager']));
 
-// Routes برای مدیریت کاربران
 router.get('/users', getAllUsers);
 router.get('/users/:id', getUserById);
 router.post('/users', createUser);
 router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
 
-// Routes برای مشاهده لاگ تغییرات
-router.get('/admin-actions', getAdminActions);
+router.get('/admin-actions', authorizeRole(['admin']), getAdminActions);
 
 module.exports = router;
 

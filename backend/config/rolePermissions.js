@@ -226,6 +226,24 @@ const rolePermissions = {
       'freight_tracking'
     ],
     description: 'انباردار — شروع و پایان بارگیری اعلام بار انبار خود؛ پس از ارجاع به ترابری فقط ثبت کد LIS لاین پاستوریزه'
+  },
+
+  branch_finance_manager: {
+    menus: [
+      'freight_tracking',
+      'freight_archive',
+      'branch_finance_users'
+    ],
+    description: 'مدیر مالی شعب — تعریف کاربران مالی شعب + پیگیری و آرشیو اعلام بار'
+  },
+
+  auditor: {
+    menus: [
+      'freight_tracking',
+      'freight_archive',
+      'commission_archive'
+    ],
+    description: 'حسابرس — بایگانی پورسانت + پیگیری و آرشیو اعلام بار'
   }
 };
 

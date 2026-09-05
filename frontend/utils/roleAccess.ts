@@ -6,7 +6,9 @@ export function isFreightViewOnlyRole(role: UserRole | string | null | undefined
     role === UserRole.Viewer ||
     role === UserRole.Inspection ||
     role === UserRole.BranchFinance ||
-    role === UserRole.HQFinance
+    role === UserRole.HQFinance ||
+    role === UserRole.BranchFinanceManager ||
+    role === UserRole.Auditor
   );
 }
 

@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 
 interface MonthlyCommissionCalculationProps {
     currentUser: User;
+    archiveOnly?: boolean;
 }
 
 // Helper function for padding
@@ -21,7 +22,7 @@ const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
 
 type VehicleTab = 'trailer' | 'tenWheeler';
 
-const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> = ({ currentUser }) => {
+const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> = ({ currentUser, archiveOnly = false }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [calculations, setCalculations] = useState<any[]>([]);
@@ -493,6 +494,12 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
             console.error('❌ خطا در دریافت دوره‌ها:', err);
         }
     };
+
+    useEffect(() => {
+        if (!archiveOnly) return;
+        fetchPeriods();
+        setShowPeriodsDialog(true);
+    }, [archiveOnly]);
     
     // گزارش راننده
     const handleDriverReport = (driverId: string) => {
@@ -568,7 +575,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
             <div className="bg-white rounded-xl shadow-lg p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-2xl font-bold text-slate-800">
-                        محاسبه پورسانت ماهانه
+                        {archiveOnly ? 'بایگانی دوره‌های پورسانت' : 'محاسبه پورسانت ماهانه'}
                     </h1>
                     <div className="flex gap-2">
                         <button
@@ -580,7 +587,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                     </div>
                 </div>
                 
-                {/* بازه زمانی و دکمه‌ها */}
+                {!archiveOnly && (
                 <div className="bg-slate-50 rounded-lg p-4 mb-6">
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                         <div>
@@ -638,6 +645,7 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                         </div>
                     </div>
                 </div>
+                )}
                 
                 {error && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">
