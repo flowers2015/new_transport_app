@@ -6,6 +6,7 @@ import {
     DriverPreferenceOpportunity,
     DriverPreferenceStats,
     DriverPreferencesResponse,
+    DriverRegionRestrictionHistory,
 } from '../types';
 import { gregorianToJalali } from '../utils/jalali';
 
@@ -342,6 +343,72 @@ function CycleSummarySection({ summary }: { summary: DriverPreferenceCycleSummar
                         )}
                     </div>
                 ))}
+            </div>
+        </section>
+    );
+}
+
+function RestrictionHistorySection({
+    history,
+}: {
+    history?: DriverRegionRestrictionHistory | null;
+}) {
+    if (!history || history.periodCount === 0) {
+        return (
+            <section className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                سوابق محدودیت عدم اعزام: دوره‌ای ثبت نشده است.
+            </section>
+        );
+    }
+    return (
+        <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-amber-950">سوابق محدودیت عدم اعزام</h3>
+                <span className="rounded-full bg-amber-200 text-amber-950 px-2 py-0.5 text-[10px]">
+                    {history.periodCount.toLocaleString('fa-IR')} دوره
+                </span>
+                <span className="rounded-full bg-white text-amber-900 px-2 py-0.5 text-[10px] border border-amber-200">
+                    در بازه انتخاب‌شده: {history.periodsInRangeCount.toLocaleString('fa-IR')}
+                </span>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                    <thead>
+                        <tr className="text-amber-900/80">
+                            <th className="text-right py-1 px-1.5">تاریخ اعمال</th>
+                            <th className="text-right py-1 px-1.5">عنوان</th>
+                            <th className="text-right py-1 px-1.5">بازه محدودیت</th>
+                            <th className="text-right py-1 px-1.5">توضیحات</th>
+                            <th className="text-right py-1 px-1.5">جریمه نقدی</th>
+                            <th className="text-right py-1 px-1.5">استان‌ها</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {history.periods.map(period => (
+                            <tr
+                                key={period.id}
+                                className={`border-t border-amber-100 ${
+                                    period.inSelectedRange ? 'bg-white/80' : 'opacity-70'
+                                }`}
+                            >
+                                <td className="py-1 px-1.5 whitespace-nowrap font-medium">
+                                    {period.appliedAtJalali || '—'}
+                                </td>
+                                <td className="py-1 px-1.5">{period.title || '—'}</td>
+                                <td className="py-1 px-1.5 whitespace-nowrap">
+                                    {period.startDate} تا {period.endDate}
+                                </td>
+                                <td className="py-1 px-1.5">{period.holdReason || '—'}</td>
+                                <td className="py-1 px-1.5 whitespace-nowrap">
+                                    {period.cashFine != null
+                                        ? `${Number(period.cashFine).toLocaleString('fa-IR')} ریال`
+                                        : '—'}
+                                </td>
+                                <td className="py-1 px-1.5">{period.forbiddenProvinces.join('، ') || '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </section>
     );
@@ -735,6 +802,8 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
                 loading={behaviorAnalysisLoading}
             />
 
+            <RestrictionHistorySection history={data.regionRestrictions} />
+
             <StatsBar stats={stats} />
 
             {stats.finalizedCount === 0 && stats.cancelledCount === 0 && stats.pendingCount === 0 && (
@@ -773,6 +842,7 @@ export type PreferenceBriefData = {
     fromJalali?: string;
     toJalali?: string;
     takenCount?: number;
+    regionRestrictions?: DriverRegionRestrictionHistory;
 };
 
 export const PreferenceBriefPanel: React.FC<{ brief: PreferenceBriefData | null; loading?: boolean }> = ({
@@ -804,6 +874,11 @@ export const PreferenceBriefPanel: React.FC<{ brief: PreferenceBriefData | null;
                     <span className="text-emerald-700">نهایی {brief.stats.finalizedCount}</span>
                     <span className="text-amber-700">موقت {brief.stats.pendingCount}</span>
                     <span className="text-rose-700">لغو {brief.stats.cancelledCount}</span>
+                    {brief.regionRestrictions && brief.regionRestrictions.periodCount > 0 && (
+                        <span className="text-orange-800">
+                            محدودیت {brief.regionRestrictions.periodCount} دوره
+                        </span>
+                    )}
                 </div>
             )}
             <div className="grid grid-cols-3 gap-1 text-[9px]">

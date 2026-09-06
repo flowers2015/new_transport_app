@@ -16,3 +16,8 @@ export function isFreightViewOnlyRole(role: UserRole | string | null | undefined
 export function isInspectionRole(role: UserRole | string | null | undefined): boolean {
   return role === UserRole.Inspection;
 }
+
+/** فقط بازرسی و ادمین می‌توانند اعمال محدودیت ثبت/ویرایش کنند */
+export function canManageBaleRegionBans(role: UserRole | string | null | undefined): boolean {
+  return role === UserRole.Inspection || role === UserRole.Admin;
+}

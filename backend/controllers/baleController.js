@@ -21,7 +21,12 @@ const {
 const { sendTestAmbientMessage } = require('../services/bale/baleAmbientAssignmentNotify');
 const {
   listRegionBans,
+  listRegionBanTemplates,
+  createRegionBanTemplate,
+  updateRegionBanTemplate,
+  deleteRegionBanTemplate,
   createRegionBan,
+  updateRegionBan,
   deleteRegionBan,
   loadGeoCatalog,
 } = require('../services/bale/baleRegionBans');
@@ -213,6 +218,25 @@ async function listDriverOutreach(req, res) {
   }
 }
 
+async function listRegionBanDrivers(req, res) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         d.id AS driver_id,
+         d.name AS driver_name,
+         d.employee_id
+       FROM drivers d
+       WHERE (d.is_deleted IS NULL OR d.is_deleted = FALSE)
+         AND d.employee_id IS NOT NULL
+         AND TRIM(d.employee_id) <> ''
+       ORDER BY d.name ASC`
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'خطا در لیست رانندگان محدودیت' });
+  }
+}
+
 async function updateRuntimeSettings(req, res) {
   try {
     const { environment } = req.body || {};
@@ -305,19 +329,96 @@ async function listRegionBansHandler(req, res) {
   }
 }
 
-async function createRegionBanHandler(req, res) {
+async function listRegionBanTemplatesHandler(req, res) {
   try {
-    const ban = await createRegionBan({
-      driverId: req.body?.driverId,
+    const templates = await listRegionBanTemplates();
+    res.json(templates);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'خطا در دریافت اعمال محدودیت‌ها' });
+  }
+}
+
+async function createRegionBanTemplateHandler(req, res) {
+  try {
+    const template = await createRegionBanTemplate({
+      title: req.body?.title,
       forbiddenProvinces: req.body?.forbiddenProvinces,
       exceptionCities: req.body?.exceptionCities,
       startDate: req.body?.startDate,
       endDate: req.body?.endDate,
+      holdReason: req.body?.holdReason,
+      userId: req.user?.id || req.user?.userId,
+    });
+    res.json(template);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'ثبت اعمال محدودیت ناموفق بود' });
+  }
+}
+
+async function updateRegionBanTemplateHandler(req, res) {
+  try {
+    const template = await updateRegionBanTemplate(req.params.id, {
+      title: req.body?.title,
+      forbiddenProvinces: req.body?.forbiddenProvinces,
+      exceptionCities: req.body?.exceptionCities,
+      startDate: req.body?.startDate,
+      endDate: req.body?.endDate,
+      holdReason: req.body?.holdReason,
+    });
+    res.json(template);
+  } catch (error) {
+    const notFound = error.message === 'اعمال محدودیت پیدا نشد.';
+    res.status(notFound ? 404 : 400).json({ message: error.message || 'ویرایش اعمال محدودیت ناموفق بود' });
+  }
+}
+
+async function deleteRegionBanTemplateHandler(req, res) {
+  try {
+    const ok = await deleteRegionBanTemplate(req.params.id);
+    if (!ok) return res.status(404).json({ message: 'اعمال محدودیت پیدا نشد' });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'حذف اعمال محدودیت ناموفق بود' });
+  }
+}
+
+async function createRegionBanHandler(req, res) {
+  try {
+    const ban = await createRegionBan({
+      driverId: req.body?.driverId,
+      templateId: req.body?.templateId,
+      title: req.body?.title,
+      forbiddenProvinces: req.body?.forbiddenProvinces,
+      exceptionCities: req.body?.exceptionCities,
+      startDate: req.body?.startDate,
+      endDate: req.body?.endDate,
+      holdReason: req.body?.holdReason,
+      cashFine: req.body?.cashFine,
       userId: req.user?.id || req.user?.userId,
     });
     res.json(ban);
   } catch (error) {
     res.status(400).json({ message: error.message || 'ثبت محدودیت ناموفق بود' });
+  }
+}
+
+async function updateRegionBanHandler(req, res) {
+  try {
+    const ban = await updateRegionBan(req.params.id, {
+      driverId: req.body?.driverId,
+      templateId: req.body?.templateId,
+      title: req.body?.title,
+      forbiddenProvinces: req.body?.forbiddenProvinces,
+      exceptionCities: req.body?.exceptionCities,
+      startDate: req.body?.startDate,
+      endDate: req.body?.endDate,
+      holdReason: req.body?.holdReason,
+      cashFine: req.body?.cashFine,
+    });
+    res.json(ban);
+  } catch (error) {
+    const notFound = error.message === 'محدودیت پیدا نشد.';
+    res.status(notFound ? 404 : 400).json({ message: error.message || 'ویرایش محدودیت ناموفق بود' });
   }
 }
 
@@ -870,13 +971,19 @@ module.exports = {
   updateAmbientNotifySettingsHandler,
   testAmbientNotifyHandler,
   listDriverOutreach,
+  listRegionBanDrivers,
   upsertDriverOutreach,
   seedTestDrivers,
   testPing,
   sendUpcomingAnnounce,
   getRegionBanGeo,
   listRegionBansHandler,
+  listRegionBanTemplatesHandler,
+  createRegionBanTemplateHandler,
+  updateRegionBanTemplateHandler,
+  deleteRegionBanTemplateHandler,
   createRegionBanHandler,
+  updateRegionBanHandler,
   deleteRegionBanHandler,
   setWebhookUrl,
   startSession,

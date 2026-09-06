@@ -27,6 +27,10 @@ const {
 const { clearPriorBoardAssignments } = require('../services/dispatch/dispatchBoard');
 const { formatJalali } = require('../utils/jalali');
 const {
+  listRegionBansForDriver,
+  summarizeRegionRestrictions,
+} = require('../services/bale/baleRegionBans');
+const {
   jalaliToGregorian,
   parseJalaliDateString,
   timestampToJalaliDate,
@@ -2152,6 +2156,12 @@ async function getDriverPreferences(req, res) {
         }));
     })();
 
+    const regionRestrictions = summarizeRegionRestrictions(
+      await listRegionBansForDriver(driverId),
+      fromJalali,
+      toJalali
+    );
+
     res.json({
       driver: {
         id: driverResult.rows[0].id,
@@ -2169,6 +2179,7 @@ async function getDriverPreferences(req, res) {
       taken,
       skipped,
       peerAssignments,
+      regionRestrictions,
     });
   } catch (error) {
     console.error('❌ [dispatch] getDriverPreferences failed:', error);

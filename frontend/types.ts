@@ -53,6 +53,7 @@ export enum View {
     FreightManagement = 'freight-management',
     AdminResourceManagement = 'admin-resource-management',
     GpsResourceManagement = 'gps-resource-management',
+    InspectionWorkbench = 'inspection-workbench',
     CityManagement = 'city-management',
     FinalizePermissionManagement = 'finalize-permission-management',
     PlanningManagerApprovalPermissionManagement = 'planning-manager-approval-permission-management',
@@ -1081,6 +1082,26 @@ export interface DriverPreferencesResponse {
     taken: DriverPreferenceAssignment[];
     skipped: DriverPreferenceOpportunity[];
     peerAssignments?: DriverPreferencePeerAssignment[];
+    regionRestrictions?: DriverRegionRestrictionHistory;
+}
+
+export interface DriverRegionRestrictionPeriod {
+    id: string;
+    holdReason: string;
+    title?: string;
+    cashFine?: number | null;
+    startDate: string;
+    endDate: string;
+    appliedAtJalali: string;
+    forbiddenProvinces: string[];
+    exceptionCities: string[];
+    inSelectedRange?: boolean;
+}
+
+export interface DriverRegionRestrictionHistory {
+    periodCount: number;
+    periodsInRangeCount: number;
+    periods: DriverRegionRestrictionPeriod[];
 }
 
 // --- Transport Finance Types ---

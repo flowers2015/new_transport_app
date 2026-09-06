@@ -235,6 +235,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [seedResult, setSeedResult] = useState<string | null>(null);
     const [selectedSessionId, setSelectedSessionId] = useState('');
     const [showRulesDialog, setShowRulesDialog] = useState(false);
+    const [showRegionBanDialog, setShowRegionBanDialog] = useState(false);
     const [drivers, setDrivers] = useState<DriverOutreach[]>([]);
     const [driverFilter, setDriverFilter] = useState('');
     const [driversTableHidden, setDriversTableHidden] = useState(() =>
@@ -711,6 +712,15 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         تستی و عملیاتی جدا هستند — هر تب راننده، کانال و جلسه خودش را دارد
                     </p>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => setShowRegionBanDialog(true)}
+                    className="px-3 py-1.5 text-sm rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    title="محدودیت استان و شهر راننده"
+                >
+                    محدودیت استان/شهر
+                </button>
                 <button
                     type="button"
                     onClick={() => setShowRulesDialog(true)}
@@ -727,6 +737,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     </svg>
                     قوانین و راهنما
                 </button>
+                </div>
             </div>
 
             <div className="flex gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
@@ -805,8 +816,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             {loading && !status ? (
                 <div className="text-slate-500 text-sm">در حال بارگذاری...</div>
             ) : (
-                <>
-                    <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                <div className="flex flex-col gap-6">
+                    <section className="order-1 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                         <h2 className="font-semibold text-slate-700">وضعیت بازو</h2>
                         <div className="text-sm text-slate-600 grid gap-1">
                             <div>
@@ -826,7 +837,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         </div>
                     </section>
 
-                    <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                    <section className="order-3 rounded-xl border border-slate-200 bg-white p-4 space-y-4">
                         <h2 className="font-semibold text-slate-700">
                             رانندگان {isTestMode ? 'تستی' : 'عملیاتی'} — chat بله
                         </h2>
@@ -946,10 +957,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         )}
                     </section>
 
-                    <BaleRegionBanPanel drivers={drivers} />
-
                     {isTestMode && (
-                        <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-4">
+                        <section className="order-4 rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-4">
                             <h2 className="font-semibold text-amber-900">
                                 ابزار تست (فقط تب تستی)
                             </h2>
@@ -995,7 +1004,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     )}
 
                     <section
-                        className={`rounded-xl border p-4 space-y-3 ${
+                        className={`order-2 rounded-xl border p-4 space-y-3 ${
                             isTestMode
                                 ? 'border-amber-200 bg-amber-50/20'
                                 : 'border-sky-200 bg-sky-50/20'
@@ -1329,8 +1338,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         })}
                         </div>
                     </section>
-
-                </>
+                </div>
             )}
 
             {showRulesDialog && (
@@ -1370,6 +1378,41 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 بولد (نه HTML).
                             </p>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showRegionBanDialog && (
+                <div
+                    className="fixed inset-0 bg-black/50 flex justify-center items-start z-50 p-4 overflow-y-auto"
+                    onClick={() => setShowRegionBanDialog(false)}
+                >
+                    <div
+                        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl p-4 my-8 max-h-[90vh] overflow-y-auto"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-start gap-3 mb-4">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800">محدودیت استان/شهر راننده</h2>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    فقط محدودیت‌های فعال نمایش داده می‌شود. ثبت از کارتابل بازرسی است.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowRegionBanDialog(false)}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm hover:bg-slate-300 shrink-0"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                        <BaleRegionBanPanel
+                            drivers={drivers}
+                            canManage={false}
+                            hideExpired
+                            hideChrome
+                            tableMaxClass="max-h-[60vh]"
+                        />
                     </div>
                 </div>
             )}

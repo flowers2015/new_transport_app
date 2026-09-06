@@ -212,13 +212,14 @@ const rolePermissions = {
     description: 'بیننده — مشاهده پیگیری زنده و آرشیو اعلام بار'
   },
 
-  // بازرسی — مشاهده پیگیری زنده + مدیریت منابع GPS
+  // بازرسی — کارتابل اعمال محدودیت + پیگیری زنده + منابع GPS
   inspector: {
     menus: [
+      'inspection_workbench',
       'freight_tracking',
       'gps_resources'
     ],
-    description: 'بازرسی — مشاهده پیگیری اعلام بار و مدیریت منابع GPS'
+    description: 'بازرسی — کارتابل اعمال محدودیت، مشاهده پیگیری اعلام بار و مدیریت منابع GPS'
   },
 
   warehouse_keeper: {

@@ -107,6 +107,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.FreightPlanning, label: 'برنامه ریزی ارسال بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager] },
       // Freight Management Section - اعلام بار
       { view: View.TransportLive, label: 'پیگیری اعلام بار زنده', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.CarrierUser, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance, UserRole.Inspection, UserRole.WarehouseKeeper, UserRole.BranchFinanceManager, UserRole.Auditor], special: 'blinking' },
+      { view: View.InspectionWorkbench, label: 'کارتابل بازرسی', roles: [UserRole.Inspection] },
       { view: View.GpsResourceManagement, label: 'منابع GPS', roles: [UserRole.Inspection] },
       { view: View.CarrierManagement, label: 'تعریف باربری', roles: [UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.AmbientBaleNotifySettings, label: 'اعلان بله فروتلند', roles: [UserRole.Transportation_Personal_Vehicle_User, UserRole.Admin] },
@@ -160,6 +161,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.CarrierManagement, label: 'تعریف باربری', icon: '🚛' },
       { view: View.FreightManagement, label: 'مدیریت اعلام بار', icon: '📦' },
       { view: View.AdminResourceManagement, label: 'مدیریت منابع', icon: '🚛' },
+      { view: View.InspectionWorkbench, label: 'کارتابل بازرسی', icon: '🛡️' },
       { view: View.GpsResourceManagement, label: 'منابع GPS', icon: '📡' },
       { view: View.CityManagement, label: 'مدیریت شهرها', icon: '🏙️' },
       { view: View.FinalizePermissionManagement, label: 'مدیریت دسترسی اتمام تخصیص', icon: '🔐' },

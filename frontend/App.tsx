@@ -65,6 +65,7 @@ const CarrierManagement = React.lazy(() => import('./components/CarrierManagemen
 const FreightManagement = React.lazy(() => import('./components/FreightManagement'));
 const AdminResourceManagement = React.lazy(() => import('./components/AdminResourceManagement'));
 const GpsResourceManagement = React.lazy(() => import('./components/GpsResourceManagement'));
+const InspectionWorkbench = React.lazy(() => import('./components/InspectionWorkbench'));
 const CityManagement = React.lazy(() => import('./components/CityManagement'));
 const FinalizePermissionManagement = React.lazy(() => import('./components/FinalizePermissionManagement'));
 const PlanningManagerApprovalPermissionManagement = React.lazy(() => import('./components/PlanningManagerApprovalPermissionManagement'));
@@ -93,7 +94,7 @@ const getDefaultViewForRole = (role?: UserRole | null): View => {
         case UserRole.Viewer:
             return View.TransportLive;
         case UserRole.Inspection:
-            return View.TransportLive;
+            return View.InspectionWorkbench;
         case UserRole.WarehouseKeeper:
             return View.TransportLive;
         case UserRole.BranchFinanceManager:
@@ -756,6 +757,13 @@ const App: React.FC = () => {
                     return <div className="p-8 text-center text-red-600">دسترسی به منابع GPS ندارید.</div>;
                 }
                 return <GpsResourceManagement />;
+            case View.InspectionWorkbench:
+                console.log('[App] Render view:', View.InspectionWorkbench);
+                if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;
+                if (!hasAccess([UserRole.Admin, UserRole.Inspection])) {
+                    return <div className="p-8 text-center text-red-600">دسترسی به کارتابل بازرسی ندارید.</div>;
+                }
+                return <InspectionWorkbench currentUser={currentUser} />;
             case View.CityManagement:
                 console.log('[App] Render view:', View.CityManagement);
                 if (!currentUser) return <div>لطفاً ابتدا وارد شوید</div>;

@@ -2855,7 +2855,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین">
                             <BookOpenIcon className="w-5 h-5 text-slate-600"/>
                         </button>
-                        {!isPendingBillOfLadingTab(activeLine) && (
+                        {activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine) && (
                             <div className="flex items-center gap-2 text-[10px] text-slate-600">
                                 <span className="inline-flex items-center gap-1">
                                     <span className="inline-block w-3 h-3 rounded border border-slate-300 bg-white" />
@@ -3350,7 +3350,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 const bolRegistered = hasBillOfLadingNumber(ann);
                                 const returnedFromCarrier = isReturnedFromCarrier(ann);
                                 const loadingStyle = warehouseLoadingRowStyle(ann.loadingStatus);
-                                const useLoadingRowColors = isWarehouseKeeper || !pendingBillRow;
+                                const isDairyLiveTab =
+                                    !pendingBillRow &&
+                                    (activeLine === FreightLineType.Dairy ||
+                                        activeLine === 'پاستوریزه' ||
+                                        activeLine === 'Dairy');
+                                const useLoadingRowColors = isDairyLiveTab;
                                 const rowColorClass = useLoadingRowColors
                                     ? loadingStyle.className
                                     : pendingBillRow

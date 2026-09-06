@@ -6,6 +6,8 @@ const baleController = require('../controllers/baleController');
 
 const transportRoles = ['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin'];
 const adminRoles = ['admin'];
+const regionBanReadRoles = [...transportRoles, 'inspector', 'بازرسی'];
+const regionBanWriteRoles = ['inspector', 'بازرسی', 'admin', 'ادمین'];
 const companyTransportRoles = baleController.companyTransportRoles;
 
 const reportImageUpload = multer({
@@ -28,13 +30,34 @@ router.post(
   authorizeRole(transportRoles),
   baleController.sendUpcomingAnnounce
 );
-router.get('/region-bans/geo', authenticateToken, authorizeRole(transportRoles), baleController.getRegionBanGeo);
-router.get('/region-bans', authenticateToken, authorizeRole(transportRoles), baleController.listRegionBansHandler);
-router.post('/region-bans', authenticateToken, authorizeRole(transportRoles), baleController.createRegionBanHandler);
+router.get('/region-bans/geo', authenticateToken, authorizeRole(regionBanReadRoles), baleController.getRegionBanGeo);
+router.get('/region-bans/drivers', authenticateToken, authorizeRole(regionBanReadRoles), baleController.listRegionBanDrivers);
+router.get('/region-ban-templates', authenticateToken, authorizeRole(regionBanReadRoles), baleController.listRegionBanTemplatesHandler);
+router.post('/region-ban-templates', authenticateToken, authorizeRole(regionBanWriteRoles), baleController.createRegionBanTemplateHandler);
+router.put(
+  '/region-ban-templates/:id',
+  authenticateToken,
+  authorizeRole(regionBanWriteRoles),
+  baleController.updateRegionBanTemplateHandler
+);
+router.delete(
+  '/region-ban-templates/:id',
+  authenticateToken,
+  authorizeRole(regionBanWriteRoles),
+  baleController.deleteRegionBanTemplateHandler
+);
+router.get('/region-bans', authenticateToken, authorizeRole(regionBanReadRoles), baleController.listRegionBansHandler);
+router.post('/region-bans', authenticateToken, authorizeRole(regionBanWriteRoles), baleController.createRegionBanHandler);
+router.put(
+  '/region-bans/:id',
+  authenticateToken,
+  authorizeRole(regionBanWriteRoles),
+  baleController.updateRegionBanHandler
+);
 router.delete(
   '/region-bans/:id',
   authenticateToken,
-  authorizeRole(transportRoles),
+  authorizeRole(regionBanWriteRoles),
   baleController.deleteRegionBanHandler
 );
 router.post('/webhook/register', authenticateToken, authorizeRole(adminRoles), baleController.setWebhookUrl);

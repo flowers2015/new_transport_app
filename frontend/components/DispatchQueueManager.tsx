@@ -1546,6 +1546,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                 fromJalali: brief.fromJalali,
                                 toJalali: brief.toJalali,
                                 takenCount: brief.takenCount,
+                                regionRestrictions: brief.regionRestrictions,
                             },
                             preferenceBriefLoading: false,
                         }));

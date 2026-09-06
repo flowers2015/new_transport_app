@@ -62,6 +62,17 @@ async function buildPreferenceBrief(driverId, options = {}) {
   }
   lines.push(`تخصیص‌های هم‌رده در بازه: ${peerCount}`);
   lines.push(`تعداد تخصیص خودکار سیستم (بله): ${autoStats.autoAssignCount}`);
+  const restrictions = prefs.regionRestrictions;
+  if (restrictions && restrictions.periodCount > 0) {
+    lines.push(`دوره‌های محدودیت عدم اعزام: ${restrictions.periodCount} (در این بازه: ${restrictions.periodsInRangeCount})`);
+    const latest = restrictions.periods[0];
+    if (latest) {
+      lines.push(
+        `آخرین اعمال: ${latest.title || 'بدون عنوان'} | ${latest.appliedAtJalali || '—'} | توضیحات: ${latest.holdReason || '—'} | بازه ${latest.startDate} تا ${latest.endDate}` +
+          (latest.cashFine != null ? ` | جریمه: ${Number(latest.cashFine).toLocaleString('fa-IR')} ریال` : '')
+      );
+    }
+  }
 
   if (announcement) {
     const annLine = [
@@ -107,6 +118,7 @@ async function buildPreferenceBrief(driverId, options = {}) {
     toJalali: prefs.toJalali,
     cycleSummary,
     stats,
+    regionRestrictions: restrictions || null,
   };
 }
 
