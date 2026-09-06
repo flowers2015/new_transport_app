@@ -1418,6 +1418,13 @@ async function getFreightAnnouncements(req, res) {
       if (!announcement.assignment_type && announcement.detected_assignment_type) {
         announcement.assignment_type = announcement.detected_assignment_type;
       }
+      // شرکتی: نام/پلاک اغلب فقط روی drivers/vehicles است — برای پنل ادمین روی اعلام‌بار هم برگردان
+      if (!announcement.assigned_driver_name && announcement.resolved_driver_name) {
+        announcement.assigned_driver_name = announcement.resolved_driver_name;
+      }
+      if (!announcement.assigned_driver_contact && announcement.resolved_driver_contact) {
+        announcement.assigned_driver_contact = announcement.resolved_driver_contact;
+      }
       
       // تبدیل فرمت تاریخ از 1404-08-14 به 1404/08/14 (اگر لازم باشد)
       if (announcement.loading_date) {
@@ -1562,7 +1569,7 @@ async function updateFreightAnnouncement(req, res) {
   try {
     await ensureJalaliDateColumns();
 
-    const {
+    let {
       loadingDate,
       deliveryDate, // تاریخ تحویل بار (برای بستنی)
       lineType,
@@ -1898,15 +1905,106 @@ async function updateFreightAnnouncement(req, res) {
           values.push(tariffNum);
         }
       }
+      const assignmentKind = String(
+        effectiveAssignmentType || oldRecord.assignment_type || ''
+      ).toLowerCase();
+      const isCompanyAssignment =
+        assignmentKind === 'company' || assignmentKind === 'شرکتی';
+      const incomingDriverId =
+        assignedDriverId !== undefined && String(assignedDriverId || '').trim()
+          ? String(assignedDriverId).trim()
+          : null;
+      const incomingVehicleId =
+        assignedVehicleId !== undefined && String(assignedVehicleId || '').trim()
+          ? String(assignedVehicleId).trim()
+          : null;
+      const driverIdForSnapshot = incomingDriverId || oldRecord.assigned_driver_id || null;
+      const vehicleIdForSnapshot = incomingVehicleId || oldRecord.assigned_vehicle_id || null;
+
+      if (isCompanyAssignment && (driverIdForSnapshot || vehicleIdForSnapshot)) {
+        try {
+          if (driverIdForSnapshot) {
+            const driverSnap = await client.query(
+              'SELECT name, employee_id FROM drivers WHERE id = $1',
+              [driverIdForSnapshot]
+            );
+            const d = driverSnap.rows[0];
+            if (d) {
+              if (!assignedDriverName || !String(assignedDriverName).trim()) {
+                assignedDriverName = d.name || oldRecord.assigned_driver_name || null;
+              }
+              if (!assignedDriverEmployeeId || !String(assignedDriverEmployeeId).trim()) {
+                assignedDriverEmployeeId =
+                  d.employee_id || oldRecord.assigned_driver_employee_id || null;
+              }
+            }
+          }
+          if (vehicleIdForSnapshot) {
+            const vehicleSnap = await client.query(
+              `SELECT plate_part1, plate_letter, plate_part2, plate_city_code, model, brand
+               FROM vehicles WHERE id = $1`,
+              [vehicleIdForSnapshot]
+            );
+            const v = vehicleSnap.rows[0];
+            if (v) {
+              if (!assignedVehicleModel) {
+                assignedVehicleModel = v.model || oldRecord.assigned_vehicle_model || null;
+              }
+              if (!assignedVehicleBrand) {
+                assignedVehicleBrand = v.brand || oldRecord.assigned_vehicle_brand || null;
+              }
+              if (!vehiclePlate || !String(vehiclePlate).trim()) {
+                vehiclePlate =
+                  v.plate_part1 && v.plate_letter && v.plate_part2
+                    ? `${v.plate_part1}${v.plate_letter}${v.plate_part2}${
+                        v.plate_city_code ? `-${v.plate_city_code}` : ''
+                      }`
+                    : oldRecord.vehicle_plate || null;
+              }
+            }
+          }
+        } catch (snapErr) {
+          console.warn(
+            '⚠️ [updateFreightAnnouncement] company assignment snapshot skipped:',
+            snapErr.message
+          );
+        }
+      }
+
       if (billOfLadingNumber !== undefined) { fields.push(`bill_of_lading_number = $${idx++}`); values.push(billOfLadingNumber); }
-      if (assignedDriverId !== undefined) { fields.push(`assigned_driver_id = $${idx++}`); values.push(assignedDriverId || null); }
-      if (assignedDriverName !== undefined) { fields.push(`assigned_driver_name = $${idx++}`); values.push(assignedDriverName || null); }
-      if (assignedDriverEmployeeId !== undefined) { fields.push(`assigned_driver_employee_id = $${idx++}`); values.push(assignedDriverEmployeeId || null); }
-      if (assignedVehicleId !== undefined) { fields.push(`assigned_vehicle_id = $${idx++}`); values.push(assignedVehicleId || null); }
-      if (assignedVehicleModel !== undefined) { fields.push(`assigned_vehicle_model = $${idx++}`); values.push(assignedVehicleModel || null); }
-      if (assignedVehicleBrand !== undefined) { fields.push(`assigned_vehicle_brand = $${idx++}`); values.push(assignedVehicleBrand || null); }
-      if (vehiclePlate !== undefined) { fields.push(`vehicle_plate = $${idx++}`); values.push(vehiclePlate || null); }
-      if (effectiveAssignmentType !== undefined) { fields.push(`assignment_type = $${idx++}`); values.push(effectiveAssignmentType || null); }
+      // رشته خالی را null نکن — در بار شرکتی شناسه راننده/خودرو پاک می‌شد و نام از JOIN هم می‌رفت
+      if (incomingDriverId) {
+        fields.push(`assigned_driver_id = $${idx++}`);
+        values.push(incomingDriverId);
+      }
+      if (assignedDriverName !== undefined && String(assignedDriverName || '').trim()) {
+        fields.push(`assigned_driver_name = $${idx++}`);
+        values.push(String(assignedDriverName).trim());
+      }
+      if (assignedDriverEmployeeId !== undefined && String(assignedDriverEmployeeId || '').trim()) {
+        fields.push(`assigned_driver_employee_id = $${idx++}`);
+        values.push(String(assignedDriverEmployeeId).trim());
+      }
+      if (incomingVehicleId) {
+        fields.push(`assigned_vehicle_id = $${idx++}`);
+        values.push(incomingVehicleId);
+      }
+      if (assignedVehicleModel !== undefined && String(assignedVehicleModel || '').trim()) {
+        fields.push(`assigned_vehicle_model = $${idx++}`);
+        values.push(String(assignedVehicleModel).trim());
+      }
+      if (assignedVehicleBrand !== undefined && String(assignedVehicleBrand || '').trim()) {
+        fields.push(`assigned_vehicle_brand = $${idx++}`);
+        values.push(String(assignedVehicleBrand).trim());
+      }
+      if (vehiclePlate !== undefined && String(vehiclePlate || '').trim()) {
+        fields.push(`vehicle_plate = $${idx++}`);
+        values.push(String(vehiclePlate).trim());
+      }
+      if (effectiveAssignmentType !== undefined && String(effectiveAssignmentType || '').trim()) {
+        fields.push(`assignment_type = $${idx++}`);
+        values.push(effectiveAssignmentType);
+      }
       
       // یادداشت — در مشارکتی پاستوریزه توضیح جدید را با قبلی با " :- " جمع کن تا پاک نشود
       if (notes !== undefined) {

@@ -1,5 +1,5 @@
 import { Destination, Driver, FreightAnnouncement, FreightAnnouncementStatus, FreightLineType, PersonalDriver, Vehicle } from '../types';
-import { formatPlateNumber, jalaliCalendarDayDiff, toTimestamp, coerceToDate, formatBillOfLadingDateDisplay } from './jalali';
+import { formatPlateNumber, jalaliCalendarDayDiff, toTimestamp, coerceToDate, formatJalaliDateTime, formatBillOfLadingDateDisplay } from './jalali';
 
 /** نوع نماینده — همیشه فارسی برای UI و اکسل */
 export function formatRepresentativeType(value?: string | null): string {
@@ -544,6 +544,55 @@ export function insertDairyCompactFreightExcelColumn(headers: string[]): string[
     }
     next.splice(insertAt, 0, DAIRY_DEST_FREIGHT_EXCEL_HEADER);
     return next;
+}
+
+/** ته جدول اکسل فشرده/کامل پاستوریزه: زمان‌های ثبت‌شده توسط انباردار */
+export const WAREHOUSE_LOADING_START_EXCEL_HEADER = 'زمان شروع بارگیری';
+export const WAREHOUSE_LOADING_END_EXCEL_HEADER = 'زمان پایان بارگیری';
+export const WAREHOUSE_LOADING_DURATION_EXCEL_HEADER = 'مدت زمان بارگیری با انباردار';
+
+export const WAREHOUSE_LOADING_EXCEL_HEADERS = [
+    WAREHOUSE_LOADING_START_EXCEL_HEADER,
+    WAREHOUSE_LOADING_END_EXCEL_HEADER,
+    WAREHOUSE_LOADING_DURATION_EXCEL_HEADER,
+] as const;
+
+export function isWarehouseLoadingExcelHeader(header: string): boolean {
+    return (WAREHOUSE_LOADING_EXCEL_HEADERS as readonly string[]).includes(header);
+}
+
+export function appendWarehouseLoadingExcelHeaders(headers: string[]): void {
+    for (const h of WAREHOUSE_LOADING_EXCEL_HEADERS) {
+        if (!headers.includes(h)) headers.push(h);
+    }
+}
+
+export function formatWarehouseLoadingDuration(
+    startedAt?: string | null,
+    endedAt?: string | null
+): string {
+    if (!startedAt || !endedAt) return '';
+    const start = coerceToDate(startedAt);
+    const end = coerceToDate(endedAt);
+    if (!start || !end) return '';
+    const sec = Math.floor((end.getTime() - start.getTime()) / 1000);
+    if (!Number.isFinite(sec) || sec < 0) return '';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+export function warehouseLoadingExcelValues(
+    ann: Pick<FreightAnnouncement, 'loadingStartedAt' | 'loadingEndedAt'> | null | undefined
+): [string, string, string] {
+    const startRaw = formatJalaliDateTime(ann?.loadingStartedAt);
+    const endRaw = formatJalaliDateTime(ann?.loadingEndedAt);
+    return [
+        !startRaw || startRaw === '-' ? '' : startRaw,
+        !endRaw || endRaw === '-' ? '' : endRaw,
+        formatWarehouseLoadingDuration(ann?.loadingStartedAt, ann?.loadingEndedAt),
+    ];
 }
 
 /** برچسب مقصد در تخصیص کرایه: نوع/نام نماینده + شعبه (شهر) */

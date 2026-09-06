@@ -1014,6 +1014,56 @@ export interface DriverPreferenceOpportunity {
     sourceDriverName?: string | null;
 }
 
+export interface DriverBehaviorRouteMixShare {
+    count: number;
+    percent: number;
+}
+
+export interface DriverBehaviorSituation {
+    key: 'farQueue' | 'nearQueue' | 'farTop4' | 'nearTop4' | string;
+    title: string;
+    tripCount: number;
+    routeMix: {
+        veryFar: DriverBehaviorRouteMixShare;
+        far: DriverBehaviorRouteMixShare;
+        near: DriverBehaviorRouteMixShare;
+    };
+    averageKm?: number | null;
+    topDestinations?: Array<{ city: string; count: number }>;
+}
+
+export interface DriverBehaviorLineMix {
+    dairy: DriverBehaviorRouteMixShare;
+    iceCream: DriverBehaviorRouteMixShare;
+    ambient: DriverBehaviorRouteMixShare;
+    other: DriverBehaviorRouteMixShare;
+    dairyVsIceCream: {
+        dairy: DriverBehaviorRouteMixShare;
+        iceCream: DriverBehaviorRouteMixShare;
+        comparedCount: number;
+    };
+}
+
+export interface DriverBehaviorAnalysisResponse {
+    driver?: {
+        id: string;
+        name?: string | null;
+        employeeId?: string | null;
+        mobile?: string | null;
+    };
+    category?: string | null;
+    from?: string;
+    to?: string;
+    fromJalali: string;
+    toJalali: string;
+    tripCount: number;
+    usedFinalizedOnly?: boolean;
+    missingQueuePositionCount?: number;
+    situations: DriverBehaviorSituation[];
+    lineMix: DriverBehaviorLineMix;
+    narrative: string;
+}
+
 export interface DriverPreferencesResponse {
     driver: {
         id: string;

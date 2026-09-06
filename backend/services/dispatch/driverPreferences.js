@@ -243,6 +243,245 @@ function buildStats(taken) {
   };
 }
 
+const TOP_QUEUE_POSITION = 4;
+
+function percent(part, total) {
+  if (!total) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+function normalizeLineKey(lineType) {
+  const raw = String(lineType || '')
+    .trim()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک');
+  const lower = raw.toLowerCase();
+  if (raw === 'پاستوریزه' || lower === 'dairy' || lower === 'pasturized' || lower === 'pasteurized') {
+    return 'dairy';
+  }
+  if (raw === 'بستنی' || lower === 'icecream' || lower === 'ice-cream' || lower === 'basteni') {
+    return 'iceCream';
+  }
+  if (raw === 'لبنیات-فروتلند' || raw === 'لبنیات فروتلند' || lower === 'ambient') {
+    return 'ambient';
+  }
+  return 'other';
+}
+
+function isFarQueueType(queueType) {
+  return queueType === 'far';
+}
+
+function isNearQueueType(queueType) {
+  return queueType === 'near';
+}
+
+function isTopQueuePosition(position) {
+  const n = Number(position);
+  return Number.isFinite(n) && n >= 1 && n <= TOP_QUEUE_POSITION;
+}
+
+function routeMixOf(items) {
+  const veryFar = items.filter(item => item.routeBucket === 'veryFar' || item.isVeryFar).length;
+  const far = items.filter(item => item.routeBucket === 'far' && !item.isVeryFar).length;
+  const near = items.filter(item => item.routeBucket === 'near').length;
+  const total = items.length;
+  return {
+    veryFar: { count: veryFar, percent: percent(veryFar, total) },
+    far: { count: far, percent: percent(far, total) },
+    near: { count: near, percent: percent(near, total) },
+  };
+}
+
+function averageKmOf(items) {
+  const kms = items
+    .map(item => Number(item.roundTripKm))
+    .filter(n => Number.isFinite(n) && n > 0);
+  if (!kms.length) return null;
+  return Math.round(kms.reduce((s, n) => s + n, 0) / kms.length);
+}
+
+function topDestinationsOf(items, limit = 3) {
+  const counts = new Map();
+  for (const item of items) {
+    const city = String(item.destinationCity || '').trim();
+    if (!city) continue;
+    counts.set(city, (counts.get(city) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([city, count]) => ({ city, count }));
+}
+
+function buildSituationBucket(key, title, items) {
+  return {
+    key,
+    title,
+    tripCount: items.length,
+    routeMix: routeMixOf(items),
+    averageKm: averageKmOf(items),
+    topDestinations: topDestinationsOf(items),
+  };
+}
+
+function lineShare(count, total) {
+  return { count, percent: percent(count, total) };
+}
+
+function buildLineMix(items) {
+  const dairy = items.filter(item => normalizeLineKey(item.lineType) === 'dairy').length;
+  const iceCream = items.filter(item => normalizeLineKey(item.lineType) === 'iceCream').length;
+  const ambient = items.filter(item => normalizeLineKey(item.lineType) === 'ambient').length;
+  const other = items.length - dairy - iceCream - ambient;
+  const dairyIceTotal = dairy + iceCream;
+  return {
+    dairy: lineShare(dairy, items.length),
+    iceCream: lineShare(iceCream, items.length),
+    ambient: lineShare(ambient, items.length),
+    other: lineShare(other, items.length),
+    dairyVsIceCream: {
+      dairy: lineShare(dairy, dairyIceTotal),
+      iceCream: lineShare(iceCream, dairyIceTotal),
+      comparedCount: dairyIceTotal,
+    },
+  };
+}
+
+function situationHint(bucket) {
+  if (!bucket || bucket.tripCount < 3) {
+    return 'نمونه کافی نیست.';
+  }
+  const vf = bucket.routeMix.veryFar.percent;
+  const near = bucket.routeMix.near.percent;
+  if (vf >= 45) return 'در این وضعیت بیشتر بار خیلی‌دور برداشته.';
+  if (near >= 55) return 'در این وضعیت تمایل به بار نزدیک داشته.';
+  return 'ترکیب بار در این وضعیت متعادل بوده.';
+}
+
+function buildBehaviorNarrative(situations, lineMix, meta) {
+  const parts = [];
+  const far = situations.find(s => s.key === 'farQueue');
+  const near = situations.find(s => s.key === 'nearQueue');
+  const farTop = situations.find(s => s.key === 'farTop4');
+  const nearTop = situations.find(s => s.key === 'nearTop4');
+
+  if (!meta.tripCount) {
+    return 'در این بازه سفر نهایی ثبت نشده؛ برای تحلیل رفتار باید حداقل چند تخصیص قطعی باشد.';
+  }
+
+  parts.push(
+    `در ${meta.fromJalali} تا ${meta.toJalali}، ${meta.tripCount} سفر نهایی بررسی شد.`
+  );
+
+  if (meta.missingQueuePositionCount > 0) {
+    parts.push(
+      `شماره نوبت در ${meta.missingQueuePositionCount} سفر خالی است؛ دستهٔ نفرات ۱ تا ۴ فقط روی سفرهایی است که شماره نوبت دارند.`
+    );
+  }
+
+  if (far && far.tripCount >= 3) {
+    if (far.routeMix.near.percent >= 50) {
+      parts.push('حتی وقتی در نوبت دور بوده، بیشتر بار نزدیک برداشته — برای اعلام خودکار بله بهتر است اول بار نزدیک پیشنهاد شود.');
+    } else if (far.routeMix.veryFar.percent >= 40) {
+      parts.push('وقتی در نوبت دور بوده بار خیلی‌دور را خوب برداشته؛ در فاز دور می‌توان او را در اولویت خیلی‌دور گذاشت.');
+    } else {
+      parts.push(situationHint(far));
+    }
+  }
+
+  if (near && near.tripCount >= 3) {
+    if (near.routeMix.veryFar.percent >= 35) {
+      parts.push('در نوبت نزدیک هم گاهی خیلی‌دور برداشته؛ یعنی الزاماً به بار کوتاه محدود نیست.');
+    } else if (near.routeMix.near.percent >= 55) {
+      parts.push('در نوبت نزدیک رفتار کلاسیک داشته و عمدتاً بار نزدیک برداشته.');
+    }
+  }
+
+  if (far && farTop && far.tripCount >= 4 && farTop.tripCount >= 2) {
+    const delta = farTop.routeMix.veryFar.percent - far.routeMix.veryFar.percent;
+    if (delta >= 10) {
+      parts.push('وقتی جزء ۴ نفر اول نوبت دور بوده، سهم خیلی‌دور بالاتر رفته — یعنی اول صف دور را جدی می‌گیرد.');
+    } else if (farTop.routeMix.near.percent >= 55) {
+      parts.push('حتی بین ۴ نفر اول نوبت دور، باز هم بار نزدیک را ترجیح داده.');
+    }
+  }
+
+  if (nearTop && nearTop.tripCount >= 3) {
+    if (nearTop.routeMix.near.percent >= 60) {
+      parts.push('در ۴ نفر اول نوبت نزدیک تقریباً فقط بار نزدیک برداشته.');
+    } else if (nearTop.routeMix.veryFar.percent >= 30) {
+      parts.push('در ۴ نفر اول نوبت نزدیک هم خیلی‌دور قبول کرده؛ برای اتومات بله می‌توان خیلی‌دور را هم به او نشان داد.');
+    }
+  }
+
+  const compared = lineMix.dairyVsIceCream.comparedCount;
+  if (compared >= 3) {
+    const dairyPct = lineMix.dairyVsIceCream.dairy.percent;
+    const icePct = lineMix.dairyVsIceCream.iceCream.percent;
+    if (icePct >= 60) {
+      parts.push(`بین بستنی و پاستوریزه، بستنی غالب است (${icePct}٪ بستنی در برابر ${dairyPct}٪ پاستوریزه).`);
+    } else if (dairyPct >= 60) {
+      parts.push(`بین بستنی و پاستوریزه، پاستوریزه غالب است (${dairyPct}٪ پاستوریزه در برابر ${icePct}٪ بستنی).`);
+    } else {
+      parts.push(`بین بستنی و پاستوریزه تقریباً متعادل بوده (${dairyPct}٪ پاستوریزه و ${icePct}٪ بستنی).`);
+    }
+  } else if (lineMix.ambient.count > 0) {
+    parts.push('بیشتر سفرها خارج از مقایسه بستنی/پاستوریزه بوده (مثلاً فروتلند).');
+  }
+
+  if (parts.length === 1) {
+    parts.push('الگوی مشخصی از این نمونه درنمی‌آید؛ با سفرهای بیشتر تحلیل پایدارتر می‌شود.');
+  }
+
+  return parts.join(' ');
+}
+
+function buildBehaviorAnalysis(taken, meta = {}) {
+  const source = (taken || []).filter(item => item && item.certainty !== 'cancelled');
+  const finalized = source.filter(item => item.certainty === 'finalized');
+  const trips = finalized.length ? finalized : source.filter(item => item.certainty !== 'cancelled');
+
+  const farQueue = trips.filter(item => isFarQueueType(item.queueType));
+  const nearQueue = trips.filter(item => isNearQueueType(item.queueType));
+  const farTop4 = farQueue.filter(item => isTopQueuePosition(item.queuePosition));
+  const nearTop4 = nearQueue.filter(item => isTopQueuePosition(item.queuePosition));
+
+  const situations = [
+    buildSituationBucket('farQueue', 'وقتی در نوبت دور بوده', farQueue),
+    buildSituationBucket('nearQueue', 'وقتی در نوبت نزدیک بوده', nearQueue),
+    buildSituationBucket('farTop4', 'وقتی جزء نفرات ۱ تا ۴ نوبت دور بوده', farTop4),
+    buildSituationBucket('nearTop4', 'وقتی جزء نفرات ۱ تا ۴ نوبت نزدیک بوده', nearTop4),
+  ];
+
+  const lineMix = buildLineMix(trips);
+  const missingQueuePositionCount = trips.filter(
+    item =>
+      (isFarQueueType(item.queueType) || isNearQueueType(item.queueType)) &&
+      !isTopQueuePosition(item.queuePosition) &&
+      (item.queuePosition == null || item.queuePosition === '')
+  ).length;
+
+  const analysisMeta = {
+    tripCount: trips.length,
+    missingQueuePositionCount,
+    fromJalali: meta.fromJalali || '',
+    toJalali: meta.toJalali || '',
+    usedFinalizedOnly: finalized.length > 0,
+  };
+
+  return {
+    fromJalali: analysisMeta.fromJalali,
+    toJalali: analysisMeta.toJalali,
+    tripCount: analysisMeta.tripCount,
+    usedFinalizedOnly: analysisMeta.usedFinalizedOnly,
+    missingQueuePositionCount,
+    situations,
+    lineMix,
+    narrative: buildBehaviorNarrative(situations, lineMix, analysisMeta),
+  };
+}
+
 function mapOpportunityRow(row, timestampToJalaliDate) {
   const isVeryFar = routeIsVeryFar(row);
   return {
@@ -441,6 +680,7 @@ module.exports = {
   buildAssignmentNotes,
   buildCycleSummary,
   buildStats,
+  buildBehaviorAnalysis,
   routeIsVeryFar,
   resolveAssignmentCertainty,
   isFarOrVeryFarOpportunity,

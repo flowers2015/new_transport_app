@@ -97,6 +97,9 @@ export const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
         financeRejectNote: a.finance_reject_note || a.financeRejectNote || null,
         financeRejectedAt: a.finance_rejected_at || a.financeRejectedAt || null,
         relatedExceptionId: a.related_exception_id || a.relatedExceptionId || null,
+        loadingStatus: a.loading_status || a.loadingStatus || null,
+        loadingStartedAt: a.loading_started_at || a.loadingStartedAt || null,
+        loadingEndedAt: a.loading_ended_at || a.loadingEndedAt || null,
     } as FreightAnnouncement;
 };
 

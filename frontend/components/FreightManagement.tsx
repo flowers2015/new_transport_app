@@ -6,6 +6,7 @@ import { formatNumberWhileTyping, parseNumberFromFormatted, formatNumberWithSepa
 import { formatCargoValueShort, formatRialsPreview } from '../utils/cargoValueUtils';
 import CargoValueInput from './CargoValueInput';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { pickAssignmentFieldsFromApi } from '../utils/freightDisplay';
 
 interface FreightManagementProps {
   currentUser: User;
@@ -223,6 +224,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           loadingDate = formatJalali(loadingDate);
         }
 
+        const assignment = pickAssignmentFieldsFromApi(a);
         return {
           id: a.id,
           announcementCode: a.announcement_code || a.announcementCode || '-',
@@ -234,22 +236,18 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           vehicleType: a.vehicle_type || a.vehicleType || '',
           notes: a.notes,
           rejectionReason: a.rejection_reason,
-          assignedDriverId: a.assigned_driver_id || a.assignedDriverId,
-          assignedVehicleId: a.assigned_vehicle_id || a.assignedVehicleId,
-          totalFreightCost: a.total_freight_cost || a.totalFreightCost || 0,
-          tariffFreightCost:
-            a.tariff_freight_cost != null || a.tariffFreightCost != null
-              ? Number(a.tariff_freight_cost ?? a.tariffFreightCost)
-              : undefined,
-          billOfLadingNumber: a.bill_of_lading_number || a.billOfLadingNumber,
-          assignedDriverName: a.assigned_driver_name || a.assignedDriverName,
+          ...assignment,
+          assignedDriverId: assignment.assignedDriverId,
+          assignedVehicleId: assignment.assignedVehicleId,
+          totalFreightCost: assignment.totalFreightCost ?? a.total_freight_cost ?? a.totalFreightCost ?? 0,
+          tariffFreightCost: assignment.tariffFreightCost,
+          billOfLadingNumber: assignment.billOfLadingNumber,
+          assignedDriverName: assignment.assignedDriverName,
           assignedDriverEmployeeId: a.assigned_driver_employee_id || a.assignedDriverEmployeeId,
           assignedVehicleModel: a.assigned_vehicle_model || a.assignedVehicleModel,
           assignedVehicleBrand: a.assigned_vehicle_brand || a.assignedVehicleBrand,
-          vehiclePlate: a.plate_part1 && a.plate_letter && a.plate_part2 && a.plate_city_code 
-            ? `${a.plate_part1}${a.plate_letter}${a.plate_part2}-${a.plate_city_code}`
-            : (a.vehicle_plate || ''),
-          assignmentType: a.assignment_type || a.assignmentType,
+          vehiclePlate: assignment.assignedVehiclePlate || a.vehicle_plate || '',
+          assignmentType: assignment.assignmentType,
           originCity: a.origin_city,
           brand: a.brand,
           representativeType: a.representative_type,
@@ -761,6 +759,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       // اطمینان از اینکه اعداد بدون جداکننده ارسال شوند
       const updateData = {
         ...formData,
+        assignedDriverId: formData.assignedDriverId || undefined,
+        assignedVehicleId: formData.assignedVehicleId || undefined,
         cargoValue: typeof formData.cargoValue === 'number' ? formData.cargoValue : parseNumberFromFormatted(String(formData.cargoValue)),
         totalFreightCost: typeof formData.totalFreightCost === 'number' ? formData.totalFreightCost : parseNumberFromFormatted(String(formData.totalFreightCost)),
         tariffFreightCost: (() => {

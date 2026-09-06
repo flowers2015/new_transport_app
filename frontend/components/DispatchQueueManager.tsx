@@ -6,12 +6,13 @@ import {
     DispatchVehicleSearchResult,
     DispatchDriverSearchResult,
     DispatchAnnouncementCandidate,
+    DriverBehaviorAnalysisResponse,
     DriverPreferencesResponse,
     View,
     UserRole,
     User,
 } from '../types';
-import { DriverPreferencesView, PreferenceBriefPanel, PreferenceBriefData } from './DriverPreferencesView';
+import { DriverPreferencesView, DriverBehaviorAnalysisPanel, PreferenceBriefPanel, PreferenceBriefData } from './DriverPreferencesView';
 import { gregorianToJalali } from '../utils/jalali';
 import { getApiUrl } from '../utils/apiConfig';
 import WorkflowRules from './WorkflowRules';
@@ -44,12 +45,13 @@ type RowEditor = {
 type DriverLastTrip = {
     found: boolean;
     destinationCity?: string | null;
+    destinationCities?: string[];
     originCity?: string | null;
     routeCategory?: string | null;
     distanceCategory?: string | null;
     roundTripKm?: number | null;
     createdAt?: string;
-    lastPathType?: 'far' | 'near' | null;
+    lastPathType?: 'far' | 'near' | 'veryFar' | null;
     suggestedQueueType?: 'far' | 'near' | null;
 };
 
@@ -130,6 +132,8 @@ type PreferencesDialogState = {
     loading: boolean;
     data: DriverPreferencesResponse | null;
     error?: string | null;
+    behaviorAnalysis?: DriverBehaviorAnalysisResponse | null;
+    behaviorAnalysisLoading?: boolean;
 };
 
 const initialAssignDialogState: AssignDialogState = {
@@ -194,6 +198,8 @@ const initialPreferencesDialogState: PreferencesDialogState = {
     loading: false,
     data: null,
     error: null,
+    behaviorAnalysis: null,
+    behaviorAnalysisLoading: false,
 };
 
 const queueTypeLabels: Record<DispatchQueueType, string> = {
@@ -911,6 +917,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
     const [preferencesRange, setPreferencesRange] = useState(getDefaultJalaliCycleRange);
     /** خالی = همه دسته‌ها — جستجوی مستقل نباید دستهٔ تب نوبت را اجبار کند */
     const [preferencesCategoryFilter, setPreferencesCategoryFilter] = useState<string>('');
+    const [panelBehaviorAnalysis, setPanelBehaviorAnalysis] = useState<DriverBehaviorAnalysisResponse | null>(null);
+    const [panelBehaviorAnalysisLoading, setPanelBehaviorAnalysisLoading] = useState(false);
     const [showRulesDialog, setShowRulesDialog] = useState(false);
     const searchTimers = useRef<Record<string, { vehicle?: ReturnType<typeof setTimeout>; driver?: ReturnType<typeof setTimeout> }>>({});
 
@@ -950,6 +958,41 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             prev.map(row => (row.id !== rowId ? row : applyRowPatch(row, patch)))
         );
         setRegisterRow(prev => (prev.id !== rowId ? prev : applyRowPatch(prev, patch)));
+    };
+
+    const loadDriverBehaviorAnalysis = async (
+        driverId: string,
+        options?: { category?: string | null }
+    ) => {
+        setPanelBehaviorAnalysisLoading(true);
+        setPreferencesDialog(prev => ({ ...prev, behaviorAnalysisLoading: true }));
+        try {
+            const params = new URLSearchParams();
+            if (options?.category) params.append('category', options.category);
+            const qs = params.toString();
+            const res = await fetch(
+                getApiUrl(`dispatch/drivers/${driverId}/behavior-analysis${qs ? `?${qs}` : ''}`),
+                { headers }
+            );
+            if (!res.ok) throw new Error(await res.text());
+            const payload = (await res.json()) as DriverBehaviorAnalysisResponse;
+            setPanelBehaviorAnalysis(payload);
+            setPreferencesDialog(prev => ({
+                ...prev,
+                behaviorAnalysis: payload,
+                behaviorAnalysisLoading: false,
+            }));
+        } catch (error) {
+            console.warn('behavior analysis failed', error);
+            setPanelBehaviorAnalysis(null);
+            setPreferencesDialog(prev => ({
+                ...prev,
+                behaviorAnalysis: null,
+                behaviorAnalysisLoading: false,
+            }));
+        } finally {
+            setPanelBehaviorAnalysisLoading(false);
+        }
     };
 
     const loadDriverPreferences = async (
@@ -1010,6 +1053,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setPreferencesRange(getDefaultJalaliCycleRange());
         setPreferencesCategoryFilter('');
         setSelectedDriver(null);
+        setPanelBehaviorAnalysis(null);
+        setPanelBehaviorAnalysisLoading(false);
         driverSearch.clear();
     };
 
@@ -1017,6 +1062,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         setPreferencesPanelOpen(false);
         driverSearch.clear();
         setSelectedDriver(null);
+        setPanelBehaviorAnalysis(null);
+        setPanelBehaviorAnalysisLoading(false);
     };
 
     const handlePreferencesPanelSearchSelect = (driver: DispatchDriverSearchResult) => {
@@ -1027,6 +1074,9 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 ...initialPreferencesDialogState,
                 isOpen: false,
             }));
+            loadDriverBehaviorAnalysis(driver.id, {
+                category: preferencesCategoryFilter || undefined,
+            });
         }
     };
 
@@ -1065,11 +1115,18 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             loading: true,
             data: null,
             error: null,
+            behaviorAnalysis: panelBehaviorAnalysis,
+            behaviorAnalysisLoading: panelBehaviorAnalysisLoading,
         });
         setPreferencesPanelOpen(false);
         loadDriverPreferences(selectedDriver.id, from, to, {
             category: preferencesCategoryFilter || undefined,
         });
+        if (!panelBehaviorAnalysis) {
+            loadDriverBehaviorAnalysis(selectedDriver.id, {
+                category: preferencesCategoryFilter || undefined,
+            });
+        }
     };
 
     const closePreferencesDialog = () => {
@@ -1101,8 +1158,11 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
             loading: true,
             data: null,
             error: null,
+            behaviorAnalysis: null,
+            behaviorAnalysisLoading: true,
         });
         loadDriverPreferences(driverId, range.from, range.to, { category: categoryKey });
+        loadDriverBehaviorAnalysis(driverId, { category: categoryKey });
     };
 
     const fetchAssignHintsForCategories = async (labels: string[]) => {
@@ -2336,7 +2396,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     onClick={closePreferencesPanel}
                 >
                     <div
-                        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+                        className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
@@ -2411,6 +2471,13 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                         {selectedDriver.mobile ? ` • ${selectedDriver.mobile}` : ''}
                                     </div>
                                 )}
+                                {selectedDriver && (
+                                    <DriverBehaviorAnalysisPanel
+                                        analysis={panelBehaviorAnalysis}
+                                        loading={panelBehaviorAnalysisLoading}
+                                        compact
+                                    />
+                                )}
                             </div>
 
                             <div className="flex flex-wrap items-end gap-3 text-xs text-slate-500">
@@ -2440,7 +2507,15 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                     <label className="mb-1 font-medium text-slate-600">دسته خودرو</label>
                                     <select
                                         value={preferencesCategoryFilter}
-                                        onChange={e => setPreferencesCategoryFilter(e.target.value)}
+                                        onChange={e => {
+                                            const next = e.target.value;
+                                            setPreferencesCategoryFilter(next);
+                                            if (selectedDriver?.id) {
+                                                loadDriverBehaviorAnalysis(selectedDriver.id, {
+                                                    category: next || undefined,
+                                                });
+                                            }
+                                        }}
                                         className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-sky-500 focus:ring-0 min-w-[9rem]"
                                     >
                                         <option value="">همه دسته‌ها</option>
@@ -2525,7 +2600,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                         ) : registerLastTrip?.found ? (
                                             <>
                                                 <p>
-                                                    آخرین مسیر:{' '}
+                                                    آخرین مقصد تور:{' '}
                                                     <strong>
                                                         {registerLastTrip.originCity || '—'} →{' '}
                                                         {registerLastTrip.destinationCity || 'نامشخص'}
@@ -2534,15 +2609,24 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                                         ? ` • ${Math.round(Number(registerLastTrip.roundTripKm))} کیلومتر`
                                                         : ''}
                                                 </p>
+                                                {(registerLastTrip.destinationCities?.length || 0) > 1 && (
+                                                    <p className="text-slate-500">
+                                                        مقاصد تور:{' '}
+                                                        {registerLastTrip.destinationCities!.join('، ')}
+                                                    </p>
+                                                )}
                                                 <p>
                                                     {registerLastTrip.lastPathType === 'near' ||
-                                                    registerLastTrip.lastPathType === 'far' ? (
+                                                    registerLastTrip.lastPathType === 'far' ||
+                                                    registerLastTrip.lastPathType === 'veryFar' ? (
                                                         <>
                                                             از مسیر{' '}
                                                             <strong>
                                                                 {registerLastTrip.lastPathType === 'near'
                                                                     ? 'نزدیک'
-                                                                    : 'دور'}
+                                                                    : registerLastTrip.lastPathType === 'veryFar'
+                                                                      ? 'خیلی‌دور'
+                                                                      : 'دور'}
                                                             </strong>{' '}
                                                             آمده — باید در نوبت{' '}
                                                             <strong>
@@ -3033,6 +3117,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                                     }
                                     targetDriverId={preferencesDialog.driver?.id || preferencesDialog.data.driver.id}
                                     targetDriverName={preferencesDialog.driver?.name || 'راننده'}
+                                    behaviorAnalysis={preferencesDialog.behaviorAnalysis}
+                                    behaviorAnalysisLoading={preferencesDialog.behaviorAnalysisLoading}
                                 />
                             ) : (
                                 <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">

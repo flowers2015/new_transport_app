@@ -9,6 +9,7 @@ const {
   getStageCandidates,
   assignFreight,
   getDriverPreferences,
+  getDriverBehaviorAnalysis,
   getDriverLastTrip,
   getBoard,
   searchVehicles,
@@ -74,6 +75,13 @@ router.get(
   authenticateToken,
   authorizeRole(transportRoles),
   getDriverPreferences
+);
+
+router.get(
+  '/drivers/:driverId/behavior-analysis',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  getDriverBehaviorAnalysis
 );
 
 router.get(

@@ -31,10 +31,24 @@ const {
 } = require('./baleFormat');
 const { enrichAnnouncements } = require('./baleAnnouncementEnrich');
 const {
+  filterAnnouncementsByRegionBans,
+  assertAnnouncementAllowedForDriver,
+} = require('./baleRegionBans');
+const {
   getDispatchChannelPlans,
   announcementMatchesCategory,
 } = require('./baleCategoryChannels');
 const { isVeryFarAnnouncement } = require('../dispatch/dispatchRouteRules');
+
+async function eligibleAnnouncementsForDriver(session, entry, announcements = null) {
+  const base = filterEligibleForDriver(
+    announcements || parseAnnouncements(session),
+    entry,
+    session.stage,
+    parseRejected(session)
+  );
+  return filterAnnouncementsByRegionBans(base, queueEntryDriverId(entry) || entry?.driverId || entry?.driver_id);
+}
 
 const TICK_MS = 15000;
 let tickTimer = null;
@@ -1042,12 +1056,11 @@ async function advanceToCurrentTurn(sessionId, depth = 0, options = {}) {
   const entry = queue[session.current_turn_index];
   const driverId = entry.driverId || entry.driver_id;
   let allAnnouncements = parseAnnouncements(session);
-  const rejected = parseRejected(session);
-  let eligible = filterEligibleForDriver(allAnnouncements, entry, session.stage, rejected);
+  let eligible = await eligibleAnnouncementsForDriver(session, entry, allAnnouncements);
 
   if (eligible.length === 0) {
     allAnnouncements = await refreshSessionAnnouncements(sessionId);
-    eligible = filterEligibleForDriver(allAnnouncements, entry, session.stage, rejected);
+    eligible = await eligibleAnnouncementsForDriver(session, entry, allAnnouncements);
   }
 
   if (eligible.length === 0) {
@@ -1143,12 +1156,7 @@ async function refreshTurnTimerMessage(sessionId) {
 
   const entry = currentTurnEntry(session);
   if (!entry) return;
-  const eligible = filterEligibleForDriver(
-    parseAnnouncements(session),
-    entry,
-    session.stage,
-    parseRejected(session)
-  );
+  const eligible = await eligibleAnnouncementsForDriver(session, entry);
 
   try {
     const text = await buildTurnMessage(session, entry, eligible);
@@ -1305,12 +1313,7 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
     return { handled: true };
   }
 
-  const eligible = filterEligibleForDriver(
-    parseAnnouncements(session),
-    entry,
-    session.stage,
-    parseRejected(session)
-  );
+  const eligible = await eligibleAnnouncementsForDriver(session, entry);
 
   if (rowNum > eligible.length) {
     await baleApi.sendMessage(
@@ -1358,6 +1361,12 @@ async function completeAssignment(session, selection, source) {
     : null;
 
   const liveSession = await loadSession(session.id);
+  const assignedAnn = parseAnnouncements(liveSession || session).find(
+    a => String(a.id) === String(selection.announcementId)
+  );
+  if (assignedAnn) {
+    await assertAnnouncementAllowedForDriver(selection.driverId, assignedAnn);
+  }
   await updateSession(session.id, { status: 'assigning', turn_deadline_at: null });
   await freezeCurrentTurnPv(liveSession, '⏳ در حال ثبت تخصیص...');
 
@@ -1397,7 +1406,6 @@ async function completeAssignment(session, selection, source) {
     }
   }
 
-  const assignedAnn = parseAnnouncements(session).find(a => a.id === selection.announcementId);
   const remaining = parseAnnouncements(session).filter(a => a.id !== selection.announcementId);
 
   const assignedStage = session.stage;
@@ -1651,12 +1659,7 @@ async function handleTimeout(sessionId) {
   }
   if (new Date(session.turn_deadline_at).getTime() > Date.now()) return;
 
-  const eligible = filterEligibleForDriver(
-    parseAnnouncements(session),
-    entry,
-    session.stage,
-    parseRejected(session)
-  );
+  const eligible = await eligibleAnnouncementsForDriver(session, entry);
 
   const mode = session.mode;
 
@@ -1787,12 +1790,7 @@ async function extendCurrentTurn(sessionId, extraSec = 120) {
     await refreshTurnTimerMessage(sessionId);
   } else if (entry) {
     const refreshed = await loadSession(sessionId);
-    const eligible = filterEligibleForDriver(
-      parseAnnouncements(refreshed),
-      entry,
-      refreshed.stage,
-      parseRejected(refreshed)
-    );
+    const eligible = await eligibleAnnouncementsForDriver(refreshed, entry);
     const outreach = await getDriverOutreach(entry.driverId || entry.driver_id);
     if (outreach?.outreach_chat_id) {
       const text = await buildTurnMessage({ ...refreshed, turn_deadline_at: deadline }, entry, eligible);
@@ -1841,6 +1839,7 @@ async function manualAssign(sessionId, body, userId) {
     queue.find(e => String(queueEntryDriverId(e)) === String(driverId)) ||
     queue.find(e => String(e.id) === String(body.queueEntryId));
   if (!entry) throw new Error('راننده در صف همین جلسه نیست.');
+  await assertAnnouncementAllowedForDriver(queueEntryDriverId(entry), ann);
 
   const selection = {
     announcementId: ann.id,

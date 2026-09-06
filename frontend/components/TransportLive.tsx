@@ -51,6 +51,9 @@ import {
     formatDairyDestinationFreightCostsText,
     insertDairyCompactFreightExcelColumn,
     DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+    appendWarehouseLoadingExcelHeaders,
+    isWarehouseLoadingExcelHeader,
+    warehouseLoadingExcelValues,
     formatAssignmentDestinationFreightCaption,
     formatDestinationRepCompactSegment,
     resolveDestinationRepTypeLabel,
@@ -176,6 +179,17 @@ const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
 
 /** ستون مقاصد فشرده پاستوریزه — شامل تاریخ/ساعت بارگیری هر مقصد */
 const DAIRY_DESTINATIONS_HEADER = 'مقاصد و تایم بارگیری';
+
+/** رنگ ردیف مطابق کارتابل انباردار: تمام‌شده / در حال بارگیری / شروع‌نشده */
+function warehouseLoadingRowStyle(loadingStatus?: string | null): { className: string; sticky: string } {
+    if (loadingStatus === 'completed') {
+        return { className: 'bg-slate-300 hover:bg-slate-400', sticky: '#cbd5e1' };
+    }
+    if (loadingStatus === 'in_progress') {
+        return { className: 'bg-yellow-200 hover:bg-yellow-300', sticky: '#fef08a' };
+    }
+    return { className: 'bg-white hover:bg-slate-50', sticky: '#ffffff' };
+}
 
 const isDairyDestinationsColumn = (header: string) =>
     header === DAIRY_DESTINATIONS_HEADER || header === 'مقاصد';
@@ -1890,6 +1904,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             'توضیحات',
             'کارمند اعلام‌کننده'
         );
+        appendWarehouseLoadingExcelHeaders(headers);
 
         const dash = (v: string) => {
             const t = (v || '').trim();
@@ -1937,6 +1952,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 ann.notes || '',
                 getAnnouncementCreatorLabel(ann) || ''
             );
+            row.push(...warehouseLoadingExcelValues(ann));
             return row;
         });
 
@@ -2037,6 +2053,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
         if (isDairyCompactExcel) {
             const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
             headers.splice(0, headers.length, ...nextHeaders);
+        }
+
+        const includeWarehouseLoadingExcel =
+            (isDairyCompactExcel || (mode === 'full' && activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine))) ||
+            (mode === 'full' && isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy);
+        if (includeWarehouseLoadingExcel) {
+            appendWarehouseLoadingExcelHeaders(headers);
         }
         
         // ایجاد workbook و worksheet
@@ -2197,6 +2220,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         row.push(...Array(isFullDairyExport ? 9 : 6).fill(''));
                     }
                 }
+            }
+
+            if (includeWarehouseLoadingExcel) {
+                row.push(...warehouseLoadingExcelValues(ann));
             }
             
             wsData.push(row);
@@ -2379,6 +2406,15 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 headers.splice(0, headers.length, ...nextHeaders);
             }
 
+            const includeWarehouseLoadingExcelDownload =
+                isDairyCompactExcelDownload ||
+                (mode === 'full' &&
+                    ((activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine)) ||
+                        (isPendingBillOfLadingTab(activeLine) && pendingSubLine === FreightLineType.Dairy)));
+            if (includeWarehouseLoadingExcelDownload) {
+                appendWarehouseLoadingExcelHeaders(headers);
+            }
+
             if (!headers.includes('ردیف')) {
                 headers.unshift('ردیف');
             }
@@ -2511,7 +2547,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             excelExportAnnouncements.forEach((ann, idx) => {
                 const rowData: any[] = [];
                 headers.forEach((header) => {
-                    if (isFreightDestinationDetailHeader(header)) return;
+                    if (isFreightDestinationDetailHeader(header) || isWarehouseLoadingExcelHeader(header)) return;
                     if (header === 'ردیف') {
                         rowData.push(idx + 1);
                     } else if (header === 'انتخاب') {
@@ -2553,6 +2589,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             rowData.push(...Array(isFullDairyExport ? 9 : 6).fill(''));
                         }
                     }
+                }
+
+                if (includeWarehouseLoadingExcelDownload) {
+                    rowData.push(...warehouseLoadingExcelValues(ann));
                 }
                 
                 const row = worksheet.addRow(rowData);
@@ -2815,6 +2855,22 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         <button onClick={() => setIsRulesOpen(true)} className="p-2 rounded-md hover:bg-slate-100" title="قوانین">
                             <BookOpenIcon className="w-5 h-5 text-slate-600"/>
                         </button>
+                        {!isPendingBillOfLadingTab(activeLine) && (
+                            <div className="flex items-center gap-2 text-[10px] text-slate-600">
+                                <span className="inline-flex items-center gap-1">
+                                    <span className="inline-block w-3 h-3 rounded border border-slate-300 bg-white" />
+                                    شروع‌نشده
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                    <span className="inline-block w-3 h-3 rounded border border-yellow-400 bg-yellow-200" />
+                                    در حال بارگیری
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                    <span className="inline-block w-3 h-3 rounded border border-slate-400 bg-slate-300" />
+                                    بارگیری‌شده
+                                </span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-1">
                             <button 
                                 onClick={() => downloadExcel('compact')} 
@@ -3293,12 +3349,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                 const pendingBillRow = isPendingBillOfLadingTab(activeLine);
                                 const bolRegistered = hasBillOfLadingNumber(ann);
                                 const returnedFromCarrier = isReturnedFromCarrier(ann);
-                                const rowColorClass = isWarehouseKeeper
-                                    ? (ann.loadingStatus === 'completed'
-                                        ? 'bg-slate-300 hover:bg-slate-400'
-                                        : ann.loadingStatus === 'in_progress'
-                                          ? 'bg-yellow-200 hover:bg-yellow-300'
-                                          : 'bg-white hover:bg-slate-50')
+                                const loadingStyle = warehouseLoadingRowStyle(ann.loadingStatus);
+                                const useLoadingRowColors = isWarehouseKeeper || !pendingBillRow;
+                                const rowColorClass = useLoadingRowColors
+                                    ? loadingStyle.className
                                     : pendingBillRow
                                     ? bolRegistered
                                         ? 'bg-green-100 hover:bg-green-200'
@@ -3312,12 +3366,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                                       : isAssigned
                                         ? 'bg-green-50 hover:bg-green-100'
                                         : 'bg-yellow-50 hover:bg-yellow-100';
-                                const rowStickyBg = isWarehouseKeeper
-                                    ? (ann.loadingStatus === 'completed'
-                                        ? '#cbd5e1'
-                                        : ann.loadingStatus === 'in_progress'
-                                          ? '#fef08a'
-                                          : '#ffffff')
+                                const rowStickyBg = useLoadingRowColors
+                                    ? loadingStyle.sticky
                                     : selectedIds.has(ann.id)
                                     ? '#f0f9ff'
                                     : pendingBillRow

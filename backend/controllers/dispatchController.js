@@ -1,5 +1,5 @@
 const pool = require('../db');
-const { isVeryFarAnnouncement } = require('../services/dispatch/dispatchRouteRules');
+const { isVeryFarAnnouncement, classifyRouteDistanceBucket } = require('../services/dispatch/dispatchRouteRules');
 const { computeJalaliCycleRange } = require('../services/dispatch/dispatchCycle');
 const {
   normalizeCategoryFilter,
@@ -8,6 +8,7 @@ const {
   buildAssignmentNotes,
   buildCycleSummary,
   buildStats,
+  buildBehaviorAnalysis,
   routeIsVeryFar,
   resolveAssignmentCertainty,
   resolveAssignmentVehicleCategory,
@@ -16,6 +17,7 @@ const {
 } = require('../services/dispatch/driverPreferences');
 const {
   lookupRoutesForDestinations,
+  lookupActiveRouteForCity,
   pickPrimaryRouteFromList,
 } = require('../services/dispatch/multiDestinationAssignments');
 const {
@@ -47,6 +49,21 @@ function computeDefaultPreferenceRange(referenceDate = new Date()) {
   const [toGy, toGm, toGd] = jalaliToGregorian(toYear, toMonth, 25);
   const fromDate = new Date(fromGy, fromGm - 1, fromGd);
   const toDate = new Date(toGy, toGm - 1, toGd);
+  return { fromDate, toDate };
+}
+
+function computeDefaultBehaviorAnalysisRange(referenceDate = new Date()) {
+  const [jy, jm, jd] = gregorianToJalali(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth() + 1,
+    referenceDate.getDate()
+  );
+  let fromJd = jd;
+  if (jm >= 7 && jm <= 11 && fromJd > 30) fromJd = 30;
+  if (jm === 12 && fromJd > 29) fromJd = 29;
+  const [fromGy, fromGm, fromGd] = jalaliToGregorian(jy - 1, jm, fromJd);
+  const fromDate = new Date(fromGy, fromGm - 1, fromGd);
+  const toDate = new Date(referenceDate);
   return { fromDate, toDate };
 }
 
@@ -2159,6 +2176,156 @@ async function getDriverPreferences(req, res) {
   }
 }
 
+async function getDriverBehaviorAnalysis(req, res) {
+  const { driverId } = req.params || {};
+  let { from, to, category: categoryParam } = req.query || {};
+  const vehicleCategoryFilter = normalizeCategoryFilter(
+    typeof categoryParam === 'string' ? categoryParam : null
+  );
+
+  if (!driverId) {
+    return res.status(400).json({ message: 'شناسه راننده الزامی است.' });
+  }
+
+  try {
+    const driverResult = await pool.query(
+      `SELECT id, name, employee_id, mobile FROM drivers WHERE id = $1`,
+      [driverId]
+    );
+    if (driverResult.rowCount === 0) {
+      return res.status(404).json({ message: 'راننده یافت نشد.' });
+    }
+
+    const { fromDate: defaultFromDate, toDate: defaultToDate } =
+      computeDefaultBehaviorAnalysisRange(new Date());
+    let fromDate = defaultFromDate;
+    let toDate = defaultToDate;
+
+    if (typeof from === 'string' && from.trim()) {
+      const parsed = parseJalaliDateString(from.trim().replace(/\\/g, '/').replace(/-/g, '/'));
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: 'تاریخ شروع نامعتبر است.' });
+      }
+      fromDate = parsed;
+    }
+    if (typeof to === 'string' && to.trim()) {
+      const parsed = parseJalaliDateString(to.trim().replace(/\\/g, '/').replace(/-/g, '/'));
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: 'تاریخ پایان نامعتبر است.' });
+      }
+      toDate = parsed;
+    }
+
+    if (fromDate > toDate) {
+      const tmp = fromDate;
+      fromDate = toDate;
+      toDate = tmp;
+    }
+
+    const fromStart = new Date(fromDate);
+    fromStart.setHours(0, 0, 0, 0);
+    const toEnd = new Date(toDate);
+    toEnd.setHours(23, 59, 59, 999);
+
+    const fromISO = fromStart.toISOString();
+    const toISO = toEnd.toISOString();
+    const fromJalali = timestampToJalaliDate(fromStart);
+    const toJalali = timestampToJalaliDate(toEnd);
+
+    const assignmentsRes = await pool.query(
+      `
+        SELECT
+          da.id,
+          da.freight_announcement_id,
+          da.stage,
+          da.created_at,
+          da.queue_position,
+          da.queue_entry_id,
+          da.assigned_at_jalali,
+          da.distance_km,
+          da.vehicle_category AS assignment_vehicle_category,
+          fa.announcement_code,
+          fa.line_type,
+          fa.vehicle_type,
+          fa.origin_city,
+          COALESCE(fd.city, fd_fallback.city) AS destination_city,
+          COALESCE(fd.created_at, fd_fallback.created_at) AS destination_created_at,
+          dr.route_category,
+          dr.distance_category,
+          dr.round_trip_km,
+          v.vehicle_code,
+          v.vehicle_category AS vehicle_category,
+          COALESCE(da.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
+          COALESCE(da.is_cancelled, FALSE) AS is_cancelled,
+          fa.status AS freight_status,
+          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at
+        FROM dispatch_assignments da
+        LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
+        LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
+        LEFT JOIN LATERAL (
+          SELECT fd2.city, fd2.created_at
+          FROM freight_destinations fd2
+          WHERE fd2.freight_announcement_id = fa.id
+          ORDER BY fd2.created_at ASC
+          LIMIT 1
+        ) fd_fallback ON TRUE
+        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+        LEFT JOIN vehicles v ON v.id = da.vehicle_id
+        WHERE da.driver_id = $1
+          AND (
+            da.created_at BETWEEN $2 AND $3
+            OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $2 AND $3
+          )
+          AND (
+            da.is_cancelled = TRUE
+            OR fa.status IS NULL
+            OR fa.status NOT IN ('Cancelled')
+          )
+        ORDER BY da.created_at ASC
+      `,
+      [driverId, fromISO, toISO]
+    );
+
+    let taken = groupAssignmentsByTrip(
+      assignmentsRes.rows.map(row => mapAssignmentRow(row, timestampToJalaliDate)),
+      {
+        tripKeyFn: item => {
+          if (!item.announcementId) return null;
+          const cancelledOnly =
+            item.certainty === 'cancelled' || (item.isCancelled && item.certainty !== 'finalized');
+          return `${item.announcementId}:${cancelledOnly ? '1' : '0'}`;
+        },
+      }
+    );
+    if (vehicleCategoryFilter) {
+      taken = taken.filter(
+        item =>
+          (item.vehicleCategory && item.vehicleCategory === vehicleCategoryFilter) ||
+          !item.vehicleType ||
+          vehicleMatchesCategory(item.vehicleType, vehicleCategoryFilter)
+      );
+    }
+
+    const analysis = buildBehaviorAnalysis(taken, { fromJalali, toJalali });
+
+    res.json({
+      driver: {
+        id: driverResult.rows[0].id,
+        name: driverResult.rows[0].name,
+        employeeId: driverResult.rows[0].employee_id,
+        mobile: driverResult.rows[0].mobile,
+      },
+      category: vehicleCategoryFilter,
+      from: fromISO,
+      to: toISO,
+      ...analysis,
+    });
+  } catch (error) {
+    console.error('❌ [dispatch] getDriverBehaviorAnalysis failed:', error);
+    res.status(500).json({ message: 'خطا در تحلیل رفتار راننده' });
+  }
+}
+
 async function getBoard(req, res) {
   try {
     // ابتدا همه dispatch_assignments را با مقاصدشان بگیریم
@@ -2459,63 +2626,69 @@ async function getDriverLastTrip(req, res) {
       `
         SELECT
           da.created_at,
-          da.stage,
-          COALESCE(da.queue_type, dqe.queue_type) AS queue_type,
-          fa.origin_city,
-          COALESCE(fd.city, fd_fallback.city) AS destination_city,
-          dr.route_category,
-          dr.distance_category,
-          dr.round_trip_km
+          da.freight_announcement_id,
+          fa.origin_city
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-        LEFT JOIN freight_destinations fd ON fd.id = da.freight_destination_id
-        LEFT JOIN LATERAL (
-          SELECT fd2.city
-          FROM freight_destinations fd2
-          WHERE fd2.freight_announcement_id = fa.id
-          ORDER BY fd2.created_at DESC
-          LIMIT 1
-        ) fd_fallback ON TRUE
-        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
-        LEFT JOIN LATERAL (
-          SELECT dqe2.queue_type
-          FROM dispatch_queue_entries dqe2
-          WHERE dqe2.id::text = da.queue_entry_id::text
-          LIMIT 1
-        ) dqe ON TRUE
         WHERE da.driver_id = $1
           AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
+          AND da.freight_announcement_id IS NOT NULL
         ORDER BY da.created_at DESC NULLS LAST
         LIMIT 1
       `,
       [driverId]
     );
     const row = rows[0];
-    if (!row) {
+    if (!row?.freight_announcement_id) {
       return res.json({ found: false });
     }
-    const blob = `${row.distance_category || ''} ${row.route_category || ''}`
-      .replace(/ي/g, 'ی')
-      .replace(/[\s\u200c\-_]/g, '')
-      .toLowerCase();
-    const qt = String(row.queue_type || '').toLowerCase();
-    let lastPathType = null;
-    if (blob.includes('نزدیک') || blob.includes('near')) lastPathType = 'near';
-    else if (blob.includes('دور') || blob.includes('far')) lastPathType = 'far';
-    else if (qt === 'far' || qt === 'near') lastPathType = qt;
-    else if (row.stage === 'stage1') lastPathType = 'far';
-    else if (row.stage === 'stage2') lastPathType = 'near';
 
+    let destRows = [];
+    try {
+      const destRes = await pool.query(
+        `
+          SELECT city, sort_order, created_at
+          FROM freight_destinations
+          WHERE freight_announcement_id = $1
+          ORDER BY sort_order ASC NULLS LAST, created_at ASC
+        `,
+        [row.freight_announcement_id]
+      );
+      destRows = destRes.rows;
+    } catch (destErr) {
+      const destRes = await pool.query(
+        `
+          SELECT city, created_at
+          FROM freight_destinations
+          WHERE freight_announcement_id = $1
+          ORDER BY created_at ASC
+        `,
+        [row.freight_announcement_id]
+      );
+      destRows = destRes.rows;
+    }
+
+    const lastDest = destRows[destRows.length - 1] || null;
+    const destinationCity = (lastDest?.city || '').trim() || null;
+    const destinationCities = destRows
+      .map(d => String(d.city || '').trim())
+      .filter(Boolean);
+
+    const route = destinationCity ? await lookupActiveRouteForCity(pool, destinationCity) : null;
+    const bucket = classifyRouteDistanceBucket(route || {});
+    const lastPathType =
+      bucket === 'near' ? 'near' : bucket === 'far' || bucket === 'veryFar' ? bucket : null;
     const suggestedQueueType =
-      lastPathType === 'near' ? 'far' : lastPathType === 'far' ? 'near' : null;
+      lastPathType === 'near' ? 'far' : lastPathType ? 'near' : null;
 
     res.json({
       found: true,
-      destinationCity: row.destination_city || null,
+      destinationCity,
+      destinationCities,
       originCity: row.origin_city || null,
-      routeCategory: row.route_category || null,
-      distanceCategory: row.distance_category || null,
-      roundTripKm: row.round_trip_km || null,
+      routeCategory: route?.route_category || null,
+      distanceCategory: route?.distance_category || null,
+      roundTripKm: route?.round_trip_km != null ? Number(route.round_trip_km) : null,
       createdAt: row.created_at,
       lastPathType,
       suggestedQueueType,
@@ -2534,6 +2707,7 @@ module.exports = {
   getStageCandidates,
   assignFreight,
   getDriverPreferences,
+  getDriverBehaviorAnalysis,
   getDriverLastTrip,
   getBoard,
   searchVehicles,

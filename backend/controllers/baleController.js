@@ -19,6 +19,13 @@ const {
   setAmbientNotifySettings,
 } = require('../services/bale/baleAmbientNotifySettings');
 const { sendTestAmbientMessage } = require('../services/bale/baleAmbientAssignmentNotify');
+const {
+  listRegionBans,
+  createRegionBan,
+  deleteRegionBan,
+  loadGeoCatalog,
+} = require('../services/bale/baleRegionBans');
+const { mdBold, BALE_PARSE_MODE, stripMarkdown } = require('../services/bale/baleFormat');
 
 const ambientNotifyRoles = ['personal_transport_user', 'admin'];
 
@@ -274,6 +281,113 @@ async function testPing(req, res) {
     res.json({ success: true, result });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+}
+
+async function getRegionBanGeo(req, res) {
+  try {
+    const geo = await loadGeoCatalog();
+    res.json({
+      provinces: geo.provinces,
+      citiesByProvince: geo.citiesByProvince,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'خطا در دریافت استان/شهر' });
+  }
+}
+
+async function listRegionBansHandler(req, res) {
+  try {
+    const bans = await listRegionBans();
+    res.json(bans);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'خطا در دریافت محدودیت‌ها' });
+  }
+}
+
+async function createRegionBanHandler(req, res) {
+  try {
+    const ban = await createRegionBan({
+      driverId: req.body?.driverId,
+      forbiddenProvinces: req.body?.forbiddenProvinces,
+      exceptionCities: req.body?.exceptionCities,
+      startDate: req.body?.startDate,
+      endDate: req.body?.endDate,
+      userId: req.user?.id || req.user?.userId,
+    });
+    res.json(ban);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'ثبت محدودیت ناموفق بود' });
+  }
+}
+
+async function deleteRegionBanHandler(req, res) {
+  try {
+    const ok = await deleteRegionBan(req.params.id);
+    if (!ok) return res.status(404).json({ message: 'محدودیت پیدا نشد' });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'حذف محدودیت ناموفق بود' });
+  }
+}
+
+async function sendUpcomingAnnounce(req, res) {
+  const minutes = Number(req.body?.minutes ?? req.body?.minute);
+  if (!Number.isFinite(minutes) || !Number.isInteger(minutes) || minutes < 1 || minutes > 120) {
+    return res.status(400).json({ message: 'دقیقه را بین ۱ تا ۱۲۰ وارد کنید.' });
+  }
+  if (!baleApi.isConfigured()) {
+    return res.status(400).json({ message: 'ربات بله روی سرور تنظیم نشده است.' });
+  }
+  try {
+    const plans = await getDispatchChannelPlans();
+    if (!plans.length) {
+      return res.status(400).json({
+        message: 'کانال فعالی برای ارسال تنظیم نشده است. ابتدا گروه هر دسته را در تنظیمات بله ذخیره کنید.',
+      });
+    }
+
+    const faMin = minutes.toLocaleString('fa-IR');
+    const text =
+      `سلام\nتا ${mdBold(faMin)} دقیقه دیگر اعلام بار شروع خواهد شد.\nلطفاً در دسترس باشید.`;
+
+    const byChat = new Map();
+    for (const plan of plans) {
+      const key = String(plan.chatId);
+      if (!byChat.has(key)) byChat.set(key, { chatId: key, categories: [] });
+      byChat.get(key).categories.push(plan.category);
+    }
+
+    const results = [];
+    for (const item of byChat.values()) {
+      try {
+        try {
+          await baleApi.sendMessage(Number(item.chatId), text, { parseMode: BALE_PARSE_MODE });
+        } catch {
+          await baleApi.sendMessage(Number(item.chatId), stripMarkdown(text));
+        }
+        results.push({ chatId: item.chatId, categories: item.categories, ok: true });
+      } catch (err) {
+        results.push({
+          chatId: item.chatId,
+          categories: item.categories,
+          ok: false,
+          error: err.message,
+        });
+      }
+    }
+
+    const sent = results.filter(r => r.ok).length;
+    if (sent === 0) {
+      return res.status(500).json({
+        message: results[0]?.error || 'ارسال پیام آماده‌باش ناموفق بود.',
+        results,
+      });
+    }
+    res.json({ sent, total: results.length, minutes, results });
+  } catch (error) {
+    console.error('❌ [bale] sendUpcomingAnnounce:', error);
+    res.status(500).json({ message: error.message || 'خطا در ارسال پیام آماده‌باش' });
   }
 }
 
@@ -759,6 +873,11 @@ module.exports = {
   upsertDriverOutreach,
   seedTestDrivers,
   testPing,
+  sendUpcomingAnnounce,
+  getRegionBanGeo,
+  listRegionBansHandler,
+  createRegionBanHandler,
+  deleteRegionBanHandler,
   setWebhookUrl,
   startSession,
   stopSession,

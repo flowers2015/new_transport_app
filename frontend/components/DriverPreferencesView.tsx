@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import {
+    DriverBehaviorAnalysisResponse,
+    DriverBehaviorSituation,
     DriverPreferenceCycleSummary,
     DriverPreferenceOpportunity,
     DriverPreferenceStats,
@@ -552,11 +554,142 @@ function SkippedTable({ items }: { items: DriverPreferenceOpportunity[] }) {
     );
 }
 
+const formatFaNumber = (value?: number | null) => {
+    if (value == null || Number.isNaN(Number(value))) return '۰';
+    return Number(value).toLocaleString('fa-IR');
+};
+
+const RouteMixBar: React.FC<{ situation: DriverBehaviorSituation }> = ({ situation }) => {
+    const mix = situation.routeMix;
+    const segments = [
+        { key: 'vf', label: 'خیلی‌دور', color: 'bg-rose-500', pct: mix.veryFar.percent, count: mix.veryFar.count },
+        { key: 'far', label: 'دور', color: 'bg-amber-500', pct: mix.far.percent, count: mix.far.count },
+        { key: 'near', label: 'نزدیک', color: 'bg-emerald-500', pct: mix.near.percent, count: mix.near.count },
+    ];
+    return (
+        <div className="space-y-1.5">
+            <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                {segments.map(seg =>
+                    seg.pct > 0 ? (
+                        <div key={seg.key} className={seg.color} style={{ width: `${Math.max(seg.pct, 2)}%` }} />
+                    ) : null
+                )}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-600">
+                {segments.map(seg => (
+                    <span key={seg.key}>
+                        {seg.label} {formatFaNumber(seg.pct)}٪
+                        <span className="text-slate-400"> ({formatFaNumber(seg.count)})</span>
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+export const DriverBehaviorAnalysisPanel: React.FC<{
+    analysis: DriverBehaviorAnalysisResponse | null;
+    loading?: boolean;
+    compact?: boolean;
+}> = ({ analysis, loading, compact }) => {
+    if (loading) {
+        return (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[11px] text-indigo-700">
+                در حال تحلیل رفتار یک‌ساله راننده...
+            </div>
+        );
+    }
+    if (!analysis) return null;
+
+    const dairyPct = analysis.lineMix.dairyVsIceCream.dairy.percent;
+    const icePct = analysis.lineMix.dairyVsIceCream.iceCream.percent;
+    const compared = analysis.lineMix.dairyVsIceCream.comparedCount;
+
+    return (
+        <section className={`rounded-xl border border-indigo-200 bg-indigo-50/40 ${compact ? 'p-3 space-y-3' : 'p-4 space-y-4'}`}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <h3 className="text-sm font-semibold text-indigo-900">تحلیل رفتار راننده انتخابی</h3>
+                    <p className="text-[10px] text-indigo-700/80 mt-0.5">
+                        بازه پیش‌فرض یک سال شمسی: {analysis.fromJalali || '—'} تا {analysis.toJalali || '—'}
+                        {analysis.usedFinalizedOnly ? ' · فقط سفرهای نهایی' : ''}
+                        {' · '}
+                        {formatFaNumber(analysis.tripCount)} سفر
+                    </p>
+                </div>
+            </div>
+
+            <div className={`grid grid-cols-1 ${compact ? 'md:grid-cols-2' : 'md:grid-cols-2 xl:grid-cols-4'} gap-2`}>
+                {analysis.situations.map(situation => (
+                    <div key={situation.key} className="rounded-lg border border-white bg-white/90 px-2.5 py-2 shadow-sm">
+                        <div className="text-[11px] font-semibold text-slate-800">{situation.title}</div>
+                        <div className="text-[10px] text-slate-500 mb-1.5">
+                            {formatFaNumber(situation.tripCount)} سفر
+                            {situation.averageKm != null ? ` · میانگین ${formatFaNumber(situation.averageKm)} km` : ''}
+                        </div>
+                        {situation.tripCount === 0 ? (
+                            <div className="text-[10px] text-slate-400">در این وضعیت سفری نبود.</div>
+                        ) : (
+                            <>
+                                <RouteMixBar situation={situation} />
+                                {situation.topDestinations && situation.topDestinations.length > 0 && (
+                                    <div className="mt-1.5 text-[10px] text-slate-500 truncate">
+                                        پرتکرار:{' '}
+                                        {situation.topDestinations
+                                            .map(d => `${d.city} (${formatFaNumber(d.count)})`)
+                                            .join('، ')}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            <div className="rounded-lg border border-white bg-white/90 px-3 py-2">
+                <div className="text-[11px] font-semibold text-slate-800 mb-1">لاین بیشتر: پاستوریزه یا بستنی</div>
+                {compared <= 0 ? (
+                    <div className="text-[10px] text-slate-500">در این بازه سفر بستنی/پاستوریزه برای مقایسه نبود.</div>
+                ) : (
+                    <>
+                        <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100">
+                            {dairyPct > 0 && <div className="bg-sky-500" style={{ width: `${dairyPct}%` }} />}
+                            {icePct > 0 && <div className="bg-violet-500" style={{ width: `${icePct}%` }} />}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-slate-700">
+                            <span>پاستوریزه {formatFaNumber(dairyPct)}٪ ({formatFaNumber(analysis.lineMix.dairyVsIceCream.dairy.count)})</span>
+                            <span>بستنی {formatFaNumber(icePct)}٪ ({formatFaNumber(analysis.lineMix.dairyVsIceCream.iceCream.count)})</span>
+                        </div>
+                        {(analysis.lineMix.ambient.count > 0 || analysis.lineMix.other.count > 0) && (
+                            <div className="mt-1 text-[10px] text-slate-500">
+                                از کل سفرها: پاستوریزه {formatFaNumber(analysis.lineMix.dairy.percent)}٪ · بستنی{' '}
+                                {formatFaNumber(analysis.lineMix.iceCream.percent)}٪
+                                {analysis.lineMix.ambient.count > 0
+                                    ? ` · فروتلند ${formatFaNumber(analysis.lineMix.ambient.percent)}٪`
+                                    : ''}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {analysis.narrative && (
+                <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-[11px] leading-6 text-slate-700">
+                    <div className="font-semibold text-indigo-900 mb-0.5">جمع‌بندی</div>
+                    {analysis.narrative}
+                </div>
+            )}
+        </section>
+    );
+};
+
 export type DriverPreferencesViewProps = {
     data: DriverPreferencesResponse;
     categoryLabel?: string | null;
     targetDriverId: string;
     targetDriverName: string;
+    behaviorAnalysis?: DriverBehaviorAnalysisResponse | null;
+    behaviorAnalysisLoading?: boolean;
 };
 
 export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
@@ -564,6 +697,8 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
     categoryLabel,
     targetDriverId,
     targetDriverName,
+    behaviorAnalysis,
+    behaviorAnalysisLoading,
 }) => {
     const categoryGroups = useMemo(
         () => buildDayTable(data, targetDriverId, targetDriverName),
@@ -594,6 +729,11 @@ export const DriverPreferencesView: React.FC<DriverPreferencesViewProps> = ({
                     دسته خودرو: <span className="font-semibold text-slate-700">{categoryLabel}</span>
                 </div>
             )}
+
+            <DriverBehaviorAnalysisPanel
+                analysis={behaviorAnalysis || null}
+                loading={behaviorAnalysisLoading}
+            />
 
             <StatsBar stats={stats} />
 

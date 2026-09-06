@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch, getApiUrl, isAuthFailureStatus } from '../utils/apiConfig';
 import { User, UserRole, View } from '../types';
 import WorkflowRules from './WorkflowRules';
+import BaleRegionBanPanel from './BaleRegionBanPanel';
 
 type BaleChannel = {
     slot_number: number;
@@ -230,6 +231,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [groupChatId, setGroupChatId] = useState('');
     const [channelChatIds, setChannelChatIds] = useState<Record<number, string>>({});
     const [busy, setBusy] = useState(false);
+    const [upcomingMinutes, setUpcomingMinutes] = useState(5);
     const [seedResult, setSeedResult] = useState<string | null>(null);
     const [selectedSessionId, setSelectedSessionId] = useState('');
     const [showRulesDialog, setShowRulesDialog] = useState(false);
@@ -415,6 +417,27 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             } finally {
                 setSavingDriverId(null);
             }
+        });
+
+    const sendUpcomingAnnounce = () =>
+        runAction('پیام آماده‌باش', async () => {
+            const minutes = Math.round(Number(upcomingMinutes));
+            if (!Number.isFinite(minutes) || minutes < 1 || minutes > 120) {
+                throw new Error('دقیقه را بین ۱ تا ۱۲۰ وارد کنید');
+            }
+            const res = await apiFetch(getApiUrl('bale/announce-soon'), {
+                method: 'POST',
+                body: JSON.stringify({ minutes }),
+            });
+            if (!res.ok) throw new Error(await readApiError(res));
+            const data = (await res.json()) as { sent?: number; total?: number };
+            const sent = data.sent ?? 0;
+            const total = data.total ?? sent;
+            setSeedResult(
+                total > 1 && sent !== total
+                    ? `پیام آماده‌باش به ${sent.toLocaleString('fa-IR')} از ${total.toLocaleString('fa-IR')} گروه ارسال شد`
+                    : `پیام آماده‌باش (${minutes.toLocaleString('fa-IR')} دقیقه) به ${sent.toLocaleString('fa-IR')} گروه ارسال شد`
+            );
         });
 
     const ping = () =>
@@ -923,6 +946,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         )}
                     </section>
 
+                    <BaleRegionBanPanel drivers={drivers} />
+
                     {isTestMode && (
                         <section className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-4">
                             <h2 className="font-semibold text-amber-900">
@@ -988,6 +1013,26 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
+                                <label className="flex items-center gap-1 text-xs text-slate-600">
+                                    دقیقه
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={120}
+                                        value={upcomingMinutes}
+                                        onChange={e => setUpcomingMinutes(Number(e.target.value))}
+                                        className="w-16 border rounded-md px-2 py-1 text-sm ltr text-left"
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    disabled={busy || !tabMatchesServer}
+                                    onClick={sendUpcomingAnnounce}
+                                    className="px-3 py-1.5 rounded-md border border-amber-500 text-amber-800 bg-amber-50 text-sm disabled:opacity-50"
+                                    title="به گروه هر سه دسته ارسال می‌شود. در تب تستی فقط گروه مشترک."
+                                >
+                                    پیام آماده‌باش
+                                </button>
                                 <button
                                     type="button"
                                     disabled={busy || !tabMatchesServer}

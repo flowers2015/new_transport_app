@@ -26,6 +26,9 @@ import {
     formatDairyDestinationFreightCostsText,
     insertDairyCompactFreightExcelColumn,
     DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+    appendWarehouseLoadingExcelHeaders,
+    isWarehouseLoadingExcelHeader,
+    warehouseLoadingExcelValues,
     formatTonnageKgFromRaw,
     matchesFreightLine,
     isDairyOrAmbientLineType,
@@ -823,6 +826,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
             headers.splice(0, headers.length, ...nextHeaders);
         }
+
+        const includeWarehouseLoadingExcel =
+            (mode === 'compact' || mode === 'full') && activeLine === FreightLineType.Dairy;
+        if (includeWarehouseLoadingExcel) {
+            appendWarehouseLoadingExcelHeaders(headers);
+        }
         
         // ایجاد workbook و worksheet
         const wb = XLSX.utils.book_new();
@@ -955,7 +964,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
             
             // Process columns in header order - دقیقاً همان ترتیب headers
             headers.forEach(header => {
-                if (!isFreightDestinationDetailHeader(header)) {
+                if (!isFreightDestinationDetailHeader(header) && !isWarehouseLoadingExcelHeader(header)) {
                     row.push(getValueForHeader(header));
                 }
             });
@@ -996,6 +1005,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                         row.push(...Array(isFullDairyMode ? 9 : 6).fill(''));
                     }
                 }
+            }
+
+            if (includeWarehouseLoadingExcel) {
+                row.push(...warehouseLoadingExcelValues(ann));
             }
             
             wsData.push(row);
@@ -1099,6 +1112,12 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 if (mode === 'compact' && activeLine === FreightLineType.Dairy) {
                     const nextHeaders = insertDairyCompactFreightExcelColumn(headers);
                     headers.splice(0, headers.length, ...nextHeaders);
+                }
+
+                const includeWarehouseLoadingExcel =
+                    (mode === 'compact' || mode === 'full') && activeLine === FreightLineType.Dairy;
+                if (includeWarehouseLoadingExcel) {
+                    appendWarehouseLoadingExcelHeaders(headers);
                 }
 
                 const headerRow = worksheet.addRow(headers);
@@ -1208,7 +1227,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 rowsToExport.forEach((ann, idx) => {
                     const rowData: any[] = [];
                     headers.forEach((header) => {
-                        if (isFreightDestinationDetailHeader(header)) return;
+                        if (isFreightDestinationDetailHeader(header) || isWarehouseLoadingExcelHeader(header)) return;
                         rowData.push(header === 'ردیف' ? idx + 1 : getValueForHeader(header, ann, idx));
                     });
                     
@@ -1240,6 +1259,10 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                             rowData.push(...Array(isFullDairyMode ? 9 : 6).fill(''));
                         }
                     }
+                    }
+
+                    if (includeWarehouseLoadingExcel) {
+                        rowData.push(...warehouseLoadingExcelValues(ann));
                     }
                     
                     const row = worksheet.addRow(rowData);

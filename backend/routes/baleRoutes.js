@@ -22,6 +22,21 @@ router.get('/drivers/outreach', authenticateToken, authorizeRole(transportRoles)
 router.put('/drivers/:driverId/outreach', authenticateToken, authorizeRole(transportRoles), baleController.upsertDriverOutreach);
 router.post('/test/seed-drivers', authenticateToken, authorizeRole(transportRoles), baleController.seedTestDrivers);
 router.post('/test/ping', authenticateToken, authorizeRole(transportRoles), baleController.testPing);
+router.post(
+  '/announce-soon',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  baleController.sendUpcomingAnnounce
+);
+router.get('/region-bans/geo', authenticateToken, authorizeRole(transportRoles), baleController.getRegionBanGeo);
+router.get('/region-bans', authenticateToken, authorizeRole(transportRoles), baleController.listRegionBansHandler);
+router.post('/region-bans', authenticateToken, authorizeRole(transportRoles), baleController.createRegionBanHandler);
+router.delete(
+  '/region-bans/:id',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  baleController.deleteRegionBanHandler
+);
 router.post('/webhook/register', authenticateToken, authorizeRole(adminRoles), baleController.setWebhookUrl);
 
 router.post('/sessions/start', authenticateToken, authorizeRole(transportRoles), baleController.startSession);
