@@ -1,7 +1,10 @@
 const pool = require('../db');
 const baleApi = require('../services/bale/baleApi');
 const sessionEngine = require('../services/bale/baleSessionEngine');
+const { listRecentPrivatePeers } = require('../services/bale/baleInboundPeers');
+const { normalizeBaleChatId } = require('../services/bale/baleChatId');
 const { buildPreferenceBrief } = require('../services/bale/balePreferenceBrief');
+const { getActivePrefsForDrivers, formatPrefSummary } = require('../services/bale/baleNextLoadPrefs');
 const { modeLabel, stageLabel } = require('../services/bale/baleFormat');
 const {
   getRuntimeSettings,
@@ -118,6 +121,29 @@ async function getStatus(req, res) {
         getDispatchChannelPlans(),
         getCategoryQueueCounts(),
       ]);
+    const driverIds = [];
+    for (const s of activeSessions) {
+      let queue = s.queue_snapshot;
+      if (typeof queue === 'string') {
+        try {
+          queue = JSON.parse(queue);
+        } catch {
+          queue = [];
+        }
+      }
+      for (const entry of queue || []) {
+        const id = entry?.driverId || entry?.driver_id || entry?.driver?.id;
+        if (id) driverIds.push(id);
+      }
+    }
+    const prefMap = await getActivePrefsForDrivers(driverIds);
+    const nextLoadPrefs = {};
+    for (const [id, pref] of Object.entries(prefMap)) {
+      nextLoadPrefs[id] = {
+        ...pref,
+        summary: formatPrefSummary(pref),
+      };
+    }
     res.json({
       configured,
       bot,
@@ -127,6 +153,8 @@ async function getStatus(req, res) {
       channels: channelResult.rows,
       channelPlans,
       categoryQueues,
+      nextLoadPrefs,
+      lastPrivateChats: listRecentPrivatePeers(),
     });
   } catch (error) {
     console.error('❌ [bale] getStatus:', error);
@@ -156,7 +184,11 @@ async function updateChannel(req, res) {
         values.push(null);
       } else {
         updates.push(`chat_id = $${idx++}`);
-        values.push(Number(chatId));
+        const normalized = normalizeBaleChatId(chatId);
+        if (!normalized) {
+          return res.status(400).json({ message: 'chat_id نامعتبر است' });
+        }
+        values.push(normalized);
       }
     }
     if (vehicleCategory !== undefined) {
@@ -208,8 +240,6 @@ async function listDriverOutreach(req, res) {
        FROM drivers d
        LEFT JOIN bale_driver_outreach o ON o.driver_id = d.id
        WHERE (d.is_deleted IS NULL OR d.is_deleted = FALSE)
-         AND d.employee_id IS NOT NULL
-         AND TRIM(d.employee_id) <> ''
        ORDER BY d.name ASC`
     );
     res.json(rows);
@@ -262,6 +292,10 @@ async function upsertDriverOutreach(req, res) {
     if (!emp) {
       return res.status(400).json({ message: 'کد پرسنلی راننده یافت نشد' });
     }
+    const chatId = normalizeBaleChatId(outreachChatId);
+    if (!chatId) {
+      return res.status(400).json({ message: 'chat_id نامعتبر است' });
+    }
     await pool.query(
       `INSERT INTO bale_driver_outreach
         (driver_id, employee_id, outreach_chat_id, is_test_simulation, notes, updated_at)
@@ -273,7 +307,7 @@ async function upsertDriverOutreach(req, res) {
          is_test_simulation = EXCLUDED.is_test_simulation,
          notes = EXCLUDED.notes,
          updated_at = NOW()`,
-      [driverId, emp, Number(outreachChatId), Boolean(isTestSimulation), notes || null]
+      [driverId, emp, chatId, Boolean(isTestSimulation), notes || null]
     );
     res.json({ success: true });
   } catch (error) {
@@ -283,11 +317,12 @@ async function upsertDriverOutreach(req, res) {
 
 async function seedTestDrivers(req, res) {
   const { outreachChatId, limit } = req.body || {};
-  if (outreachChatId == null) {
-    return res.status(400).json({ message: 'outreachChatId الزامی است' });
+  const chatId = normalizeBaleChatId(outreachChatId);
+  if (!chatId) {
+    return res.status(400).json({ message: 'outreachChatId نامعتبر است' });
   }
   try {
-    const linked = await sessionEngine.seedTestDrivers(Number(outreachChatId), limit || 10);
+    const linked = await sessionEngine.seedTestDrivers(chatId, limit || 10);
     res.json({ linked, count: linked.length });
   } catch (error) {
     res.status(500).json({ message: error.message || 'خطا در seed' });
@@ -296,15 +331,23 @@ async function seedTestDrivers(req, res) {
 
 async function testPing(req, res) {
   const { chatId, text } = req.body || {};
-  if (!chatId) return res.status(400).json({ message: 'chatId الزامی است' });
+  const normalized = normalizeBaleChatId(chatId);
+  if (!normalized) return res.status(400).json({ message: 'chatId نامعتبر است' });
   try {
+    await baleApi.getChat(normalized);
     const result = await baleApi.sendMessage(
-      Number(chatId),
+      normalized,
       text || '✅ تست اتصال بازوی اعلام بار'
     );
-    res.json({ success: true, result });
+    res.json({ success: true, chatId: normalized, result });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const missing = /no such group or user|chat not found/i.test(String(error.message || ''));
+    res.status(missing ? 400 : 500).json({
+      message: missing
+        ? `ربات گفتگوی ${normalized} را نمی‌شناسد. آیدی پروفایل بله معمولاً غلط است. در چت خصوصی همین بازو بنویسید: آیدی — سپس همان عدد پاسخ را ذخیره کنید.`
+        : error.message,
+      chatId: normalized,
+    });
   }
 }
 
@@ -463,9 +506,9 @@ async function sendUpcomingAnnounce(req, res) {
     for (const item of byChat.values()) {
       try {
         try {
-          await baleApi.sendMessage(Number(item.chatId), text, { parseMode: BALE_PARSE_MODE });
+          await baleApi.sendMessage(item.chatId, text, { parseMode: BALE_PARSE_MODE });
         } catch {
-          await baleApi.sendMessage(Number(item.chatId), stripMarkdown(text));
+          await baleApi.sendMessage(item.chatId, stripMarkdown(text));
         }
         results.push({ chatId: item.chatId, categories: item.categories, ok: true });
       } catch (err) {
@@ -776,8 +819,8 @@ async function createReportRecipient(req, res) {
   if (!label || !String(label).trim()) {
     return res.status(400).json({ message: 'نام مخاطب الزامی است.' });
   }
-  const chat_id = Number(chatId);
-  if (!Number.isFinite(chat_id)) {
+  const chat_id = normalizeBaleChatId(chatId);
+  if (!chat_id) {
     return res.status(400).json({ message: 'chat_id عددی معتبر وارد کنید.' });
   }
   try {

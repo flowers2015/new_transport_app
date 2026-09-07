@@ -788,6 +788,8 @@ export interface DispatchQueueDriver {
     periodFinalizedKm?: number;
     /** تعداد خیلی‌دور نهایی فقط در دوره جاری نوبت */
     periodVeryFarCount?: number;
+    periodFarCount?: number;
+    periodNearCount?: number;
 }
 
 export interface DispatchQueueVehicle {

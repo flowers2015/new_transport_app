@@ -55,7 +55,7 @@ type DriverOutreach = {
     driver_name: string;
     employee_id: string;
     mobile?: string | null;
-    outreach_chat_id: number | null;
+    outreach_chat_id: number | string | null;
     bale_user_id?: number | null;
     is_test_simulation?: boolean | null;
     notes?: string | null;
@@ -71,10 +71,18 @@ type BaleStatus = {
     channels: BaleChannel[];
     channelPlans?: Array<{ category: string; slot: number; chatId: string; pilotCombined: boolean }>;
     categoryQueues?: Array<{ category: string; queueCount: number }>;
+    lastPrivateChats?: Array<{
+        chatId: string;
+        fromId?: string | null;
+        name?: string | null;
+        at?: string;
+    }>;
 };
 
 const MODES = [
-    { value: 'hybrid', label: 'هیبرید' },
+    { value: 'hybrid', label: 'هیبرید (انتخاب با اپراتور)' },
+    { value: 'auto', label: 'اتومات' },
+    { value: 'semi_auto', label: 'نیمه‌خودکار' },
     { value: 'manual', label: 'دستی' },
 ];
 
@@ -392,29 +400,43 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!testChatId.trim()) throw new Error('chat_id تست را وارد کنید');
             const res = await apiFetch(getApiUrl('bale/test/seed-drivers'), {
                 method: 'POST',
-                body: JSON.stringify({ outreachChatId: Number(testChatId), limit: 10 }),
+                body: JSON.stringify({ outreachChatId: testChatId.trim(), limit: 10 }),
             });
             if (!res.ok) throw new Error(await readApiError(res));
             const data = await res.json();
-            setSeedResult(`${data.count} راننده با chat مشترک لینک شدند`);
+            setSeedResult(
+                `${data.count} رانندهٔ اول صف با همین chat_id در جدول لینک راننده ذخیره شدند (فلگ تست).`
+            );
+            await loadDrivers();
         });
 
     const saveDriverOutreach = (driver: DriverOutreach) =>
         runAction('ذخیره chat راننده', async () => {
-            const chatRaw = editingChat[driver.driver_id]?.trim();
-            if (!chatRaw) throw new Error('chat_id را وارد کنید');
+            const chatRaw =
+                editingChat[driver.driver_id]?.trim() || (isTestMode ? testChatId.trim() : '');
+            if (!chatRaw) {
+                throw new Error(
+                    isTestMode
+                        ? 'chat_id ردیف یا کادر «chat_id خصوصی/تست» را وارد کنید'
+                        : 'chat_id را در ردیف راننده وارد کنید'
+                );
+            }
+            if (!driver.employee_id?.trim()) {
+                throw new Error('این راننده کد پرسنلی ندارد؛ تا ثبت کد، لینک بله ذخیره نمی‌شود');
+            }
             setSavingDriverId(driver.driver_id);
             try {
                 const res = await apiFetch(getApiUrl(`bale/drivers/${driver.driver_id}/outreach`), {
                     method: 'PUT',
                     body: JSON.stringify({
-                        outreachChatId: Number(chatRaw),
+                        outreachChatId: chatRaw,
                         employeeId: driver.employee_id,
                         isTestSimulation: isTestMode,
                         notes: isTestMode ? 'ثبت دستی — تست' : 'ثبت دستی — عملیاتی',
                     }),
                 });
                 if (!res.ok) throw new Error(await readApiError(res));
+                await loadDrivers();
             } finally {
                 setSavingDriverId(null);
             }
@@ -447,7 +469,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             if (!chat) throw new Error('chat_id وارد کنید');
             const res = await apiFetch(getApiUrl('bale/test/ping'), {
                 method: 'POST',
-                body: JSON.stringify({ chatId: Number(chat) }),
+                body: JSON.stringify({ chatId: String(chat).trim() }),
             });
             if (!res.ok) throw new Error(await readApiError(res));
         });
@@ -612,10 +634,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const queue = Array.isArray(session?.queueSnapshot) ? session.queueSnapshot : [];
     const currentTurn = session ? queue[session.currentTurnIndex] : null;
 
-    const workspaceDrivers = drivers.filter(d => {
-        if (!d.outreach_chat_id) return true;
-        return isTestMode ? Boolean(d.is_test_simulation) : !d.is_test_simulation;
-    });
+    const workspaceDrivers = drivers;
 
     const filteredDrivers = workspaceDrivers.filter(d => {
         const q = driverFilter.trim().toLowerCase();
@@ -915,7 +934,11 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                             filteredDrivers.map(d => (
                                                 <tr key={d.driver_id} className="border-t border-slate-100">
                                                     <td className="p-2">{d.driver_name || '—'}</td>
-                                                    <td className="p-2 font-mono text-xs">{d.employee_id}</td>
+                                                    <td className="p-2 font-mono text-xs">
+                                                        {d.employee_id || (
+                                                            <span className="text-red-500">بدون کد</span>
+                                                        )}
+                                                    </td>
                                                     <td className="p-2">
                                                         <input
                                                             className="w-full min-w-[120px] border rounded px-2 py-1 text-xs ltr text-left"
@@ -963,8 +986,45 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                 ابزار تست (فقط تب تستی)
                             </h2>
                             <p className="text-xs text-slate-600">
-                                تا ۱۰ راننده صف — همه PV به یک chat_id. شناسایی با نوبت جاری هر جلسه.
+                                آیدی داخل پروفایل بله (مثل ۱۹۰۰۲۶۴۴۷) برای PV کافی نیست. باید در چت
+                                خصوصی همین بازو بنویسید «آیدی» و عددی که بازو جواب می‌دهد را اینجا
+                                بگذارید. قبل از شروع جلسه «ارسال پیام تست» را بزنید؛ اگر خطا داد جلسه را شروع نکنید.
                             </p>
+                            {status?.bot?.username && (
+                                <p className="text-xs text-slate-700">
+                                    بازوی سرور:{' '}
+                                    <span className="font-mono ltr" dir="ltr">
+                                        @{status.bot.username}
+                                    </span>
+                                </p>
+                            )}
+                            {status?.lastPrivateChats?.length ? (
+                                <div className="text-xs space-y-1">
+                                    <p className="font-medium text-amber-900">
+                                        گفتگوی خصوصی که بازو همین الان دیده:
+                                    </p>
+                                    {status.lastPrivateChats.map(p => (
+                                        <button
+                                            key={p.chatId}
+                                            type="button"
+                                            className="block w-full text-right px-2 py-1 rounded border border-amber-200 bg-white hover:bg-amber-50 ltr"
+                                            dir="ltr"
+                                            onClick={() => setTestChatId(p.chatId)}
+                                        >
+                                            {p.chatId}
+                                            {p.fromId && p.fromId !== p.chatId
+                                                ? ` (user ${p.fromId})`
+                                                : ''}
+                                            {p.name ? ` — ${p.name}` : ''}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-amber-800">
+                                    هنوز هیچ پیام خصوصی به این بازو نرسیده. تا وقتی «آیدی» نزنید، PV
+                                    ۴۰۴ می‌دهد.
+                                </p>
+                            )}
                             <div className="grid md:grid-cols-2 gap-3">
                                 <label className="text-sm block">
                                     chat_id خصوصی/تست (PV)
@@ -972,7 +1032,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                         className="mt-1 w-full border rounded-md px-3 py-2 text-sm ltr text-left"
                                         value={testChatId}
                                         onChange={e => setTestChatId(e.target.value)}
-                                        placeholder="مثلاً از getUpdates"
+                                        placeholder="عدد پاسخ بازو به پیام آیدی"
                                     />
                                 </label>
                                 <div className="text-sm block">
@@ -1203,6 +1263,25 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                     </span>
                                                 )}
                                             </div>
+                                            {(catSession.mode === 'hybrid' ||
+                                                catSession.mode === 'auto' ||
+                                                catSession.mode === 'semi_auto') &&
+                                                status?.nextLoadPrefs?.[queueDriverId(turn)]
+                                                    ?.summary && (
+                                                    <div className="text-[11px] text-violet-800 bg-violet-50 rounded px-2 py-1 whitespace-pre-line">
+                                                        اعلام بار بعدی این راننده (کمکی / رزرو نیست):
+                                                        {'\n'}
+                                                        {
+                                                            status.nextLoadPrefs[queueDriverId(turn)]
+                                                                .summary
+                                                        }
+                                                    </div>
+                                                )}
+                                            {catSession.status === 'awaiting_admin' && (
+                                                <div className="text-[11px] text-amber-800 bg-amber-50 rounded px-2 py-1">
+                                                    مهلت تمام شد. وقت اضافه بدهید، دستی تخصیص دهید، یا نوبت را رد کنید.
+                                                </div>
+                                            )}
                                             <div>
                                                 زمان مانده:{' '}
                                                 <strong className={remainExpired ? 'text-red-600' : ''}>
@@ -1266,7 +1345,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                     تخصیص به راننده
                                                 </button>
                                             </div>
-                                            {catSession.status !== 'awaiting_admin' && (
+                                            {catSession.status !== 'awaiting_confirm' && (
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span className="text-xs text-slate-500">وقت اضافه:</span>
                                                     {EXTEND_MINUTE_OPTIONS.map(min => (
@@ -1277,7 +1356,11 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                             onClick={() =>
                                                                 extendTurnForSession(catSession.id, min)
                                                             }
-                                                            className="px-2 py-1 rounded border border-slate-300 text-xs hover:bg-slate-50 disabled:opacity-50"
+                                                            className={`px-2 py-1 rounded border text-xs disabled:opacity-50 ${
+                                                                catSession.status === 'awaiting_admin'
+                                                                    ? 'border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                                                                    : 'border-slate-300 hover:bg-slate-50'
+                                                            }`}
                                                         >
                                                             +{min} دقیقه
                                                         </button>

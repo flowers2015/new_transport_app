@@ -52,28 +52,20 @@ function filterEligibleForDriver(announcements, driverEntry, stage, rejectedAnno
   });
 }
 
-function pickAutoAnnouncement(eligible, recentTaken = []) {
+function pickMaxRemainingKm(eligible) {
   if (!eligible || eligible.length === 0) return null;
-  if (eligible.length === 1) return eligible[0];
-
-  const lastLine = recentTaken[0]?.lineType || null;
-  if (lastLine) {
-    const lineMatches = eligible.filter(a => a.lineType === lastLine);
-    if (lineMatches.length === 1) return lineMatches[0];
-  }
-
-  const withPriority = eligible.filter(a => {
-    const p = (a.priority || '').toString().toLowerCase();
-    return p === 'high' || p === 'بالا';
-  });
-  if (withPriority.length === 1) return withPriority[0];
-
-  const sorted = [...eligible].sort((a, b) => {
+  return [...eligible].sort((a, b) => {
+    const kmA = Number(a?.route?.round_trip_km ?? a?.roundTripKm ?? 0) || 0;
+    const kmB = Number(b?.route?.round_trip_km ?? b?.roundTripKm ?? 0) || 0;
+    if (kmB !== kmA) return kmB - kmA;
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return ta - tb;
-  });
-  return sorted[0];
+  })[0];
+}
+
+function pickAutoAnnouncement(eligible, _recentTaken = []) {
+  return pickMaxRemainingKm(eligible);
 }
 
 function canSemiAutoAssign(eligible) {
@@ -83,5 +75,6 @@ function canSemiAutoAssign(eligible) {
 module.exports = {
   filterEligibleForDriver,
   pickAutoAnnouncement,
+  pickMaxRemainingKm,
   canSemiAutoAssign,
 };

@@ -15,14 +15,15 @@ async function enrichAnnouncements(announcements) {
   if (!ids.length) return announcements || [];
 
   const { rows: faRows } = await pool.query(
-    `SELECT id, brand, origin_city, cargo_value, notes, delivery_date, line_type, loading_date
+    `SELECT id, brand, origin_city, cargo_value, notes, delivery_date, line_type, loading_date,
+            representative_type, representative_name
      FROM freight_announcements WHERE id = ANY($1::varchar[])`,
     [ids]
   );
   const faMap = new Map(faRows.map(r => [r.id, r]));
 
   const { rows: destRows } = await pool.query(
-    `SELECT freight_announcement_id, city, delivery_date
+    `SELECT freight_announcement_id, city, delivery_date, representative_name, representative_type
      FROM freight_destinations WHERE freight_announcement_id = ANY($1::varchar[])
      ORDER BY created_at ASC`,
     [ids]
@@ -43,6 +44,20 @@ async function enrichAnnouncements(announcements) {
       .filter(Boolean)
       .map(d => String(d).replace(/-/g, '/'));
     const destCities = dests.map(d => d.city).filter(Boolean);
+    const destRepTypes = [
+      ...new Set(
+        dests
+          .map(d => d.representative_type)
+          .filter(Boolean)
+      ),
+    ];
+    const destRepNames = [
+      ...new Set(
+        dests
+          .map(d => (d.representative_name || '').trim())
+          .filter(Boolean)
+      ),
+    ];
 
     return {
       ...ann,
@@ -51,6 +66,17 @@ async function enrichAnnouncements(announcements) {
       brand: combineBrands(row || { brand: ann.brand }),
       cargoValue: ann.cargoValue ?? (row?.cargo_value != null ? Number(row.cargo_value) : null),
       notes: ann.notes ?? row?.notes ?? null,
+      representativeType:
+        ann.representativeType ||
+        row?.representative_type ||
+        destRepTypes[0] ||
+        null,
+      representativeName:
+        ann.representativeName ||
+        row?.representative_name ||
+        destRepNames.join('، ') ||
+        null,
+      allDestinations: dests.length ? dests : ann.allDestinations,
       deliveryDate: (() => {
         const raw = row?.delivery_date;
         if (raw) {

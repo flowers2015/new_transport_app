@@ -510,165 +510,190 @@ function isFarOrVeryFarOpportunity(item) {
   return stage === 'stage1' || stage === 'stage2_far';
 }
 
-async function fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd, options = {}) {
-  const map = new Map();
-  if (!driverIds?.length) return map;
+function categoryKeyFromText(value) {
+  if (!value || !String(value).trim()) return null;
+  return resolveCategoryKey(String(value)) || detectVehicleCategoryKey(String(value));
+}
 
-  const categoryLabel = options.categoryLabel || null;
-  const params = [driverIds, cycleStart, cycleEnd];
-  let categorySql = '';
-  if (categoryLabel) {
-    params.push(categoryLabel);
-    // فیلتر نرم: اگر vehicle_type خالی بود از آمار حذف نشود
-    categorySql = `
-      AND (
-        fa.vehicle_type IS NULL
-        OR TRIM(fa.vehicle_type) = ''
-        OR fa.vehicle_type = $${params.length}
-        OR (
-          $${params.length} = 'تریلی'
-          AND fa.vehicle_type IN ('تریلی', 'تریلر')
-        )
-        OR (
-          $${params.length} = 'مینی تریلی'
-          AND (
-            fa.vehicle_type ILIKE '%مینی%'
-            OR fa.vehicle_type ILIKE '%mini%'
-          )
-        )
-        OR (
-          $${params.length} = 'ده چرخ'
-          AND (
-            fa.vehicle_type ILIKE '%ده چرخ%'
-            OR fa.vehicle_type ILIKE '%ده‌چرخ%'
-            OR fa.vehicle_type ILIKE '%10%'
-          )
-        )
-      )
-    `;
+function resolveTripCategoryLabel(row) {
+  const keys = [
+    categoryKeyFromText(row.assignment_vehicle_category),
+    categoryKeyFromText(row.vehicle_type),
+    categoryKeyFromText(row.current_vehicle_type),
+    categoryKeyFromText(row.vehicle_model),
+  ];
+  for (const key of keys) {
+    if (key === 'mini-trailer' || key === 'ten-wheel') {
+      return CATEGORY_KEY_TO_LABEL[key];
+    }
   }
+  for (const key of keys) {
+    if (key && CATEGORY_KEY_TO_LABEL[key]) return CATEGORY_KEY_TO_LABEL[key];
+  }
+  return null;
+}
 
-  // هر سفر (اعلام بار) = بیشترین پیمایش بین مقصدهای تخلیه؛ سپس جمع سفرهای دوره
+function resolveTripKmAndBucket(row) {
+  const assignedKm = Number(row.assigned_route_km);
+  const destKm = Number(row.dest_route_km);
+  const assignKm = Number(row.assignment_distance_km);
+  const kmCandidates = [assignedKm, destKm, assignKm].filter(n => Number.isFinite(n) && n > 0);
+  const km = kmCandidates.length ? Math.max(...kmCandidates) : 0;
+
+  const routeLike = {
+    distance_category: row.assigned_distance_category || row.dest_distance_category || '',
+    route_category: row.assigned_route_category || row.dest_route_category || '',
+    round_trip_km: km || null,
+    distance_km: km || null,
+  };
+  let bucket = classifyRouteDistanceBucket(routeLike);
+  if (!bucket && isVeryFarAnnouncement({ route: routeLike })) bucket = 'veryFar';
+  if (!bucket && km > 0) bucket = km >= 500 ? 'far' : 'near';
+  return { km, bucket };
+}
+
+async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, options = {}) {
+  if (!driverIds?.length) return [];
+  const finalizedOnly = options.finalizedOnly !== false;
+  const finalizedSql = finalizedOnly
+    ? `AND (
+          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
+          OR fa.status IN ('Finalized', 'InTransit')
+        )
+        AND (
+          da.is_cancelled IS NULL
+          OR da.is_cancelled = FALSE
+          OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
+          OR fa.status IN ('Finalized', 'InTransit')
+        )`
+    : `AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)`;
   const { rows } = await pool.query(
     `
       SELECT
-        per_trip.driver_id,
-        SUM(per_trip.trip_km)::float AS total_km
-      FROM (
+        da.id,
+        da.driver_id,
+        da.freight_announcement_id,
+        da.created_at,
+        da.stage,
+        da.distance_km AS assignment_distance_km,
+        da.vehicle_category AS assignment_vehicle_category,
+        fa.vehicle_type,
+        fa.announcement_code,
+        v.current_vehicle_type,
+        v.model AS vehicle_model,
+        dr.round_trip_km AS assigned_route_km,
+        dr.distance_category AS assigned_distance_category,
+        dr.route_category AS assigned_route_category,
+        dr.city AS assigned_route_city,
+        dest.round_trip_km AS dest_route_km,
+        dest.distance_category AS dest_distance_category,
+        dest.route_category AS dest_route_category,
+        dest.city AS dest_city
+      FROM dispatch_assignments da
+      LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
+      LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+      LEFT JOIN vehicles v ON v.id = da.vehicle_id
+      LEFT JOIN LATERAL (
         SELECT
-          da.driver_id,
-          da.freight_announcement_id,
-          MAX(COALESCE(dr.round_trip_km, da.distance_km, 0))::float AS trip_km
-        FROM dispatch_assignments da
-        LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
-        WHERE da.driver_id = ANY($1::varchar[])
-          AND da.created_at >= $2
-          AND da.created_at <= $3
-          AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-          AND fa.status NOT IN ('Cancelled')
-          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
-          AND (
-            COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-            OR fa.status = 'Finalized'
-          )
-          ${categorySql}
-        GROUP BY da.driver_id, da.freight_announcement_id
-      ) per_trip
-      GROUP BY per_trip.driver_id
+          dr2.round_trip_km,
+          dr2.distance_category,
+          dr2.route_category,
+          dr2.city
+        FROM freight_destinations fd
+        INNER JOIN dispatch_routes dr2
+          ON dr2.is_active = TRUE
+         AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr2.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+           = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+        WHERE fd.freight_announcement_id = fa.id
+        ORDER BY COALESCE(dr2.round_trip_km, 0) DESC NULLS LAST
+        LIMIT 1
+      ) dest ON TRUE
+      WHERE da.driver_id = ANY($1::varchar[])
+        AND da.created_at >= $2
+        AND da.created_at <= $3
+        AND (fa.id IS NULL OR fa.status IS NULL OR fa.status NOT IN ('Cancelled'))
+        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+        ${finalizedSql}
     `,
-    params
+    [driverIds, cycleStart, cycleEnd]
   );
+  return rows.map(row => {
+    const { km, bucket } = resolveTripKmAndBucket(row);
+    return {
+      id: row.id,
+      driverId: row.driver_id,
+      announcementId: row.freight_announcement_id,
+      announcementCode: row.announcement_code,
+      createdAt: row.created_at,
+      stage: row.stage,
+      city: row.dest_city || row.assigned_route_city || null,
+      categoryLabel: resolveTripCategoryLabel(row),
+      km,
+      bucket,
+      isVeryFar: bucket === 'veryFar',
+    };
+  });
+}
 
-  for (const row of rows) {
-    if (row.driver_id) {
-      map.set(row.driver_id, Math.round(Number(row.total_km) || 0));
+async function fetchDriverCycleStatsAll(pool, driverIds, cycleStart, cycleEnd) {
+  const trips = await fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, {
+    finalizedOnly: true,
+  });
+  return aggregateCycleTripStats(trips, null);
+}
+
+function aggregateCycleTripStats(trips, categoryLabel = null) {
+  const perTrip = new Map();
+  for (const trip of trips) {
+    if (categoryLabel && trip.categoryLabel && trip.categoryLabel !== categoryLabel) continue;
+    if (!trip.driverId) continue;
+    const key = `${trip.driverId}::${trip.announcementId || trip.id}`;
+    const prev = perTrip.get(key);
+    if (!prev) {
+      perTrip.set(key, { ...trip });
+      continue;
     }
+    prev.km = Math.max(prev.km || 0, trip.km || 0);
+    if (trip.isVeryFar) {
+      prev.isVeryFar = true;
+      prev.bucket = 'veryFar';
+    } else if (prev.bucket !== 'veryFar' && trip.bucket) {
+      prev.bucket = trip.bucket;
+    }
+    if (!prev.city && trip.city) prev.city = trip.city;
   }
-  return map;
+
+  const kmMap = new Map();
+  const vfMap = new Map();
+  const farMap = new Map();
+  const nearMap = new Map();
+  for (const trip of perTrip.values()) {
+    kmMap.set(trip.driverId, (kmMap.get(trip.driverId) || 0) + Math.round(trip.km || 0));
+    if (trip.bucket === 'veryFar') vfMap.set(trip.driverId, (vfMap.get(trip.driverId) || 0) + 1);
+    else if (trip.bucket === 'far') farMap.set(trip.driverId, (farMap.get(trip.driverId) || 0) + 1);
+    else if (trip.bucket === 'near') nearMap.set(trip.driverId, (nearMap.get(trip.driverId) || 0) + 1);
+  }
+  return { kmMap, vfMap, farMap, nearMap, perTrip };
+}
+
+async function fetchDriverCycleStatsByCategory(pool, driverIds, cycleStart, cycleEnd) {
+  const trips = await fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd);
+  const byCategory = new Map();
+  const labels = [...new Set(trips.map(t => t.categoryLabel).filter(Boolean))];
+  for (const label of labels) {
+    byCategory.set(label, aggregateCycleTripStats(trips, label));
+  }
+  return { trips, byCategory };
+}
+
+async function fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd, options = {}) {
+  const trips = await fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd);
+  return aggregateCycleTripStats(trips, options.categoryLabel || null).kmMap;
 }
 
 async function fetchDriversVeryFarCount(pool, driverIds, cycleStart, cycleEnd, options = {}) {
-  const map = new Map();
-  if (!driverIds?.length) return map;
-
-  const categoryLabel = options.categoryLabel || null;
-  const params = [driverIds, cycleStart, cycleEnd];
-  let categorySql = '';
-  if (categoryLabel) {
-    params.push(categoryLabel);
-    categorySql = `
-      AND (
-        fa.vehicle_type IS NULL
-        OR TRIM(fa.vehicle_type) = ''
-        OR fa.vehicle_type = $${params.length}
-        OR (
-          $${params.length} = 'تریلی'
-          AND fa.vehicle_type IN ('تریلی', 'تریلر')
-        )
-        OR (
-          $${params.length} = 'مینی تریلی'
-          AND (
-            fa.vehicle_type ILIKE '%مینی%'
-            OR fa.vehicle_type ILIKE '%mini%'
-          )
-        )
-        OR (
-          $${params.length} = 'ده چرخ'
-          AND (
-            fa.vehicle_type ILIKE '%ده چرخ%'
-            OR fa.vehicle_type ILIKE '%ده‌چرخ%'
-            OR fa.vehicle_type ILIKE '%10%'
-          )
-        )
-      )
-    `;
-  }
-
-  const { rows } = await pool.query(
-    `
-      SELECT
-        per_trip.driver_id,
-        COUNT(*)::int AS vf_count
-      FROM (
-        SELECT
-          da.driver_id,
-          da.freight_announcement_id
-        FROM dispatch_assignments da
-        LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-        LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
-        WHERE da.driver_id = ANY($1::varchar[])
-          AND da.created_at >= $2
-          AND da.created_at <= $3
-          AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-          AND fa.status NOT IN ('Cancelled')
-          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
-          AND (
-            COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-            OR fa.status = 'Finalized'
-          )
-          AND (
-            LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلی‌دور%'
-            OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلیدور%'
-            OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%veryfar%'
-            OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.route_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلی‌دور%'
-            OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.route_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلیدور%'
-            OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.route_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%veryfar%'
-          )
-          ${categorySql}
-        GROUP BY da.driver_id, da.freight_announcement_id
-      ) per_trip
-      GROUP BY per_trip.driver_id
-    `,
-    params
-  );
-
-  for (const row of rows) {
-    if (row.driver_id) {
-      map.set(row.driver_id, Number(row.vf_count) || 0);
-    }
-  }
-  return map;
+  const trips = await fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd);
+  return aggregateCycleTripStats(trips, options.categoryLabel || null).vfMap;
 }
 
 module.exports = {
@@ -686,5 +711,9 @@ module.exports = {
   isFarOrVeryFarOpportunity,
   fetchDriversFinalizedKm,
   fetchDriversVeryFarCount,
+  fetchDriverCycleTrips,
+  fetchDriverCycleStatsByCategory,
+  fetchDriverCycleStatsAll,
+  aggregateCycleTripStats,
   groupAssignmentsByTrip: require('./multiDestinationAssignments').groupAssignmentsByTrip,
 };

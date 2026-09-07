@@ -1807,6 +1807,8 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
         const vehicleCode = entry.vehicle?.vehicleCode || entry.vehicle?.model || '---';
         const driverName = entry.driver?.name || '---';
         const periodKm = entry.driver?.periodFinalizedKm ?? 0;
+        const periodFarCount = entry.driver?.periodFarCount ?? 0;
+        const periodNearCount = entry.driver?.periodNearCount ?? 0;
         const mobile = entry.driver?.mobile || '-';
         const originalPosition = entry.position ?? 0;
         const originalValue = originalPosition > 0 ? originalPosition.toString() : '';
@@ -1851,13 +1853,12 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                     : statusStyle.badgeLabel
                 : null;
         const hasVeryFarBefore =
-            Boolean(hint?.hasVeryFarHistory) ||
-            rowStatus === 'very_far_history' ||
-            (entry.periodVeryFarCount ?? entry.driver?.periodVeryFarCount ?? 0) > 0;
+            (entry.periodVeryFarCount ?? entry.driver?.periodVeryFarCount ?? 0) > 0 ||
+            rowStatus === 'very_far_history';
         const veryFarCount =
-            hint?.veryFarHistoryCount ??
-            entry.periodVeryFarCount ??
             entry.driver?.periodVeryFarCount ??
+            entry.periodVeryFarCount ??
+            hint?.veryFarHistoryCount ??
             0;
 
         return (
@@ -1896,7 +1897,14 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                 <td className="px-1 py-1.5 text-center align-middle font-mono text-[10px]">
                     {vehicleCode}
                 </td>
-                <td className="px-1 py-1.5 text-center align-middle text-[10px] text-violet-700 whitespace-nowrap">
+                <td
+                    className="px-1 py-1.5 text-center align-middle text-[10px] text-violet-700 whitespace-nowrap"
+                    title={
+                        periodKm > 0 || veryFarCount > 0 || periodFarCount > 0 || periodNearCount > 0
+                            ? `خیلی‌دور ${veryFarCount.toLocaleString('fa-IR')} · دور ${periodFarCount.toLocaleString('fa-IR')} · نزدیک ${periodNearCount.toLocaleString('fa-IR')}`
+                            : 'پیمایش نهایی در دوره جاری این دسته'
+                    }
+                >
                     {periodKm > 0 ? periodKm.toLocaleString('fa-IR') : '—'}
                 </td>
                 <td className="px-1.5 py-1.5 align-middle min-w-0">

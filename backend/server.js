@@ -210,7 +210,7 @@ async function runStartupMigrations() {
     { name: 'carrier_name', fn: require('./migrations/add_carrier_name_column') },
     { name: 'carrier_handoff', fn: require('./migrations/add_carrier_handoff') },
     { name: 'tariff_freight_cost', fn: require('./migrations/add_tariff_freight_cost') },
-    { name: 'bale_ambient_notify_seq', fn: require('./migrations/add_bale_ambient_notify_seq') },
+    { name: 'bale_next_load_prefs', fn: require('./migrations/create_bale_next_load_prefs') },
     { name: 'vehicle_code', fn: require('./migrations/add_vehicle_code_column') },
     { name: 'support_tickets', fn: require('./migrations/create_support_tickets_table') },
     { name: 'destination_original_creator', fn: require('./migrations/add_destination_original_creator') },

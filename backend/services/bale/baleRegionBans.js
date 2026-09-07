@@ -603,6 +603,7 @@ module.exports = {
   updateRegionBan,
   deleteRegionBan,
   loadGeoCatalog,
+  extractAnnouncementCities,
   filterAnnouncementsByRegionBans,
   assertAnnouncementAllowedForDriver,
 };

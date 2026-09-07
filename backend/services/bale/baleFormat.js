@@ -15,6 +15,71 @@ function formatRial(value) {
   return `${n.toLocaleString('en-US')} ریال`;
 }
 
+function faNumber(n, maxFractionDigits = 0) {
+  return Number(n).toLocaleString('fa-IR', {
+    maximumFractionDigits: maxFractionDigits,
+    minimumFractionDigits: 0,
+  });
+}
+
+/** ارزش بار برای اعلام بله: میلیارد/میلیون تومان به‌جای صفرهای ریال */
+function formatCargoValueToman(valueRial) {
+  const rial = Number(valueRial);
+  if (!Number.isFinite(rial) || rial <= 0) return '—';
+  const toman = rial / 10;
+  const billion = toman / 1e9;
+  if (billion >= 1) {
+    const digits = billion >= 10 ? 0 : 1;
+    const rounded = digits === 0 ? Math.round(billion) : Math.round(billion * 10) / 10;
+    return `${faNumber(rounded, digits)} میلیارد تومان`;
+  }
+  const million = toman / 1e6;
+  if (million >= 1) {
+    return `${faNumber(Math.round(million), 0)} میلیون تومان`;
+  }
+  return `${faNumber(Math.round(toman), 0)} تومان`;
+}
+
+function formatRepresentativeType(value) {
+  if (!value) return '';
+  const v = String(value).trim().toLowerCase();
+  if (v === 'distributor' || v === 'distribution' || v === 'پخش') return 'پخش';
+  if (v === 'depot' || v === 'دپو') return 'دپو';
+  if (v === 'agent' || v === 'representative' || v === 'نماینده') return 'نماینده';
+  const raw = String(value).trim();
+  if (raw === 'پخش' || raw === 'نماینده' || raw === 'دپو') return raw;
+  return raw;
+}
+
+function getAnnouncementRepType(ann) {
+  const fromAnn = formatRepresentativeType(ann.representativeType || ann.representative_type);
+  if (fromAnn) return fromAnn;
+  const dests = ann.allDestinations || ann.destinations || [];
+  const types = dests
+    .map(d => formatRepresentativeType(d.representativeType || d.representative_type))
+    .filter(Boolean);
+  return [...new Set(types)].join('، ') || '';
+}
+
+function getAnnouncementRepName(ann) {
+  const fromAnn = String(ann.representativeName || ann.representative_name || '').trim();
+  if (fromAnn) return fromAnn;
+  const dests = ann.allDestinations || ann.destinations || [];
+  const names = dests
+    .map(d => String(d.representativeName || d.representative_name || '').trim())
+    .filter(Boolean);
+  return [...new Set(names)].join('، ') || '';
+}
+
+function formatRepLine(ann) {
+  const type = getAnnouncementRepType(ann);
+  const name = getAnnouncementRepName(ann);
+  if (!type && !name) return '';
+  if (type && name) return `نمایندگی ${type} | ${name}`;
+  if (type) return `نوع نمایندگی ${type}`;
+  return `نماینده ${name}`;
+}
+
 /** بله/Telegram Markdown — کاراکترهای خاص داخل متن پویا */
 function escapeMarkdown(text) {
   return String(text || '')
@@ -79,26 +144,37 @@ function formatDeliveryDate(ann) {
   );
 }
 
+function formatAnnouncementMetaLines(ann, { markdown = false } = {}) {
+  const wrap = markdown
+    ? (s) => escapeMarkdown(s)
+    : (s) => String(s || '');
+  const brand = wrap(ann.brand || '—');
+  const cargo = wrap(formatCargoValueToman(ann.cargoValue));
+  const delivery = wrap(formatDeliveryDate(ann));
+  const kmPlain = formatRouteKm(ann);
+  const noteRaw =
+    ann.notes && String(ann.notes).trim() && String(ann.notes).trim() !== kmPlain
+      ? String(ann.notes).trim()
+      : null;
+  const rep = formatRepLine(ann);
+  const lines = [`   برند ${brand} | ارزش ${cargo} | تحویل ${delivery}`];
+  if (rep) lines.push(`   ${markdown ? wrap(rep) : rep}`);
+  if (noteRaw) lines.push(`   ${markdown ? wrap(noteRaw) : noteRaw}`);
+  return lines.join('\n');
+}
+
 function formatAnnouncementRow(index, ann) {
   const line = ann.lineType || '—';
   const dest = getDestinationDisplay(ann);
   const km = formatRouteKm(ann);
   const origin = getOriginDisplay(ann);
-  const brand = ann.brand || '—';
-  const cargo = formatRial(ann.cargoValue);
-  const delivery = formatDeliveryDate(ann);
-  const note =
-    ann.notes && String(ann.notes).trim() && String(ann.notes).trim() !== km
-      ? String(ann.notes).trim()
-      : null;
-
-  let text =
-    `${index}. بار ${line}\n` +
+  const prefix = index ? `${index}. ` : '';
+  return (
+    `${prefix}بار ${line}\n` +
     `   📍 ${dest}  |  📏 ${km}\n` +
     `   🏭 بارگیری از ${origin}\n` +
-    `   برند ${brand} | ارزش ${cargo} | تحویل ${delivery}`;
-  if (note) text += `\n   ${note}`;
-  return text;
+    formatAnnouncementMetaLines(ann, { markdown: false })
+  );
 }
 
 function formatAnnouncementRowMarkdown(index, ann) {
@@ -106,21 +182,13 @@ function formatAnnouncementRowMarkdown(index, ann) {
   const dest = escapeMarkdown(getDestinationDisplay(ann));
   const km = escapeMarkdown(formatRouteKm(ann));
   const origin = escapeMarkdown(getOriginDisplay(ann));
-  const brand = escapeMarkdown(ann.brand || '—');
-  const cargo = escapeMarkdown(formatRial(ann.cargoValue));
-  const delivery = escapeMarkdown(formatDeliveryDate(ann));
-  const note =
-    ann.notes && String(ann.notes).trim() && String(ann.notes).trim() !== formatRouteKm(ann)
-      ? escapeMarkdown(String(ann.notes).trim())
-      : null;
-
-  let text =
-    `${mdBold(`${index}.`)} بار ${line}\n` +
+  const prefix = index ? `${mdBold(`${index}.`)} ` : '';
+  return (
+    `${prefix}بار ${line}\n` +
     `   📍 ${mdBold(dest)}  |  📏 ${mdBold(km)}\n` +
     `   🏭 بارگیری از ${mdBold(origin)}\n` +
-    `   برند ${brand} | ارزش ${cargo} | تحویل ${delivery}`;
-  if (note) text += `\n   ${note}`;
-  return text;
+    formatAnnouncementMetaLines(ann, { markdown: true })
+  );
 }
 
 function formatAssignmentGroupMessage(driverName, rowNumber, ann) {
@@ -292,6 +360,8 @@ module.exports = {
   parseRowNumber,
   looksLikeDriverSelectionAttempt,
   formatRial,
+  formatCargoValueToman,
+  formatRepresentativeType,
   getDestinationDisplay,
   stripMarkdown,
   mdBold,

@@ -11,6 +11,7 @@ const categoryVehicleKeywords = {
   trailer: [
     'تریلی',
     'تریلر',
+    'کشنده',
     'trailer',
     'semi',
     'semi-trailer',

@@ -3,6 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const os = require('os');
 const path = require('path');
+const { toBaleApiChatId } = require('./baleChatId');
 
 const BALE_API_BASE = 'https://tapi.bale.ai/bot';
 
@@ -77,6 +78,7 @@ async function callBale(method, body = {}) {
     console.error(`❌ [bale] ${method}:`, {
       status: response.status,
       statusText: response.statusText,
+      chat_id: body?.chat_id ?? null,
       body: data,
     });
     throw new Error(message);
@@ -85,13 +87,12 @@ async function callBale(method, body = {}) {
 }
 
 function normalizeChatId(chatId) {
-  const raw = String(chatId ?? '').trim();
-  return raw || null;
+  return toBaleApiChatId(chatId);
 }
 
 async function sendMessage(chatId, text, options = {}) {
   const normalizedChatId = normalizeChatId(chatId);
-  if (!normalizedChatId) {
+  if (normalizedChatId == null) {
     throw new Error('chat_id مقصد مشخص نشده است.');
   }
   return callBale('sendMessage', buildJsonBody({
@@ -159,6 +160,14 @@ async function deleteWebhook() {
 
 async function getMe() {
   return callBale('getMe', {});
+}
+
+async function getChat(chatId) {
+  const normalizedChatId = normalizeChatId(chatId);
+  if (normalizedChatId == null) {
+    throw new Error('chat_id مقصد مشخص نشده است.');
+  }
+  return callBale('getChat', { chat_id: normalizedChatId });
 }
 
 async function getUpdates({ offset = 0, timeout = 30 } = {}) {
@@ -242,9 +251,9 @@ async function withTempFile(buffer, filename, fn) {
 }
 
 function buildUploadForm(chatId, fieldName, filePath, filename, options = {}) {
-  const normalizedChatId = Number(chatId);
+  const normalizedChatId = toBaleApiChatId(chatId) ?? chatId;
   const form = new FormData();
-  form.append('chat_id', Number.isFinite(normalizedChatId) ? normalizedChatId : chatId);
+  form.append('chat_id', normalizedChatId);
   form.append(fieldName, fs.createReadStream(filePath), {
     filename: sanitizeFilename(filename),
     contentType: options.mimeType || 'application/octet-stream',
@@ -280,18 +289,18 @@ async function sendPhoto(chatId, buffer, filename, options = {}) {
 }
 
 async function sendDocumentByUrl(chatId, fileUrl, caption) {
-  const normalizedChatId = Number(chatId);
+  const normalizedChatId = toBaleApiChatId(chatId);
   return callBale('sendDocument', {
-    chat_id: Number.isFinite(normalizedChatId) ? normalizedChatId : chatId,
+    chat_id: normalizedChatId ?? chatId,
     document: fileUrl,
     caption: caption || undefined,
   });
 }
 
 async function sendPhotoByUrl(chatId, fileUrl, caption) {
-  const normalizedChatId = Number(chatId);
+  const normalizedChatId = toBaleApiChatId(chatId);
   return callBale('sendPhoto', {
-    chat_id: Number.isFinite(normalizedChatId) ? normalizedChatId : chatId,
+    chat_id: normalizedChatId ?? chatId,
     photo: fileUrl,
     caption: caption || undefined,
   });
@@ -313,5 +322,6 @@ module.exports = {
   setWebhook,
   deleteWebhook,
   getMe,
+  getChat,
   getUpdates,
 };

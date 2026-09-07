@@ -6,7 +6,6 @@ const {
 } = require('./baleDispatchBridge');
 const {
   filterEligibleForDriver,
-  pickAutoAnnouncement,
   canSemiAutoAssign,
 } = require('./baleDecision');
 const {
@@ -38,7 +37,58 @@ const {
   getDispatchChannelPlans,
   announcementMatchesCategory,
 } = require('./baleCategoryChannels');
+const {
+  startNextLoadSurvey,
+  handleNextLoadCallback,
+} = require('./baleNextLoadSurvey');
+const {
+  getActivePref,
+  pickWithNextLoadPrefs,
+  buildAutoAssignPvText,
+} = require('./baleNextLoadPrefs');
+const { recordPrivatePeer } = require('./baleInboundPeers');
 const { isVeryFarAnnouncement } = require('../dispatch/dispatchRouteRules');
+
+const unreachableOutreachBySession = new Map();
+
+function markOutreachUnreachable(sessionId, chatId) {
+  const sid = String(sessionId);
+  if (!unreachableOutreachBySession.has(sid)) {
+    unreachableOutreachBySession.set(sid, new Set());
+  }
+  const set = unreachableOutreachBySession.get(sid);
+  const key = String(chatId);
+  const first = !set.has(key);
+  set.add(key);
+  return first;
+}
+
+function isOutreachUnreachable(sessionId, chatId) {
+  return Boolean(
+    unreachableOutreachBySession.get(String(sessionId))?.has(String(chatId))
+  );
+}
+
+function clearOutreachUnreachable(sessionId) {
+  unreachableOutreachBySession.delete(String(sessionId));
+}
+
+function isChatIdHelpRequest(text) {
+  return /^(?:\/id(?:@[\w_]+)?|آیدی|ایدی|chat[_-]?id)$/i.test(String(text || '').trim());
+}
+
+function buildPrivateChatIdHelp(chatId, fromUserId) {
+  const chat = String(chatId);
+  const from = fromUserId != null ? String(fromUserId) : null;
+  let text =
+    `شناسه گفتگوی شما با این بازو:\n${chat}\n\n` +
+    `همین عدد را در صفحه اعلام بار (کادر تست یا ردیف راننده) ذخیره کنید.\n` +
+    `آیدی داخل پروفایل بله برای ارسال پیام خصوصی کافی نیست.`;
+  if (from && from !== chat) {
+    text += `\n\nشناسه کاربر: ${from}\nبرای PV باید شناسه گفتگو (${chat}) را بگذارید.`;
+  }
+  return text;
+}
 
 async function eligibleAnnouncementsForDriver(session, entry, announcements = null) {
   const base = filterEligibleForDriver(
@@ -335,13 +385,13 @@ async function sendGroupMessage(session, text, options = {}) {
   const groupChatId = await getChannelChatId(session.group_channel_slot);
   if (!groupChatId) return;
   try {
-    await baleApi.sendMessage(Number(groupChatId), text, {
+    await baleApi.sendMessage(groupChatId, text, {
       parseMode: options.parseMode,
     });
   } catch (err) {
     if (options.parseMode) {
       try {
-        await baleApi.sendMessage(Number(groupChatId), stripMarkdown(text));
+        await baleApi.sendMessage(groupChatId, stripMarkdown(text));
         return;
       } catch (_) {}
     }
@@ -824,6 +874,7 @@ async function startSessionForCategory({
     ]
   );
   let session = rows[0];
+  clearOutreachUnreachable(session.id);
 
   try {
     const { queue: liveQueue, displayQueue: liveDisplayQueue } = await syncQueueFromServer(session.id);
@@ -844,7 +895,7 @@ async function startSessionForCategory({
             skipStage1Reason === 'no_far_queue'
               ? `ℹ️ نوبت «دور» خالی است — جلسه طبق قوانین از ${mdBold('مرحله دوم')} ادامه می‌یابد.`
               : `ℹ️ بار مرحله اول (خیلی‌دور) موجود نبود — جلسه مستقیماً از ${mdBold('مرحله دوم')} ادامه می‌یابد.`;
-          await baleApi.sendMessage(Number(groupChatId), promoText, { parseMode: BALE_PARSE_MODE });
+          await baleApi.sendMessage(groupChatId, promoText, { parseMode: BALE_PARSE_MODE });
         }
         await broadcastSessionStartToGroup(
           session,
@@ -1100,11 +1151,20 @@ async function advanceToCurrentTurn(sessionId, depth = 0, options = {}) {
   try {
     const outreach = await getDriverOutreach(driverId);
     if (!outreach?.outreach_chat_id) {
-      await updateSession(sessionId, { status: 'awaiting_admin' });
+      const driverName = entry.driver?.name || entry.driver_name || '—';
       await logEvent(sessionId, 'missing_outreach', { driverId });
-      return session;
+      await announceToGroup(
+        session,
+        `⚠️ برای ${driverName} chat خصوصی ثبت نشده.\nنوبت بعدی.`
+      );
+      await skipTurnInternal(sessionId, 'outreach_unreachable');
+      return advanceToCurrentTurn(sessionId, depth + 1);
     }
     chatId = outreach.outreach_chat_id;
+    if (isOutreachUnreachable(sessionId, chatId)) {
+      await skipTurnInternal(sessionId, 'outreach_unreachable');
+      return advanceToCurrentTurn(sessionId, depth + 1);
+    }
     const text = await buildTurnMessage(
       { ...session, turn_deadline_at: deadline },
       entry,
@@ -1114,9 +1174,34 @@ async function advanceToCurrentTurn(sessionId, depth = 0, options = {}) {
     messageId = sent?.message_id;
     await sendDeferTurnMessage(session, chatId);
   } catch (err) {
-    console.error('❌ [bale] send turn failed:', err.message);
+    console.error('❌ [bale] send turn failed:', err.message, {
+      driverId,
+      chatId: chatId != null ? String(chatId) : null,
+    });
+    await logEvent(sessionId, 'send_turn_error', {
+      error: err.message,
+      driverId,
+      chatId: chatId != null ? String(chatId) : null,
+    });
+    const driverName = entry.driver?.name || entry.driver_name || '—';
+    const missingChat = /no such group or user|chat not found/i.test(String(err.message || ''));
+    if (missingChat) {
+      const firstFail = markOutreachUnreachable(sessionId, chatId);
+      if (firstFail) {
+        await announceToGroup(
+          session,
+          `⚠️ chat_id ${chatId} برای این بازو وجود ندارد (آیدی پروفایل بله معمولاً غلط است).\n` +
+            `در چت خصوصی بازو بنویسید: آیدی\nعدد پاسخ را ذخیره کنید. بقیه نوبت‌های همین chat رد می‌شوند.`
+        );
+      }
+      await skipTurnInternal(sessionId, 'outreach_unreachable');
+      return advanceToCurrentTurn(sessionId, depth + 1);
+    }
+    await announceToGroup(
+      session,
+      `⚠️ ارسال PV به ${driverName} ناموفق بود.\nمنتظر تصمیم اپراتور.`
+    );
     await updateSession(sessionId, { status: 'awaiting_admin' });
-    await logEvent(sessionId, 'send_turn_error', { error: err.message, driverId });
     return session;
   }
 
@@ -1211,7 +1296,9 @@ async function tryHandleDriverRegistration(chatId, text, fromUserId) {
     if (!employeeId) {
       await baleApi.sendMessage(
         chatId,
-        'برای ثبت chat خود در سیستم اعلام بار:\n\n/start کدپرسنلی\n\nمثال:\n/start 44983'
+        `برای ثبت chat در اعلام بار این پیام را بفرستید:\n` +
+          '`/start 44983`\n' +
+          `(به‌جای ۴۴۹۸۳ کد پرسنلی خودتان)\n\n${buildPrivateChatIdHelp(chatId, fromUserId)}`
       );
       return { handled: true };
     }
@@ -1247,7 +1334,7 @@ async function tryHandleDriverRegistration(chatId, text, fromUserId) {
        is_test_simulation = FALSE,
        notes = 'ثبت خودکار از بله',
        updated_at = NOW()`,
-    [driver.id, driver.employee_id, Number(chatId), fromUserId ? Number(fromUserId) : null]
+    [driver.id, driver.employee_id, String(chatId), fromUserId != null ? String(fromUserId) : null]
   );
 
   await baleApi.sendMessage(
@@ -1260,6 +1347,11 @@ async function tryHandleDriverRegistration(chatId, text, fromUserId) {
 async function handleTextMessage(chatId, text, fromUserId, chat = null) {
   if (isGroupLikeChat(chat) || (await isBaleGroupChat(chatId))) {
     return { handled: false };
+  }
+
+  if (isChatIdHelpRequest(text)) {
+    await baleApi.sendMessage(chatId, buildPrivateChatIdHelp(chatId, fromUserId));
+    return { handled: true };
   }
 
   const registration = await tryHandleDriverRegistration(chatId, text, fromUserId);
@@ -1354,7 +1446,7 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
   return { handled: true, messageId: sent?.message_id };
 }
 
-async function completeAssignment(session, selection, source) {
+async function completeAssignment(session, selection, source, extra = {}) {
   const turnStartedAt = await getLastTurnStartedAt(session.id);
   const selectionDurationSec = turnStartedAt
     ? Math.max(0, Math.round((Date.now() - turnStartedAt.getTime()) / 1000))
@@ -1397,12 +1489,20 @@ async function completeAssignment(session, selection, source) {
 
   if (source === 'auto' || source === 'semi_auto') {
     await incrementAutoAssignStats(selection.driverId);
-    const ann = parseAnnouncements(session).find(a => a.id === selection.announcementId);
-    const brief = await buildPreferenceBrief(selection.driverId, { announcement: ann });
+    const ann = parseAnnouncements(session).find(a => a.id === selection.announcementId) || assignedAnn;
+    let pvText = extra.autoPvText;
+    if (!pvText) {
+      const brief = await buildPreferenceBrief(selection.driverId, { announcement: ann });
+      pvText = brief.driverAutoPvText;
+    }
     try {
-      await sendToDriver(selection.driverId, brief.driverAutoPvText);
+      await sendToDriver(selection.driverId, pvText, { parseMode: BALE_PARSE_MODE });
     } catch (e) {
-      console.warn('⚠️ [bale] auto pv:', e.message);
+      try {
+        await sendToDriver(selection.driverId, stripMarkdown(pvText));
+      } catch (e2) {
+        console.warn('⚠️ [bale] auto pv:', e2.message);
+      }
     }
   }
 
@@ -1443,29 +1543,37 @@ async function completeAssignment(session, selection, source) {
     );
   }
 
-  const veryFarRemaining = remaining.filter(isVeryFarAnnouncement).length;
-  if (assignedStage === 'stage1' && veryFarRemaining === 0) {
-    const advanced = await tryAdvanceDispatchPhase(session.id);
-    if (advanced) {
-      return { completed: false, selectionDurationSec, stage2Started: true };
-    }
-  }
+  void startNextLoadSurvey(selection.driverId).catch(err => {
+    console.warn('⚠️ [bale] next-load survey:', err.message);
+  });
 
-  if (assignedStage === 'stage2_near_vf') {
-    if (veryFarRemaining === 0) {
+  try {
+    const veryFarRemaining = remaining.filter(isVeryFarAnnouncement).length;
+    if (assignedStage === 'stage1' && veryFarRemaining === 0) {
       const advanced = await tryAdvanceDispatchPhase(session.id);
       if (advanced) {
         return { completed: false, selectionDurationSec, stage2Started: true };
       }
-    } else {
-      const { queue: activeQueue } = await syncQueueFromServer(session.id);
-      if (activeQueue.length === 0) {
+    }
+
+    if (assignedStage === 'stage2_near_vf') {
+      if (veryFarRemaining === 0) {
         const advanced = await tryAdvanceDispatchPhase(session.id);
         if (advanced) {
           return { completed: false, selectionDurationSec, stage2Started: true };
         }
+      } else {
+        const { queue: activeQueue } = await syncQueueFromServer(session.id);
+        if (activeQueue.length === 0) {
+          const advanced = await tryAdvanceDispatchPhase(session.id);
+          if (advanced) {
+            return { completed: false, selectionDurationSec, stage2Started: true };
+          }
+        }
       }
     }
+  } catch (err) {
+    console.error('❌ [bale] post-assign stage check:', err.message);
   }
 
   await advanceAfterAssignment(session.id, { localRemaining: remaining });
@@ -1681,7 +1789,12 @@ async function handleTimeout(sessionId) {
   }
 
   if (mode === 'semi_auto' && canSemiAutoAssign(eligible)) {
-    const ann = eligible[0];
+    const brief = await buildPreferenceBrief(entry.driverId || entry.driver_id, {
+      category: session.vehicle_category,
+    });
+    const pref = await getActivePref(entry.driverId || entry.driver_id);
+    const pick = await pickWithNextLoadPrefs(eligible, pref, brief.recentTaken);
+    const ann = pick.announcement || eligible[0];
     const selection = {
       rowNumber: 1,
       announcementId: ann.id,
@@ -1691,7 +1804,9 @@ async function handleTimeout(sessionId) {
       vehicleId: entry.vehicleId || entry.vehicle_id,
     };
     try {
-      await completeAssignment(session, selection, 'semi_auto');
+      await completeAssignment(session, selection, 'semi_auto', {
+        autoPvText: buildAutoAssignPvText(pick, ann),
+      });
     } catch (err) {
       await updateSession(sessionId, { status: 'awaiting_admin' });
     }
@@ -1702,7 +1817,9 @@ async function handleTimeout(sessionId) {
     const brief = await buildPreferenceBrief(entry.driverId || entry.driver_id, {
       category: session.vehicle_category,
     });
-    const ann = pickAutoAnnouncement(eligible, brief.recentTaken);
+    const pref = await getActivePref(entry.driverId || entry.driver_id);
+    const pick = await pickWithNextLoadPrefs(eligible, pref, brief.recentTaken);
+    const ann = pick.announcement;
     if (!ann) {
       await updateSession(sessionId, { status: 'awaiting_admin' });
       await logEvent(sessionId, 'timeout_no_candidate', {});
@@ -1718,7 +1835,9 @@ async function handleTimeout(sessionId) {
       vehicleId: entry.vehicleId || entry.vehicle_id,
     };
     try {
-      await completeAssignment(session, selection, 'auto');
+      await completeAssignment(session, selection, 'auto', {
+        autoPvText: buildAutoAssignPvText(pick, ann),
+      });
     } catch (err) {
       await updateSession(sessionId, { status: 'awaiting_admin' });
     }
@@ -1809,6 +1928,7 @@ async function extendCurrentTurn(sessionId, extraSec = 120) {
 }
 
 async function stopSession(sessionId) {
+  clearOutreachUnreachable(sessionId);
   await updateSession(sessionId, { status: 'stopped' });
   await logEvent(sessionId, 'session_stopped', {});
   return loadSession(sessionId);
@@ -1854,10 +1974,28 @@ async function manualAssign(sessionId, body, userId) {
 }
 
 async function processWebhookUpdate(update) {
+  const msg = update.message || update.edited_message;
+  if (msg?.chat && !isGroupLikeChat(msg.chat)) {
+    recordPrivatePeer({
+      chatId: msg.chat.id,
+      fromId: msg.from?.id,
+      name:
+        [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') ||
+        msg.chat.first_name ||
+        null,
+      username: msg.from?.username || msg.chat.username || null,
+    });
+    console.log('📩 [bale] private inbound', {
+      chatId: String(msg.chat.id),
+      fromId: msg.from?.id != null ? String(msg.from.id) : null,
+      type: msg.chat.type || null,
+    });
+  }
   if (update.callback_query) {
+    const surveyHandled = await handleNextLoadCallback(update.callback_query);
+    if (surveyHandled?.handled) return surveyHandled;
     return handleCallback(update.callback_query);
   }
-  const msg = update.message || update.edited_message;
   if (!msg?.text) return { handled: false };
   return handleTextMessage(msg.chat.id, msg.text, msg.from?.id, msg.chat);
 }

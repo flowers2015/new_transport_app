@@ -282,10 +282,9 @@ async function getQueue(req, res) {
     };
 
     const { start: cycleStart, end: cycleEnd } = computeJalaliCycleRange();
-    const { fetchDriversFinalizedKm, fetchDriversVeryFarCount } = require('../services/dispatch/driverPreferences');
+    const { fetchDriverCycleStatsAll } = require('../services/dispatch/driverPreferences');
     const driverIds = [...new Set(rows.map(r => r.driver_id).filter(Boolean))];
 
-    // ابتدا دسته نمایشی هر ردیف را مشخص کن، بعد کیلومتر/خیلی‌دور را همان دسته + فقط دوره جاری حساب کن
     const rowMeta = [];
     for (const row of rows) {
       const rawCategory = row.vehicle_category || null;
@@ -293,18 +292,11 @@ async function getQueue(req, res) {
       rowMeta.push({ row, rawCategory, category });
     }
 
-    const categoriesNeeded = [...new Set(rowMeta.map(m => m.category).filter(c => c && c !== 'نامشخص'))];
-    const finalizedKmByCategory = new Map(); // category -> Map(driverId -> km)
-    const veryFarByCategory = new Map();
-    await Promise.all(
-      categoriesNeeded.map(async (categoryLabel) => {
-        const [kmMap, vfMap] = await Promise.all([
-          fetchDriversFinalizedKm(pool, driverIds, cycleStart, cycleEnd, { categoryLabel }),
-          fetchDriversVeryFarCount(pool, driverIds, cycleStart, cycleEnd, { categoryLabel }),
-        ]);
-        finalizedKmByCategory.set(categoryLabel, kmMap);
-        veryFarByCategory.set(categoryLabel, vfMap);
-      })
+    const cycleStats = await fetchDriverCycleStatsAll(
+      pool,
+      driverIds,
+      cycleStart,
+      cycleEnd
     );
 
     const grouped = {};
@@ -330,9 +322,9 @@ async function getQueue(req, res) {
         };
       }
 
-      const kmMap = finalizedKmByCategory.get(category) || new Map();
-      const vfMap = veryFarByCategory.get(category) || new Map();
-      const vfCount = vfMap.get(row.driver_id) || 0;
+      const vfCount = cycleStats.vfMap.get(row.driver_id) || 0;
+      const farCount = cycleStats.farMap.get(row.driver_id) || 0;
+      const nearCount = cycleStats.nearMap.get(row.driver_id) || 0;
 
       const info = {
         id: row.id,
@@ -360,8 +352,10 @@ async function getQueue(req, res) {
           name: row.driver_name,
           mobile: row.driver_mobile,
           employeeId: row.employee_id,
-          periodFinalizedKm: kmMap.get(row.driver_id) || 0,
+          periodFinalizedKm: cycleStats.kmMap.get(row.driver_id) || 0,
           periodVeryFarCount: vfCount,
+          periodFarCount: farCount,
+          periodNearCount: nearCount,
         },
         hasVeryFarHistory: vfCount > 0,
         periodVeryFarCount: vfCount,
@@ -902,52 +896,21 @@ async function restoreDriversFromCancelledAssignment(client, announcementId, cre
 }
 
 async function getDriverLongRouteHistory(driverId, since, until) {
-  const params = [driverId, since];
-  let untilSql = '';
-  if (until) {
-    untilSql = 'AND da.created_at <= $3';
-    params.push(until);
-  }
-
-  const { rows } = await pool.query(
-    `
-      SELECT
-        da.id,
-        da.created_at,
-        da.stage,
-        dr.city,
-        dr.route_category,
-        dr.distance_category,
-        dr.round_trip_km,
-        fa.announcement_code,
-        fa.status
-      FROM dispatch_assignments da
-      LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
-      LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
-      WHERE da.driver_id = $1
-        AND da.created_at >= $2
-        ${untilSql}
-        AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)
-        AND fa.status NOT IN ('Cancelled')
-        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
-        AND (
-          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-          OR fa.status = 'Finalized'
-        )
-        AND (
-          LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلی‌دور%'
-          OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلیدور%'
-          OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.distance_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%veryfar%'
-          OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.route_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلی‌دور%'
-          OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.route_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%خیلیدور%'
-          OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(dr.route_category, ''), 'ي', 'ی'), 'ك', 'ک'), ' ', '')) LIKE '%veryfar%'
-        )
-      ORDER BY da.created_at DESC
-    `,
-    params
-  );
-
-  return rows.map(mapVeryFarHistoryRow);
+  const { fetchDriverCycleTrips, aggregateCycleTripStats } = require('../services/dispatch/driverPreferences');
+  const trips = await fetchDriverCycleTrips(pool, [driverId], since, until || new Date());
+  const { perTrip } = aggregateCycleTripStats(trips, null);
+  return [...perTrip.values()]
+    .filter(trip => trip.isVeryFar)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map(trip =>
+      mapVeryFarHistoryRow({
+        id: trip.id,
+        created_at: trip.createdAt,
+        city: trip.city,
+        announcement_code: trip.announcementCode,
+        stage: trip.stage,
+      })
+    );
 }
 
 const presetCategories = [
