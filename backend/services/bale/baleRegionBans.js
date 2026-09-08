@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const jalaali = require('jalaali-js');
 const pool = require('../../db');
 const { timestampToJalaliDate, validateJalaliDateString } = require('../../utils/jalali');
 
@@ -14,7 +15,13 @@ function normalizePlace(value) {
     .trim()
     .replace(/ي/g, 'ی')
     .replace(/ك/g, 'ک')
+    .replace(/\u200c/g, '')
+    .replace(/^شهر\s+/, '')
     .replace(/\s+/g, ' ');
+}
+
+function normalizeProvinceName(value) {
+  return normalizePlace(value).replace(/\s+/g, '');
 }
 
 function toEnglishDigits(value) {
@@ -54,11 +61,44 @@ function jalaliKey(value) {
   return `${m[1]}${pad2(Number(m[2]))}${pad2(Number(m[3]))}`;
 }
 
-function isBanActiveOn(ban, jalaliDate) {
-  const today = jalaliKey(jalaliDate);
+function tehranJalaliToday(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const gy = Number(parts.find(p => p.type === 'year')?.value);
+  const gm = Number(parts.find(p => p.type === 'month')?.value);
+  const gd = Number(parts.find(p => p.type === 'day')?.value);
+  if (!gy || !gm || !gd) return timestampToJalaliDate(date);
+  const j = jalaali.toJalaali(gy, gm, gd);
+  return `${j.jy}/${pad2(j.jm)}/${pad2(j.jd)}`;
+}
+
+function announcementJalaliDates(ann) {
+  const out = [];
+  const push = value => {
+    const key = jalaliKey(toStoredJalali(value) || value);
+    if (key) out.push(key);
+  };
+  push(ann?.loadingDate || ann?.loading_date);
+  push(ann?.deliveryDate || ann?.delivery_date);
+  for (const d of ann?.deliveryDates || []) push(d);
+  for (const dest of ann?.allDestinations || ann?.destinations || []) {
+    push(dest?.delivery_date || dest?.deliveryDate);
+  }
+  return out;
+}
+
+function banCoversAnnouncement(ban, todayJalali, ann) {
   const start = jalaliKey(ban.startDate || ban.start_date);
   const end = jalaliKey(ban.endDate || ban.end_date);
-  return Boolean(today && start && end && today >= start && today <= end);
+  const today = jalaliKey(todayJalali);
+  if (!start || !end || !today) return false;
+  if (today > end) return false;
+  if (today >= start && today <= end) return true;
+  return announcementJalaliDates(ann).some(d => d >= start && d <= end);
 }
 
 async function ensureRegionBanTable() {
@@ -486,7 +526,7 @@ async function loadGeoCatalog() {
 async function getActiveBansForDriver(driverId) {
   if (!driverId) return [];
   await ensureRegionBanTable();
-  const today = timestampToJalaliDate(new Date());
+  const today = tehranJalaliToday();
   const { rows } = await pool.query(
     `
       SELECT forbidden_provinces, exception_cities, start_date, end_date
@@ -495,38 +535,112 @@ async function getActiveBansForDriver(driverId) {
     `,
     [driverId]
   );
-  return rows.map(mapBanRow).filter(ban => isBanActiveOn(ban, today));
+  return rows.map(mapBanRow).filter(ban => {
+    const end = jalaliKey(ban.endDate);
+    const todayKey = jalaliKey(today);
+    return Boolean(end && todayKey && todayKey <= end);
+  });
+}
+
+function isDairyLine(ann) {
+  const t = String(ann?.lineType || ann?.line_type || '').toLowerCase();
+  return (
+    t.includes('پاستوریزه') ||
+    t.includes('dairy') ||
+    t.includes('pasteur') ||
+    t.includes('لبن')
+  );
+}
+
+function splitCityBlob(value) {
+  return String(value || '')
+    .split(/\s*(?:و|,|،|-|–|\/)\s*/)
+    .map(normalizePlace)
+    .filter(Boolean);
+}
+
+function orderedDestinationCities(ann) {
+  const fromList = (ann?.allDestinations || ann?.destinations || [])
+    .map(d => normalizePlace(d?.city))
+    .filter(Boolean)
+    .flatMap(city => (city.includes('-') || city.includes(' و ') ? splitCityBlob(city) : [city]));
+  if (fromList.length) return fromList;
+  const blobs = [
+    ann?.destinationCities,
+    ann?.destination_cities,
+    ann?.destination?.city,
+    ann?.destinationCity,
+    ann?.destination_city,
+  ];
+  const cities = [];
+  for (const blob of blobs) {
+    cities.push(...splitCityBlob(blob));
+  }
+  return [...new Set(cities)];
+}
+
+function citiesToCheckForBan(ann) {
+  const ordered = orderedDestinationCities(ann);
+  if (!ordered.length) return [];
+  if (isDairyLine(ann)) return [ordered[ordered.length - 1]];
+  return [...new Set(ordered)];
+}
+
+function resolveProvince(city, cityToProvince) {
+  const n = normalizePlace(city);
+  if (!n || !cityToProvince) return null;
+  if (cityToProvince[n]) return cityToProvince[n];
+  const keys = Object.keys(cityToProvince);
+  const hit = keys.find(k => k === n || n.includes(k) || k.includes(n));
+  return hit ? cityToProvince[hit] : null;
+}
+
+function placeInSet(city, set) {
+  const n = normalizePlace(city);
+  if (!n) return false;
+  if (set.has(n)) return true;
+  for (const item of set) {
+    if (item && (n.includes(item) || item.includes(n))) return true;
+  }
+  return false;
+}
+
+function provinceIsForbidden(province, forbiddenSet) {
+  const n = normalizeProvinceName(province);
+  if (!n) return false;
+  for (const item of forbiddenSet) {
+    const f = normalizeProvinceName(item);
+    if (f && (n === f || n.includes(f) || f.includes(n))) return true;
+  }
+  return false;
 }
 
 function extractAnnouncementCities(ann) {
-  const cities = [];
-  const joined = String(ann?.destinationCities || ann?.destination_cities || '');
-  if (joined) {
-    cities.push(...joined.split(/\s*و\s*|[,،]/));
-  }
-  const list = ann?.allDestinations || ann?.destinations || [];
-  for (const dest of list) {
-    if (dest?.city) cities.push(dest.city);
-  }
-  if (ann?.destination?.city) cities.push(ann.destination.city);
-  if (ann?.destinationCity) cities.push(ann.destinationCity);
-  if (ann?.destination_city) cities.push(ann.destination_city);
-  return [...new Set(cities.map(normalizePlace).filter(Boolean))];
+  return orderedDestinationCities(ann);
 }
 
 function announcementBlockedByBans(ann, bans, cityToProvince) {
   if (!bans?.length) return false;
-  const cities = extractAnnouncementCities(ann);
-  if (!cities.length) return false;
-  return cities.some(city => {
-    return bans.some(ban => {
-      const exceptions = new Set((ban.exceptionCities || []).map(normalizePlace));
-      if (exceptions.has(city)) return false;
-      const province = cityToProvince[city];
-      if (!province) return false;
-      const forbidden = new Set((ban.forbiddenProvinces || []).map(normalizePlace));
-      return forbidden.has(province);
-    });
+  const cities = citiesToCheckForBan(ann);
+  const routeProvince = normalizePlace(ann?.route?.province);
+  const checkCities = cities.length ? cities : [];
+
+  return bans.some(ban => {
+    const exceptions = new Set((ban.exceptionCities || []).map(normalizePlace).filter(Boolean));
+    const forbidden = new Set((ban.forbiddenProvinces || []).map(normalizePlace).filter(Boolean));
+    if (!forbidden.size) return false;
+
+    if (checkCities.length) {
+      return checkCities.some(city => {
+        if (placeInSet(city, exceptions)) return false;
+        const province = resolveProvince(city, cityToProvince) || routeProvince;
+        if (!province) return false;
+        return provinceIsForbidden(province, forbidden);
+      });
+    }
+
+    if (!routeProvince) return false;
+    return provinceIsForbidden(routeProvince, forbidden);
   });
 }
 
@@ -535,7 +649,12 @@ async function filterAnnouncementsByRegionBans(announcements, driverId) {
   if (!list.length || !driverId) return list;
   const [bans, geo] = await Promise.all([getActiveBansForDriver(driverId), loadGeoCatalog()]);
   if (!bans.length) return list;
-  return list.filter(ann => !announcementBlockedByBans(ann, bans, geo.cityToProvince));
+  const today = tehranJalaliToday();
+  return list.filter(ann => {
+    const applicable = bans.filter(ban => banCoversAnnouncement(ban, today, ann));
+    if (!applicable.length) return true;
+    return !announcementBlockedByBans(ann, applicable, geo.cityToProvince);
+  });
 }
 
 async function assertAnnouncementAllowedForDriver(driverId, announcement) {

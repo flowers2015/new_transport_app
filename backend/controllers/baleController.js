@@ -725,6 +725,20 @@ async function extendTurn(req, res) {
   }
 }
 
+async function listAssignableLoads(req, res) {
+  try {
+    const sessionId = req.params.sessionId;
+    const driverId = req.query.driverId;
+    if (!driverId) {
+      return res.status(400).json({ message: 'راننده مشخص نشده است.' });
+    }
+    const data = await sessionEngine.listAssignableLoads(sessionId, driverId);
+    res.json(data);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
 async function manualAssign(req, res) {
   try {
     const resolved = await resolveSessionFromRequest(req);
@@ -1034,6 +1048,7 @@ module.exports = {
   skipTurn,
   resumeTurn,
   extendTurn,
+  listAssignableLoads,
   manualAssign,
   getSessionLogs,
   getPreferenceBrief,

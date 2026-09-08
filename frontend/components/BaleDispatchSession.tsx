@@ -254,6 +254,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [assignOpenId, setAssignOpenId] = useState<string | null>(null);
     const [assignDriverId, setAssignDriverId] = useState('');
     const [assignAnnouncementId, setAssignAnnouncementId] = useState('');
+    const [assignableLoads, setAssignableLoads] = useState<SessionAnnouncement[] | null>(null);
     const [nowTs, setNowTs] = useState(() => Date.now());
 
     const isTestMode = activeTab === 'test';
@@ -269,6 +270,43 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         const t = setInterval(() => setNowTs(Date.now()), 1000);
         return () => clearInterval(t);
     }, []);
+
+    useEffect(() => {
+        if (!assignOpenId || !assignDriverId) {
+            setAssignableLoads(null);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await apiFetch(
+                    getApiUrl(
+                        `bale/sessions/${encodeURIComponent(assignOpenId)}/assignable-loads?driverId=${encodeURIComponent(assignDriverId)}`
+                    )
+                );
+                if (!res.ok) throw new Error(await readApiError(res));
+                const data = (await res.json()) as { announcements?: SessionAnnouncement[] };
+                if (cancelled) return;
+                const next = data.announcements || [];
+                setAssignableLoads(next);
+                setAssignAnnouncementId(prev =>
+                    next.some(a => String(a.id) === String(prev))
+                        ? prev
+                        : next[0]?.id
+                          ? String(next[0].id)
+                          : ''
+                );
+            } catch {
+                if (!cancelled) {
+                    setAssignableLoads([]);
+                    setAssignAnnouncementId('');
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [assignOpenId, assignDriverId]);
 
     const loadDrivers = useCallback(async () => {
         const res = await apiFetch(getApiUrl('bale/drivers/outreach'), { skipAuthRedirect: true });
@@ -613,6 +651,14 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
             const entry = q.find(e => queueDriverId(e) === assignDriverId);
             const ann = loads.find(a => String(a.id) === String(assignAnnouncementId));
             if (!entry || !ann) throw new Error('راننده و بار را از لیست همین جلسه انتخاب کنید');
+            if (
+                assignableLoads &&
+                !assignableLoads.some(a => String(a.id) === String(ann.id))
+            ) {
+                throw new Error(
+                    'این بار به‌خاطر محدودیت استان/شهر برای این راننده مجاز نیست.'
+                );
+            }
             const res = await apiFetch(getApiUrl('bale/sessions/manual-assign'), {
                 method: 'POST',
                 body: JSON.stringify({
@@ -1195,7 +1241,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                         </select>
                                     </label>
                                     <label className="text-xs block">
-                                        مرحله شروع
+                                        شروع از
                                         <select
                                             className="mt-1 w-full border rounded-md px-2 py-1.5 text-sm"
                                             value={settings.stage}
@@ -1204,8 +1250,8 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                 patchCategorySettings(category, { stage: e.target.value })
                                             }
                                         >
-                                            <option value="stage1">مرحله ۱ — خیلی‌دور</option>
-                                            <option value="stage2">مرحله ۲</option>
+                                            <option value="stage1">اعلام بار مسیرهای خیلی دور</option>
+                                            <option value="stage2">اعلام بار نهایی</option>
                                         </select>
                                     </label>
                                     <label className="text-xs block">
@@ -1297,17 +1343,12 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                 {loads.length === 0 ? (
                                                     <div className="text-amber-700">لیست بار خالی است</div>
                                                 ) : (
-                                                    <ul className="mt-1 max-h-28 overflow-y-auto space-y-0.5 text-slate-700">
-                                                        {loads.slice(0, 8).map((ann, i) => (
+                                                    <ul className="mt-1 max-h-64 overflow-y-auto space-y-0.5 text-slate-700">
+                                                        {loads.map((ann, i) => (
                                                             <li key={String(ann.id || i)}>
                                                                 {announcementLine(ann, i)}
                                                             </li>
                                                         ))}
-                                                        {loads.length > 8 && (
-                                                            <li className="text-slate-500">
-                                                                و {loads.length - 8} بار دیگر
-                                                            </li>
-                                                        )}
                                                     </ul>
                                                 )}
                                             </div>
@@ -1395,17 +1436,29 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                                 setAssignAnnouncementId(e.target.value)
                                                             }
                                                         >
-                                                            {loads.map((ann, i) => (
+                                                            {(assignableLoads || []).map((ann, i) => (
                                                                 <option key={String(ann.id)} value={String(ann.id)}>
                                                                     {announcementLine(ann, i)}
                                                                 </option>
                                                             ))}
                                                         </select>
                                                     </label>
+                                                    <p className="text-[11px] text-violet-800">
+                                                        فقط بارهایی که برای این راننده مجازند (محدودیت استان/شهر اعمال می‌شود).
+                                                    </p>
+                                                    {assignableLoads && assignableLoads.length === 0 && (
+                                                        <p className="text-[11px] text-amber-800">
+                                                            برای این راننده بار مجازی در این نوبت نیست.
+                                                        </p>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         disabled={
-                                                            busy || !assignDriverId || !assignAnnouncementId
+                                                            busy ||
+                                                            !assignDriverId ||
+                                                            !assignAnnouncementId ||
+                                                            (assignableLoads !== null &&
+                                                                assignableLoads.length === 0)
                                                         }
                                                         onClick={() => assignFromSession(catSession)}
                                                         className="w-full px-2 py-1.5 rounded-md bg-violet-700 text-white text-xs disabled:opacity-50"

@@ -52,8 +52,13 @@ function provinceKeyboard(surveyId, provinces, selected, maxCount) {
 function introKeyboard(surveyId) {
   return {
     inline_keyboard: [
-      [{ text: 'طبق نوبت — خودم چیزی نمی‌گویم', callback_data: cb(surveyId, 'skip') }],
-      [{ text: 'یک فیلتر می‌گویم', callback_data: cb(surveyId, 'ask') }],
+      [{ text: 'ترجیحات انتخاب بار بعدی را ثبت می‌کنم', callback_data: cb(surveyId, 'ask') }],
+      [
+        {
+          text: 'ترجیحی ندارم؛ اگر در دسترس نبودم طبق نوبت دفتر یا سیستم انتخاب کند',
+          callback_data: cb(surveyId, 'skip'),
+        },
+      ],
     ],
   };
 }
@@ -62,10 +67,15 @@ function lineKeyboard(surveyId) {
   return {
     inline_keyboard: [
       [
+        {
+          text: 'بار بستنی یا لبنیات برام فرقی نداره؛ هر دو را می‌برم',
+          callback_data: cb(surveyId, 'line', 'none'),
+        },
+      ],
+      [
         { text: 'بستنی نمی‌روم', callback_data: cb(surveyId, 'line', 'ice') },
         { text: 'پاستوریزه نمی‌روم', callback_data: cb(surveyId, 'line', 'dairy') },
       ],
-      [{ text: 'لاین برایم فرقی ندارد', callback_data: cb(surveyId, 'line', 'none') }],
     ],
   };
 }
@@ -85,18 +95,19 @@ function distanceKeyboard(surveyId) {
   };
 }
 
+const NOT_RESERVED =
+  'این انتخاب شما به معنی رزرو شدن مسیر نیست. در صورت امکان ترجیح شما مدنظر قرار خواهد گرفت وگرنه اولویت ارسال بار شرکت است.';
+
 function renderBody(step, draft) {
-  const notice =
-    'رزرو مسیر نیست؛ فقط به تصمیم دفتر / انتخاب خودکار بین بارهای مجاز کمک می‌کند.';
   if (step === 'intro') {
     return (
       'بار فعلی ثبت شد.\n\n' +
-      `${mdBold('اگر در اعلام بار بعدی چند ردیف باشد، کدام را ترجیح می‌دهی؟')}\n` +
-      notice
+      `${mdBold('برای انتخاب بار بعدی کدام را می‌خواهید؟')}\n` +
+      NOT_RESERVED
     );
   }
   if (step === 'reject_line') {
-    return `${mdBold('کدام لاین را ترجیح می‌دهی نروی؟')}\n${notice}`;
+    return `${mdBold('کدام لاین را ترجیح می‌دهی نروی؟')}\n${NOT_RESERVED}`;
   }
   if (step === 'reject_province') {
     const selected = (draft.rejectProvinces || []).join('، ') || 'هیچ';
@@ -107,7 +118,7 @@ function renderBody(step, draft) {
     );
   }
   if (step === 'reject_distance') {
-    return `${mdBold('کدام نوع مسیر را ترجیح می‌دهی نروی؟')}\n${notice}`;
+    return `${mdBold('کدام نوع مسیر را ترجیح می‌دهی نروی؟')}\n${NOT_RESERVED}`;
   }
   if (step === 'prefer_province') {
     const selected = (draft.preferProvinces || []).join('، ') || 'هیچ';
@@ -117,7 +128,7 @@ function renderBody(step, draft) {
       `انتخاب‌شده: ${mdBold(selected)}`
     );
   }
-  return notice;
+  return NOT_RESERVED;
 }
 
 function keyboardFor(survey) {
@@ -215,7 +226,9 @@ async function finishSkip(survey) {
   await saveCompletedPref(survey.driverId, { followTurn: true });
   await deleteSurvey(survey.id);
   const text =
-    `✅ ${mdBold('طبق نوبت ثبت شد')}. رزرو مسیر نیست.\nاگر چند ردیف باشد بیشترین کیلومتر باقی‌مانده انتخاب می‌شود.`;
+    `✅ ${mdBold('طبق نوبت ثبت شد')}.\n` +
+    'اگر چند ردیف باشد بیشترین کیلومتر باقی‌مانده انتخاب می‌شود.\n' +
+    NOT_RESERVED;
   await sendSurveyText(survey.chatId, text, { inline_keyboard: [] }, survey.messageId);
 }
 
@@ -233,7 +246,7 @@ async function finishSave(survey) {
   };
   const summary = formatPrefSummary(pref, { audience: 'driver' });
   await deleteSurvey(survey.id);
-  const text = `✅ ${mdBold('ثبت شد')}.\n${summary}\n\nرزرو مسیر نیست؛ فقط کمک به تصمیم بین بارهای مجاز.`;
+  const text = `✅ ${mdBold('ثبت شد')}.\n${summary}\n\n${NOT_RESERVED}`;
   await sendSurveyText(survey.chatId, text, { inline_keyboard: [] }, survey.messageId);
 }
 
@@ -262,7 +275,7 @@ async function handleNextLoadCallback(callbackQuery) {
   }
 
   if (cmd === 'skip') {
-    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'طبق نوبت');
+    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'طبق نوبت دفتر');
     await finishSkip(survey);
     return { handled: true };
   }

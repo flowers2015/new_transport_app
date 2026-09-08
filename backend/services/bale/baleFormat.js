@@ -192,9 +192,10 @@ function formatAnnouncementRowMarkdown(index, ann) {
 }
 
 function formatAssignmentGroupMessage(driverName, rowNumber, ann) {
-  const name = mdBold(driverName || '—');
-  const barLine = formatAnnouncementRowMarkdown(rowNumber || 1, ann);
-  return `✅ ${name} انتخاب کرد\n\n${barLine}`;
+  const name = escapeMarkdown(driverName || '—');
+  const dest = escapeMarkdown(getDestinationDisplay(ann));
+  const line = escapeMarkdown(ann.lineType || '—');
+  return `✅ ${name} بار مسیر ${dest} لاین ${line} را انتخاب کرد`;
 }
 
 function formatAnnouncementList(announcements, max = 30) {
@@ -210,14 +211,8 @@ function formatAnnouncementListMarkdown(announcements, max = 30) {
 }
 
 function formatGroupStageTitle(stage, vehicleCategory) {
-  const titles = {
-    stage1: 'اعلام بار مرحله اول — مسیرهای خیلی‌دور (نوبت دور)',
-    stage2_far: 'مرحله دوم — نوبت دور (همه بارهای باقی‌مانده)',
-    stage2_near_vf: 'مرحله دوم — خیلی‌دور برای نوبت نزدیک',
-    stage2_near_all: 'مرحله دوم — نوبت نزدیک (بارهای باقی‌مانده)',
-    stage2: 'اعلام بار مرحله دوم — بارهای باقی‌مانده',
-  };
-  const stagePart = titles[stage] || titles.stage2;
+  const { publicStageName } = require('./baleCopy');
+  const stagePart = publicStageName(stage);
   const categoryPart = vehicleCategory
     ? `\nدسته: ${escapeMarkdown(vehicleCategory)}`
     : '';
@@ -293,14 +288,8 @@ function formatQueueSnapshot(queue) {
 }
 
 function stageLabel(stage) {
-  const labels = {
-    stage1: 'مرحله اول (خیلی‌دور — نوبت دور)',
-    stage2_far: 'مرحله دوم — نوبت دور',
-    stage2_near_vf: 'مرحله دوم — خیلی‌دور (نوبت نزدیک)',
-    stage2_near_all: 'مرحله دوم — نوبت نزدیک',
-    stage2: 'مرحله دوم',
-  };
-  return labels[stage] || labels.stage2;
+  const { publicStageName } = require('./baleCopy');
+  return publicStageName(stage);
 }
 
 function modeLabel(mode) {

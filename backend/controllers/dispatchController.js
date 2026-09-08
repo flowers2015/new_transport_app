@@ -29,6 +29,7 @@ const { formatJalali } = require('../utils/jalali');
 const {
   listRegionBansForDriver,
   summarizeRegionRestrictions,
+  assertAnnouncementAllowedForDriver,
 } = require('../services/bale/baleRegionBans');
 const {
   jalaliToGregorian,
@@ -1553,6 +1554,19 @@ async function assignFreight(req, res) {
     // پیدا کردن route اصلی (دورترین مقصد) برای queue_type و stage
     const destRoutes = await lookupRoutesForDestinations(client, allDestRows);
     const { route, primaryDestination } = pickPrimaryRouteFromList(allDestRows, destRoutes);
+
+    try {
+      await assertAnnouncementAllowedForDriver(driverId, {
+        id: announcement.id,
+        lineType: announcement.line_type,
+        allDestinations: allDestRows,
+        destination: { city: allDestRows[allDestRows.length - 1]?.city },
+        route: route || null,
+      });
+    } catch (banErr) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: banErr.message });
+    }
 
     let actingUserId = req.user?.id || null;
     if (!actingUserId && queueEntryId) {

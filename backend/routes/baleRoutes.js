@@ -67,6 +67,12 @@ router.post('/sessions/stop', authenticateToken, authorizeRole(transportRoles), 
 router.post('/sessions/skip-turn', authenticateToken, authorizeRole(transportRoles), baleController.skipTurn);
 router.post('/sessions/resume-turn', authenticateToken, authorizeRole(transportRoles), baleController.resumeTurn);
 router.post('/sessions/extend-turn', authenticateToken, authorizeRole(transportRoles), baleController.extendTurn);
+router.get(
+  '/sessions/:sessionId/assignable-loads',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  baleController.listAssignableLoads
+);
 router.post('/sessions/manual-assign', authenticateToken, authorizeRole(transportRoles), baleController.manualAssign);
 router.get('/sessions/:sessionId/logs', authenticateToken, authorizeRole(transportRoles), baleController.getSessionLogs);
 

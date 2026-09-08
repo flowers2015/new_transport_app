@@ -15,15 +15,12 @@ const {
 const {
   formatCountdown,
   formatAnnouncementList,
-  formatQueueSnapshot,
-  formatAnnouncementRow,
-  formatAnnouncementRowMarkdown,
   formatAnnouncementListMarkdown,
+  formatAnnouncementRowMarkdown,
   formatAssignmentGroupMessage,
   BALE_PARSE_MODE,
   stripMarkdown,
   mdBold,
-  formatGroupStageTitle,
   stageLabel,
   parseRowNumber,
   looksLikeDriverSelectionAttempt,
@@ -48,6 +45,23 @@ const {
 } = require('./baleNextLoadPrefs');
 const { recordPrivatePeer } = require('./baleInboundPeers');
 const { isVeryFarAnnouncement } = require('../dispatch/dispatchRouteRules');
+const { buildExcelBuffer } = require('./baleReportExcel');
+const { renderAnnouncementTablePng, announcementsToTableRows } = require('./baleSessionTableImage');
+const {
+  sessionStartIntro,
+  namesAfterImageText,
+  loadsImageCaption,
+  formatAnnouncementOrderNames,
+  namesQueueForGroup,
+  skippedStage1ToFinal,
+  finalPhaseStarted,
+  publicStageName,
+  driverSkippedVeryFarGroup,
+  officeSkippedTurnGroup,
+  officeSkippedTurnPv,
+  deferStayPvAck,
+  autoHeldForFinalBecausePrefsPv,
+} = require('./baleCopy');
 
 const unreachableOutreachBySession = new Map();
 
@@ -320,14 +334,11 @@ function turnKeyboard(sessionId, turnIndex) {
 }
 
 function canDeferTurn(stage) {
-  return stage === 'stage1' || stage === 'stage2_near_vf';
+  return stage === 'stage1';
 }
 
-function deferTurnHint(stage) {
-  if (stage === 'stage2_near_vf') {
-    return '⏭ اگر الان بار خیلی‌دور نمی‌خواهید، می‌توانید نوبت را به مرحله نوبت نزدیک موکول کنید:';
-  }
-  return '⏭ اگر الان بار نمی‌خواهید، می‌توانید نوبت را به مرحله بعد موکول کنید:';
+function deferTurnHint() {
+  return 'اگر الان باری خیلی دور انتخاب نکنید، مرحله دوم به شما اعلام بار خواهد شد.';
 }
 
 async function sendDeferTurnMessage(session, chatId) {
@@ -335,7 +346,7 @@ async function sendDeferTurnMessage(session, chatId) {
   try {
     const sent = await baleApi.sendMessage(
       chatId,
-      deferTurnHint(session.stage),
+      deferTurnHint(),
       { replyMarkup: turnKeyboard(session.id, session.current_turn_index) }
     );
     return sent?.message_id || null;
@@ -399,6 +410,49 @@ async function sendGroupMessage(session, text, options = {}) {
   }
 }
 
+async function sendGroupFile(session, buffer, filename, options = {}) {
+  if (!session?.group_channel_slot) return false;
+  const groupChatId = await getChannelChatId(session.group_channel_slot);
+  if (!groupChatId) return false;
+  try {
+    await baleApi.sendDocument(groupChatId, buffer, filename, {
+      mimeType: options.mimeType,
+      caption: options.caption,
+    });
+    return true;
+  } catch (err) {
+    console.warn('⚠️ [bale] group file:', err.message);
+    return false;
+  }
+}
+
+async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { allCategory = false } = {}) {
+  const list = announcements || [];
+  const caption = loadsImageCaption(vehicleCategory, list.length, { allCategory });
+  try {
+    const { buffer } = await renderAnnouncementTablePng(list, { vehicleCategory });
+    const sent = await sendGroupFile(session, buffer, `loads-${Date.now()}.png`, {
+      mimeType: 'image/png',
+      caption,
+    });
+    if (sent) return 'image';
+  } catch (err) {
+    console.warn('⚠️ [bale] loads table image:', err.message);
+  }
+  try {
+    const rows = announcementsToTableRows(list, vehicleCategory);
+    const xlsx = await buildExcelBuffer(rows);
+    const sent = await sendGroupFile(session, xlsx, `loads-${Date.now()}.xlsx`, {
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      caption: `${caption}\n(تصویر ساخته نشد؛ فایل جدول ارسال شد)`,
+    });
+    if (sent) return 'excel';
+  } catch (err) {
+    console.warn('⚠️ [bale] loads table excel:', err.message);
+  }
+  return null;
+}
+
 async function announceToGroup(session, text, options = {}) {
   try {
     await sendGroupMessage(session, text, options);
@@ -414,33 +468,33 @@ async function broadcastSessionStartToGroup(
   announcements,
   stage,
   vehicleCategory,
-  displayQueue = null
+  displayQueue = null,
+  options = {}
 ) {
-  const list = (announcements || []).slice(0, 30);
-  const queueForGroup =
-    displayQueue && displayQueue.length > 0 ? displayQueue : queue;
+  const imageList = options.imageAnnouncements || announcements || [];
+  const namesQueue = namesQueueForGroup(stage, queue, displayQueue);
+  const includeIntro = options.includeIntro !== false;
+  const allCategoryImage = Boolean(options.allCategoryImage);
 
-  await sendGroupMessage(
-    session,
-    `📋 ${mdBold('نوبت')}${vehicleCategory ? ` — ${vehicleCategory}` : ''}\n\n${formatQueueSnapshot(queueForGroup)}`,
-    { parseMode: BALE_PARSE_MODE }
-  );
+  if (includeIntro) {
+    await sendGroupMessage(session, sessionStartIntro(stage));
+  }
 
-  await sendGroupMessage(
-    session,
-    `📦 ${mdBold('لیست بارها')}\n\n${formatAnnouncementListMarkdown(announcements)}`,
-    { parseMode: BALE_PARSE_MODE }
-  );
-
-  await sendGroupMessage(session, formatGroupStageTitle(stage, vehicleCategory), {
-    parseMode: BALE_PARSE_MODE,
+  await sendLoadsTableToGroup(session, imageList, vehicleCategory, {
+    allCategory: allCategoryImage,
   });
+
+  await sendGroupMessage(
+    session,
+    namesAfterImageText(stage, formatAnnouncementOrderNames(namesQueue))
+  );
 
   await logEvent(session.id, 'group_broadcast', {
     type: 'session_start',
     queueMessage: true,
-    announcementCount: list.length,
-    stageTitle: true,
+    announcementCount: imageList.length,
+    namesOnly: true,
+    publicStage: publicStageName(stage),
   });
 }
 
@@ -508,6 +562,20 @@ function stageFetchOpts(session) {
     forceStage2: api.forceStage2,
     subPhase: api.subPhase,
   };
+}
+
+async function loadAllCategoryAnnouncements(vehicleCategory, { userId } = {}) {
+  const candidates = await fetchStageCandidates({
+    stage: 'stage2',
+    category: vehicleCategory,
+    forceStage2: true,
+    subPhase: '',
+    userId,
+  });
+  let announcements = await enrichAnnouncements(candidates.announcements || []);
+  return announcements.filter(ann =>
+    announcementMatchesCategory(ann.vehicleType, vehicleCategory)
+  );
 }
 
 async function loadStagePayload(sessionStage, vehicleCategory, { userId, forceStage2 } = {}) {
@@ -699,16 +767,7 @@ async function skipTurnInternal(sessionId, reason) {
     );
   }
   if (reason === 'deferred_to_stage2') {
-    await announceToGroup(
-      session,
-      `⏭ ${driverName} (${session.vehicle_category || '—'}) برای مرحله بعد ماند.`
-    );
-  }
-  if (reason === 'deferred_to_near_all') {
-    await announceToGroup(
-      session,
-      `⏭ ${driverName} (${session.vehicle_category || '—'}) برای نوبت نزدیک (مرحله بعد) ماند.`
-    );
+    await announceToGroup(session, driverSkippedVeryFarGroup(driverName));
   }
 }
 
@@ -742,11 +801,11 @@ async function startDispatchPhase(sessionId, newStage, { groupTitle, logType }) 
     fallback: announcements,
   });
   const refreshed = await loadSession(sessionId);
+  const namesQueue = namesQueueForGroup(newStage, liveQueue, liveDisplayQueue);
   await announceToGroup(
     refreshed,
-    `${groupTitle} — ${vehicleCategory}\n` +
-      `${liveAnnouncements.length} بار باقی‌مانده برای ${liveQueue.length} راننده در صف`,
-    { parseMode: BALE_PARSE_MODE }
+    groupTitle ||
+      finalPhaseStarted(vehicleCategory, liveAnnouncements.length, namesQueue.length)
   );
   await broadcastSessionStartToGroup(
     refreshed,
@@ -754,7 +813,8 @@ async function startDispatchPhase(sessionId, newStage, { groupTitle, logType }) 
     liveAnnouncements,
     newStage,
     vehicleCategory,
-    liveDisplayQueue
+    liveDisplayQueue,
+    { includeIntro: false }
   );
   await logEvent(sessionId, logType, {
     stage: newStage,
@@ -771,18 +831,18 @@ async function tryAdvanceDispatchPhase(sessionId) {
 
   const phaseChain = {
     stage1: [
-      ['stage2_far', `🔄 ${mdBold('شروع مرحله دوم — نوبت دور')}`, 'stage2_far_started'],
+      ['stage2_far', null, 'stage2_far_started'],
     ],
     stage2_far: [
-      ['stage2_near_vf', `🔄 ${mdBold('مرحله دوم — خیلی‌دور برای نوبت نزدیک')}`, 'stage2_near_vf_started'],
-      ['stage2_near_all', `🔄 ${mdBold('مرحله دوم — نوبت نزدیک')}`, 'stage2_near_all_started'],
+      ['stage2_near_vf', null, 'stage2_near_vf_started'],
+      ['stage2_near_all', null, 'stage2_near_all_started'],
     ],
     stage2: [
-      ['stage2_near_vf', `🔄 ${mdBold('مرحله دوم — خیلی‌دور برای نوبت نزدیک')}`, 'stage2_near_vf_started'],
-      ['stage2_near_all', `🔄 ${mdBold('مرحله دوم — نوبت نزدیک')}`, 'stage2_near_all_started'],
+      ['stage2_near_vf', null, 'stage2_near_vf_started'],
+      ['stage2_near_all', null, 'stage2_near_all_started'],
     ],
     stage2_near_vf: [
-      ['stage2_near_all', `🔄 ${mdBold('مرحله دوم — نوبت نزدیک')}`, 'stage2_near_all_started'],
+      ['stage2_near_all', null, 'stage2_near_all_started'],
     ],
   };
 
@@ -891,19 +951,24 @@ async function startSessionForCategory({
     if (groupChatId) {
       try {
         if (autoPromoted) {
-          const promoText =
-            skipStage1Reason === 'no_far_queue'
-              ? `ℹ️ نوبت «دور» خالی است — جلسه طبق قوانین از ${mdBold('مرحله دوم')} ادامه می‌یابد.`
-              : `ℹ️ بار مرحله اول (خیلی‌دور) موجود نبود — جلسه مستقیماً از ${mdBold('مرحله دوم')} ادامه می‌یابد.`;
-          await baleApi.sendMessage(groupChatId, promoText, { parseMode: BALE_PARSE_MODE });
+          await baleApi.sendMessage(groupChatId, skippedStage1ToFinal(skipStage1Reason));
         }
+        const allCategoryLoads = await loadAllCategoryAnnouncements(vehicleCategory, {
+          userId,
+        });
         await broadcastSessionStartToGroup(
           session,
           liveQueue,
           liveAnnouncements,
           effectiveStage,
           vehicleCategory,
-          liveDisplayQueue
+          liveDisplayQueue,
+          {
+            includeIntro: !autoPromoted,
+            allCategoryImage: true,
+            imageAnnouncements:
+              allCategoryLoads.length > 0 ? allCategoryLoads : liveAnnouncements,
+          }
         );
       } catch (groupErr) {
         console.warn('⚠️ [bale] group broadcast failed:', groupErr.message);
@@ -1593,6 +1658,34 @@ async function persistDeferToDispatch(entry, userId) {
   }
 }
 
+function shouldHoldStage1ForUnmetPrefs(stage, pick) {
+  return stage === 'stage1' && pick?.reasonCode === 'rejects_relaxed';
+}
+
+async function holdDriverForFinalStage(session, entry) {
+  const sessionId = session.id;
+  const driverName = entry?.driver?.name || entry?.driver_name || '—';
+  const driverId = entry?.driverId || entry?.driver_id;
+  await clearTurnTimer(sessionId, {
+    freezeText: `⏭ به‌خاطر ترجیح، برای اعلام بار نهایی ماند\n👤 ${driverName}`,
+  });
+  await persistDeferToDispatch(entry, session.started_by_user_id);
+  await logEvent(sessionId, 'deferred_to_stage2', {
+    driverId,
+    index: session.current_turn_index,
+    stage: session.stage,
+    reason: 'prefs_unmet_stage1_auto',
+  });
+  await skipTurnInternal(sessionId, 'deferred_to_stage2');
+  if (driverId) {
+    try {
+      await sendToDriver(driverId, autoHeldForFinalBecausePrefsPv());
+    } catch (_) {}
+  }
+  if (await finishQueueIfDone(sessionId)) return;
+  await advanceToCurrentTurn(sessionId);
+}
+
 async function removeDeferButton(callbackQuery) {
   const chatId = callbackQuery.message?.chat?.id;
   const messageId = callbackQuery.message?.message_id;
@@ -1670,7 +1763,7 @@ async function handleCallback(callbackQuery) {
       const reason =
         session.status !== 'running'
           ? 'نوبت شما دیگر فعال نیست (مهلت تمام شده یا منتظر اپراتور هستید).'
-          : 'در این مرحله امکان «بمانم برای مرحله بعد» وجود ندارد.';
+          : 'این دکمه دیگر معتبر نیست.';
       await baleApi.safeAnswerCallbackQuery(callbackQuery.id, reason);
       if (driverChatId) {
         try {
@@ -1700,30 +1793,22 @@ async function handleCallback(callbackQuery) {
     }
 
     const driverName = entry?.driver?.name || entry?.driver_name || '—';
-    const deferToNearAll = session.stage === 'stage2_near_vf';
-    const ackText = deferToNearAll
-      ? 'ثبت شد — در نوبت نزدیک نوبت شماست'
-      : 'ثبت شد — در مرحله بعد نوبت شماست';
+    const ackText = deferStayPvAck();
 
     // Ack immediately so Bale does not expire the callback while DB work runs.
-    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, ackText);
+    await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'ثبت شد');
     await removeDeferButton(callbackQuery);
 
     await clearTurnTimer(sessionId, {
-      freezeText: deferToNearAll
-        ? `⏭ برای نوبت نزدیک ماندید\n👤 ${driverName}`
-        : `⏭ برای مرحله بعد ماندید\n👤 ${driverName}`,
+      freezeText: `⏭ برای اعلام بار نهایی ماندید\n👤 ${driverName}`,
     });
     await persistDeferToDispatch(entry, session.started_by_user_id);
-    await logEvent(sessionId, deferToNearAll ? 'deferred_to_near_all' : 'deferred_to_stage2', {
+    await logEvent(sessionId, 'deferred_to_stage2', {
       driverId: entry?.driverId || entry?.driver_id,
       index: session.current_turn_index,
       stage: session.stage,
     });
-    await skipTurnInternal(
-      sessionId,
-      deferToNearAll ? 'deferred_to_near_all' : 'deferred_to_stage2'
-    );
+    await skipTurnInternal(sessionId, 'deferred_to_stage2');
     if (await finishQueueIfDone(sessionId)) {
       if (driverChatId) {
         try {
@@ -1794,6 +1879,10 @@ async function handleTimeout(sessionId) {
     });
     const pref = await getActivePref(entry.driverId || entry.driver_id);
     const pick = await pickWithNextLoadPrefs(eligible, pref, brief.recentTaken);
+    if (shouldHoldStage1ForUnmetPrefs(session.stage, pick)) {
+      await holdDriverForFinalStage(session, entry);
+      return;
+    }
     const ann = pick.announcement || eligible[0];
     const selection = {
       rowNumber: 1,
@@ -1819,6 +1908,10 @@ async function handleTimeout(sessionId) {
     });
     const pref = await getActivePref(entry.driverId || entry.driver_id);
     const pick = await pickWithNextLoadPrefs(eligible, pref, brief.recentTaken);
+    if (shouldHoldStage1ForUnmetPrefs(session.stage, pick)) {
+      await holdDriverForFinalStage(session, entry);
+      return;
+    }
     const ann = pick.announcement;
     if (!ann) {
       await updateSession(sessionId, { status: 'awaiting_admin' });
@@ -1852,10 +1945,13 @@ async function skipCurrentTurn(sessionId) {
   if (!session) throw new Error('جلسه یافت نشد');
   const entry = currentTurnEntry(session);
   const driverName = entry?.driver?.name || entry?.driver_name || '—';
-  await announceToGroup(
-    session,
-    `⏭ رد نوبت / عبور — ${driverName} (${session.vehicle_category || '—'})`
-  );
+  await announceToGroup(session, officeSkippedTurnGroup(driverName));
+  const driverId = entry?.driverId || entry?.driver_id;
+  if (driverId) {
+    try {
+      await sendToDriver(driverId, officeSkippedTurnPv());
+    } catch (_) {}
+  }
   await updateSession(sessionId, {
     current_turn_index: session.current_turn_index + 1,
     status: 'running',
@@ -1943,6 +2039,20 @@ async function stopAllSessions() {
     stopped.push(await stopSession(session.id));
   }
   return stopped;
+}
+
+async function listAssignableLoads(sessionId, driverId) {
+  const session = await loadSession(sessionId);
+  if (!session) throw new Error('جلسه یافت نشد');
+  const queue = parseQueueSnapshot(session);
+  const entry =
+    queue.find(e => String(queueEntryDriverId(e)) === String(driverId)) || null;
+  if (!entry) throw new Error('راننده در صف همین جلسه نیست.');
+  const eligible = await eligibleAnnouncementsForDriver(session, entry);
+  return {
+    driverId: queueEntryDriverId(entry),
+    announcements: eligible,
+  };
 }
 
 async function manualAssign(sessionId, body, userId) {
@@ -2083,6 +2193,7 @@ module.exports = {
   skipCurrentTurn,
   extendCurrentTurn,
   resumeCurrentTurn,
+  listAssignableLoads,
   manualAssign,
   processWebhookUpdate,
   seedTestDrivers,
