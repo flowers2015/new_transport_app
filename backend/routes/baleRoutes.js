@@ -21,6 +21,18 @@ router.get('/status', authenticateToken, authorizeRole(transportRoles), baleCont
 router.put('/settings/runtime', authenticateToken, authorizeRole(transportRoles), baleController.updateRuntimeSettings);
 router.put('/channels/:slot', authenticateToken, authorizeRole(adminRoles), baleController.updateChannel);
 router.get('/drivers/outreach', authenticateToken, authorizeRole(transportRoles), baleController.listDriverOutreach);
+router.get(
+  '/next-load-insight/:driverId',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  baleController.getNextLoadDriverInsight
+);
+router.get(
+  '/category-queue-insight',
+  authenticateToken,
+  authorizeRole(transportRoles),
+  baleController.getCategoryQueueInsightHandler
+);
 router.put('/drivers/:driverId/outreach', authenticateToken, authorizeRole(transportRoles), baleController.upsertDriverOutreach);
 router.post('/test/seed-drivers', authenticateToken, authorizeRole(transportRoles), baleController.seedTestDrivers);
 router.post('/test/ping', authenticateToken, authorizeRole(transportRoles), baleController.testPing);

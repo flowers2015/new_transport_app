@@ -3,6 +3,10 @@ import { apiFetch, getApiUrl, isAuthFailureStatus } from '../utils/apiConfig';
 import { User, UserRole, View } from '../types';
 import WorkflowRules from './WorkflowRules';
 import BaleRegionBanPanel from './BaleRegionBanPanel';
+import {
+    BaleCategoryQueuePrefDialog,
+    BaleNextLoadPrefLookupDialog,
+} from './BalePrefInsightDialogs';
 
 type BaleChannel = {
     slot_number: number;
@@ -244,6 +248,11 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
     const [selectedSessionId, setSelectedSessionId] = useState('');
     const [showRulesDialog, setShowRulesDialog] = useState(false);
     const [showRegionBanDialog, setShowRegionBanDialog] = useState(false);
+    const [showPrefLookupDialog, setShowPrefLookupDialog] = useState(false);
+    const [queueInsightCategory, setQueueInsightCategory] = useState<{
+        category: string;
+        label: string;
+    } | null>(null);
     const [drivers, setDrivers] = useState<DriverOutreach[]>([]);
     const [driverFilter, setDriverFilter] = useState('');
     const [driversTableHidden, setDriversTableHidden] = useState(() =>
@@ -788,6 +797,14 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 </button>
                 <button
                     type="button"
+                    onClick={() => setShowPrefLookupDialog(true)}
+                    className="px-3 py-1.5 text-sm rounded-md border border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100"
+                    title="جستجوی راننده: آخرین مسیر و ترجیح/رد اعلام بار بعدی"
+                >
+                    ترجیح و رد راننده
+                </button>
+                <button
+                    type="button"
                     onClick={() => setShowRulesDialog(true)}
                     className="px-3 py-1.5 text-sm rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center gap-2"
                     title="قوانین و راهنما"
@@ -1194,7 +1211,19 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                     key={slot}
                                     className="rounded-lg border border-slate-200 bg-white p-3 space-y-2"
                                 >
-                                    <div className="font-medium text-sm">{label}</div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="font-medium text-sm">{label}</div>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setQueueInsightCategory({ category, label })
+                                            }
+                                            className="px-2 py-0.5 text-[11px] rounded-md border border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100"
+                                            title="نوبت این دسته + ترجیح و رد"
+                                        >
+                                            نوبت و ترجیح
+                                        </button>
+                                    </div>
                                     <div className="text-xs text-slate-500">
                                         {isTestMode ? 'گروه تست (اسلات ۱)' : channelLabel}
                                     </div>
@@ -1516,6 +1545,21 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showPrefLookupDialog && (
+                <BaleNextLoadPrefLookupDialog
+                    drivers={drivers}
+                    onClose={() => setShowPrefLookupDialog(false)}
+                />
+            )}
+
+            {queueInsightCategory && (
+                <BaleCategoryQueuePrefDialog
+                    category={queueInsightCategory.category}
+                    label={queueInsightCategory.label}
+                    onClose={() => setQueueInsightCategory(null)}
+                />
             )}
 
             {showRegionBanDialog && (

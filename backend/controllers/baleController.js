@@ -5,6 +5,7 @@ const { listRecentPrivatePeers } = require('../services/bale/baleInboundPeers');
 const { normalizeBaleChatId } = require('../services/bale/baleChatId');
 const { buildPreferenceBrief } = require('../services/bale/balePreferenceBrief');
 const { getActivePrefsForDrivers, formatPrefSummary } = require('../services/bale/baleNextLoadPrefs');
+const { getDriverInsight, getCategoryQueueInsight } = require('../services/bale/baleNextLoadInsight');
 const { modeLabel, stageLabel } = require('../services/bale/baleFormat');
 const {
   getRuntimeSettings,
@@ -245,6 +246,35 @@ async function listDriverOutreach(req, res) {
     res.json(rows);
   } catch (error) {
     res.status(500).json({ message: 'خطا در لیست رانندگان بله' });
+  }
+}
+
+async function getNextLoadDriverInsight(req, res) {
+  try {
+    const driverId = String(req.params.driverId || '').trim();
+    if (!driverId) {
+      return res.status(400).json({ message: 'شناسه راننده الزامی است.' });
+    }
+    const insight = await getDriverInsight(driverId);
+    if (!insight) {
+      return res.status(404).json({ message: 'راننده یافت نشد.' });
+    }
+    res.json(insight);
+  } catch (error) {
+    console.error('❌ [bale] getNextLoadDriverInsight:', error);
+    res.status(500).json({ message: error.message || 'خطا در دریافت ترجیح راننده' });
+  }
+}
+
+async function getCategoryQueueInsightHandler(req, res) {
+  try {
+    const category = String(req.query.category || '').trim();
+    const data = await getCategoryQueueInsight(category);
+    res.json(data);
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('❌ [bale] getCategoryQueueInsight:', error);
+    res.status(status).json({ message: error.message || 'خطا در دریافت نوبت دسته' });
   }
 }
 
@@ -1028,6 +1058,8 @@ module.exports = {
   updateAmbientNotifySettingsHandler,
   testAmbientNotifyHandler,
   listDriverOutreach,
+  getNextLoadDriverInsight,
+  getCategoryQueueInsightHandler,
   listRegionBanDrivers,
   upsertDriverOutreach,
   seedTestDrivers,
