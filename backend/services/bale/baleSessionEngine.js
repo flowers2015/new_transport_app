@@ -15,7 +15,6 @@ const {
 const {
   formatCountdown,
   formatAnnouncementList,
-  formatAnnouncementListMarkdown,
   formatAnnouncementRowMarkdown,
   formatAssignmentGroupMessage,
   BALE_PARSE_MODE,
@@ -523,10 +522,14 @@ async function broadcastSessionStartToGroup(
 async function freezeCurrentTurnPv(session, text) {
   if (!session?.current_turn_message_id || !session?.current_turn_chat_id) return;
   try {
-    await baleApi.editMessageText(session.current_turn_chat_id, session.current_turn_message_id, text);
+    await baleApi.editMessageCaption(session.current_turn_chat_id, session.current_turn_message_id, text);
   } catch (err) {
-    if (!String(err.message).includes('message is not modified')) {
-      console.warn('⚠️ [bale] freeze turn pv:', err.message);
+    try {
+      await baleApi.editMessageText(session.current_turn_chat_id, session.current_turn_message_id, text);
+    } catch (err2) {
+      if (!String(err2.message).includes('message is not modified')) {
+        console.warn('⚠️ [bale] freeze turn pv:', err2.message);
+      }
     }
   }
 }
@@ -1114,16 +1117,29 @@ async function startAllCategorySessions(opts) {
   };
 }
 
-async function buildTurnMessage(session, entry, eligible) {
+function buildTurnCaption(session, entry) {
   const name = entry.driver?.name || entry.driver_name || '—';
   const countdown = formatCountdown(session.turn_deadline_at);
-  return (
-    `⏱ ${mdBold(countdown)} | ${mdBold('نوبت شما')}\n` +
-    `👤 ${mdBold(name)}\n` +
-    `📌 ${mdBold(stageLabel(session.stage))}\n\n` +
-    `بارهای مجاز — فقط شماره را بفرستید:\n\n` +
-    formatAnnouncementListMarkdown(eligible)
-  );
+  return `نوبت ${name} — فقط شماره بار را بفرستید\n⏱ ${countdown}`;
+}
+
+async function sendTurnLoadPhoto(chatId, session, entry, eligible) {
+  const caption = buildTurnCaption(session, entry);
+  const { buffer } = await renderAnnouncementTablePng(eligible, {
+    vehicleCategory: session.vehicle_category,
+  });
+  const filename = `loads-${Date.now()}.png`;
+  try {
+    const sent = await baleApi.sendPhoto(chatId, buffer, filename, { caption });
+    return sent?.message_id;
+  } catch (err) {
+    console.warn('⚠️ [bale] turn photo, sending as file:', err.message);
+    const sent = await baleApi.sendDocument(chatId, buffer, filename, {
+      mimeType: 'image/png',
+      caption,
+    });
+    return sent?.message_id;
+  }
 }
 
 async function resumeCurrentTurn(sessionId) {
@@ -1252,13 +1268,8 @@ async function advanceToCurrentTurn(sessionId, depth = 0, options = {}) {
       await skipTurnInternal(sessionId, 'outreach_unreachable');
       return advanceToCurrentTurn(sessionId, depth + 1);
     }
-    const text = await buildTurnMessage(
-      { ...session, turn_deadline_at: deadline },
-      entry,
-      eligible
-    );
-    const sent = await baleApi.sendMessage(chatId, text, { parseMode: BALE_PARSE_MODE });
-    messageId = sent?.message_id;
+    const sentMessageId = await sendTurnLoadPhoto(chatId, { ...session, turn_deadline_at: deadline }, entry, eligible);
+    messageId = sentMessageId;
     await sendDeferTurnMessage(session, chatId);
   } catch (err) {
     console.error('❌ [bale] send turn failed:', err.message, {
@@ -1328,19 +1339,17 @@ async function refreshTurnTimerMessage(sessionId) {
 
   const entry = currentTurnEntry(session);
   if (!entry) return;
-  const eligible = await eligibleAnnouncementsForDriver(session, entry);
 
   try {
-    const text = await buildTurnMessage(session, entry, eligible);
-    await baleApi.editMessageText(
+    const caption = buildTurnCaption(session, entry);
+    await baleApi.editMessageCaption(
       session.current_turn_chat_id,
       session.current_turn_message_id,
-      text,
-      { parseMode: BALE_PARSE_MODE }
+      caption
     );
   } catch (err) {
     if (!String(err.message).includes('message is not modified')) {
-      console.warn('⚠️ [bale] timer edit:', err.message);
+      console.warn('⚠️ [bale] timer caption:', err.message);
     }
   }
 }
@@ -2030,13 +2039,15 @@ async function extendCurrentTurn(sessionId, extraSec = 120) {
     const eligible = await eligibleAnnouncementsForDriver(refreshed, entry);
     const outreach = await getDriverOutreach(entry.driverId || entry.driver_id);
     if (outreach?.outreach_chat_id) {
-      const text = await buildTurnMessage({ ...refreshed, turn_deadline_at: deadline }, entry, eligible);
-      const sent = await baleApi.sendMessage(outreach.outreach_chat_id, text, {
-        parseMode: BALE_PARSE_MODE,
-      });
+      const sentMessageId = await sendTurnLoadPhoto(
+        outreach.outreach_chat_id,
+        { ...refreshed, turn_deadline_at: deadline },
+        entry,
+        eligible
+      );
       await sendDeferTurnMessage(refreshed, outreach.outreach_chat_id);
       await updateSession(sessionId, {
-        current_turn_message_id: sent?.message_id,
+        current_turn_message_id: sentMessageId,
         current_turn_chat_id: outreach.outreach_chat_id,
       });
     }

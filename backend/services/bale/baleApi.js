@@ -115,6 +115,16 @@ async function editMessageText(chatId, messageId, text, options = {}) {
   });
 }
 
+async function editMessageCaption(chatId, messageId, caption, options = {}) {
+  return callBale('editMessageCaption', {
+    chat_id: chatId,
+    message_id: messageId,
+    caption: String(caption || ''),
+    parse_mode: options.parseMode || undefined,
+    reply_markup: options.replyMarkup || undefined,
+  });
+}
+
 async function answerCallbackQuery(callbackQueryId, text, options = {}) {
   return callBale('answerCallbackQuery', {
     callback_query_id: callbackQueryId,
@@ -315,6 +325,7 @@ module.exports = {
   sendDocumentByUrl,
   sendPhotoByUrl,
   editMessageText,
+  editMessageCaption,
   editMessageReplyMarkup,
   answerCallbackQuery,
   safeAnswerCallbackQuery,
