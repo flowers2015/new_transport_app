@@ -15,6 +15,7 @@ const {
 const {
   formatCountdown,
   formatAnnouncementList,
+  formatAnnouncementListMarkdown,
   formatAnnouncementRowMarkdown,
   formatAssignmentGroupMessage,
   BALE_PARSE_MODE,
@@ -1123,23 +1124,42 @@ function buildTurnCaption(session, entry) {
   return `نوبت ${name} — فقط شماره بار را بفرستید\n⏱ ${countdown}`;
 }
 
+async function sendTurnLoadText(chatId, session, entry, eligible) {
+  const caption = buildTurnCaption(session, entry);
+  const text =
+    `${caption}\n\n` +
+    `بارهای مجاز — فقط شماره را بفرستید:\n\n` +
+    formatAnnouncementListMarkdown(eligible);
+  const sent = await baleApi.sendMessage(chatId, text, { parseMode: BALE_PARSE_MODE });
+  return sent?.message_id;
+}
+
 async function sendTurnLoadPhoto(chatId, session, entry, eligible) {
   const caption = buildTurnCaption(session, entry);
-  const { buffer } = await renderAnnouncementTablePng(eligible, {
-    vehicleCategory: session.vehicle_category,
-  });
-  const filename = `loads-${Date.now()}.png`;
   try {
-    const sent = await baleApi.sendPhoto(chatId, buffer, filename, { caption });
-    return sent?.message_id;
-  } catch (err) {
-    console.warn('⚠️ [bale] turn photo, sending as file:', err.message);
-    const sent = await baleApi.sendDocument(chatId, buffer, filename, {
-      mimeType: 'image/png',
-      caption,
+    const { buffer } = await renderAnnouncementTablePng(eligible, {
+      vehicleCategory: session.vehicle_category,
     });
-    return sent?.message_id;
+    const filename = `loads-${Date.now()}.png`;
+    try {
+      const sent = await baleApi.sendPhoto(chatId, buffer, filename, { caption });
+      return sent?.message_id;
+    } catch (err) {
+      console.warn('⚠️ [bale] turn photo failed, trying file:', err.message);
+      try {
+        const sent = await baleApi.sendDocument(chatId, buffer, filename, {
+          mimeType: 'image/png',
+          caption,
+        });
+        return sent?.message_id;
+      } catch (fileErr) {
+        console.warn('⚠️ [bale] turn file failed, sending text list:', fileErr.message);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ [bale] turn image render failed, sending text list:', err.message);
   }
+  return sendTurnLoadText(chatId, session, entry, eligible);
 }
 
 async function resumeCurrentTurn(sessionId) {
@@ -1340,16 +1360,33 @@ async function refreshTurnTimerMessage(sessionId) {
   const entry = currentTurnEntry(session);
   if (!entry) return;
 
+  const caption = buildTurnCaption(session, entry);
   try {
-    const caption = buildTurnCaption(session, entry);
     await baleApi.editMessageCaption(
       session.current_turn_chat_id,
       session.current_turn_message_id,
       caption
     );
+    return;
+  } catch (err) {
+    if (String(err.message).includes('message is not modified')) return;
+  }
+
+  try {
+    const eligible = await eligibleAnnouncementsForDriver(session, entry);
+    const text =
+      `${caption}\n\n` +
+      `بارهای مجاز — فقط شماره را بفرستید:\n\n` +
+      formatAnnouncementListMarkdown(eligible);
+    await baleApi.editMessageText(
+      session.current_turn_chat_id,
+      session.current_turn_message_id,
+      text,
+      { parseMode: BALE_PARSE_MODE }
+    );
   } catch (err) {
     if (!String(err.message).includes('message is not modified')) {
-      console.warn('⚠️ [bale] timer caption:', err.message);
+      console.warn('⚠️ [bale] timer edit:', err.message);
     }
   }
 }
