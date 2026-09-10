@@ -45,8 +45,7 @@ const {
 } = require('./baleNextLoadPrefs');
 const { recordPrivatePeer } = require('./baleInboundPeers');
 const { isVeryFarAnnouncement } = require('../dispatch/dispatchRouteRules');
-const { buildExcelBuffer } = require('./baleReportExcel');
-const { renderAnnouncementTablePng, announcementsToTableRows } = require('./baleSessionTableImage');
+const { renderAnnouncementTablePng, renderAnnouncementTableXlsx } = require('./baleSessionTableImage');
 const {
   sessionStartIntro,
   namesAfterImageText,
@@ -426,13 +425,27 @@ async function sendGroupFile(session, buffer, filename, options = {}) {
   }
 }
 
+async function sendGroupPhoto(session, buffer, filename, options = {}) {
+  if (!session?.group_channel_slot) return false;
+  const groupChatId = await getChannelChatId(session.group_channel_slot);
+  if (!groupChatId) return false;
+  try {
+    await baleApi.sendPhoto(groupChatId, buffer, filename, {
+      caption: options.caption,
+    });
+    return true;
+  } catch (err) {
+    console.warn('⚠️ [bale] group photo:', err.message);
+    return false;
+  }
+}
+
 async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { allCategory = false } = {}) {
   const list = announcements || [];
   const caption = loadsImageCaption(vehicleCategory, list.length, { allCategory });
   try {
     const { buffer } = await renderAnnouncementTablePng(list, { vehicleCategory });
-    const sent = await sendGroupFile(session, buffer, `loads-${Date.now()}.png`, {
-      mimeType: 'image/png',
+    const sent = await sendGroupPhoto(session, buffer, `loads-${Date.now()}.png`, {
       caption,
     });
     if (sent) return 'image';
@@ -440,9 +453,18 @@ async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { 
     console.warn('⚠️ [bale] loads table image:', err.message);
   }
   try {
-    const rows = announcementsToTableRows(list, vehicleCategory);
-    const xlsx = await buildExcelBuffer(rows);
-    const sent = await sendGroupFile(session, xlsx, `loads-${Date.now()}.xlsx`, {
+    const { buffer } = await renderAnnouncementTablePng(list, { vehicleCategory });
+    const sent = await sendGroupFile(session, buffer, `loads-${Date.now()}.png`, {
+      mimeType: 'image/png',
+      caption: `${caption}\n(تصویر به‌صورت فایل ارسال شد)`,
+    });
+    if (sent) return 'image';
+  } catch (err) {
+    console.warn('⚠️ [bale] loads table png file:', err.message);
+  }
+  try {
+    const { buffer } = await renderAnnouncementTableXlsx(list, { vehicleCategory });
+    const sent = await sendGroupFile(session, buffer, `loads-${Date.now()}.xlsx`, {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       caption: `${caption}\n(تصویر ساخته نشد؛ فایل جدول ارسال شد)`,
     });

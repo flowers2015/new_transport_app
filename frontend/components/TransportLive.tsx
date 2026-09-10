@@ -172,6 +172,11 @@ const renderDairyAmbientDestinationChips = (ann: FreightAnnouncement) =>
                     </span>
                 )}
                 {unloadTime && <span className="text-orange-600 mr-1">🕐{unloadTime}</span>}
+                {Number(d.freightCost) > 0 && (
+                    <span className="text-violet-700 mr-1">
+                        کرایه {Number(d.freightCost).toLocaleString('fa-IR')}
+                    </span>
+                )}
                 {idx < ann.destinations.length - 1 && '، '}
             </span>
         );
@@ -326,11 +331,16 @@ interface TransportLiveProps {
     onReferToCarrier?: (
         announcementId: string,
         carrierId: string,
-        totalFreightCost: number
+        totalFreightCost: number,
+        destinationFreightCosts?: { destinationId: string; freightCost: number }[]
     ) => Promise<{ ok: boolean; message?: string } | void> | void;
     onReferToCarrierBulk?: (
         carrierId: string,
-        items: { announcementId: string; totalFreightCost: number }[]
+        items: {
+            announcementId: string;
+            totalFreightCost: number;
+            destinationFreightCosts?: { destinationId: string; freightCost: number }[];
+        }[]
     ) => void | Promise<void>;
     onCancelCarrierRefer?: (announcementId: string, options?: { skipConfirm?: boolean }) => void | Promise<void>;
     onCarrierReturn?: (announcementId: string, reason?: string) => void | Promise<void>;
@@ -1451,6 +1461,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                     { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                     { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
                         withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
+                    {
+                        header: DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+                        excelOnly: true,
+                        render: (ann: FreightAnnouncement) => formatDairyDestinationFreightCostsText(ann),
+                    },
                     { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                     { header: 'ساعت حضور', render: (ann: FreightAnnouncement) => ann.platformArrivalTime || '-' },
                     { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -1553,6 +1568,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 { header: 'کل تناژ (کیلوگرم)', render: (ann: FreightAnnouncement) => formatTotalTonnageFromDestinations(ann.destinations) },
                 { header: 'مقاصد', render: (ann: FreightAnnouncement) =>
                     withReannounceBadge(ann, renderDairyAmbientDestinationChips(ann)) },
+                {
+                    header: DAIRY_DEST_FREIGHT_EXCEL_HEADER,
+                    excelOnly: true,
+                    render: (ann: FreightAnnouncement) => formatDairyDestinationFreightCostsText(ann),
+                },
                 { header: 'ارزش بار (ریال)', render: (ann: FreightAnnouncement) => (ann.cargoValue || 0).toLocaleString('fa-IR') },
                 { header: 'تاریخ تحویل', render: (ann: FreightAnnouncement) => renderDairyDeliveryDatesCell(ann) },
                 { header: 'تاریخ اعلام بار', render: (ann: FreightAnnouncement) => <span>{formatJalaliDateTime(ann.createdAt)}</span> },
@@ -3544,7 +3564,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             const result = await onReferToCarrier(
                                 items[0].announcementId,
                                 carrierId,
-                                items[0].totalFreightCost
+                                items[0].totalFreightCost,
+                                items[0].destinationFreightCosts
                             );
                             if (result && 'ok' in result) {
                                 alert(
@@ -3557,7 +3578,12 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             await onReferToCarrierBulk(carrierId, items);
                         } else {
                             for (const item of items) {
-                                await onReferToCarrier(item.announcementId, carrierId, item.totalFreightCost);
+                                await onReferToCarrier(
+                                    item.announcementId,
+                                    carrierId,
+                                    item.totalFreightCost,
+                                    item.destinationFreightCosts
+                                );
                             }
                         }
                         setReferDialogAnns(null);
@@ -5266,49 +5292,91 @@ const ChangeRequestDialog: React.FC<{ announcement: FreightAnnouncement, onClose
 };
 
 
+const destFreightKey = (annId: string, destId: string) => `${annId}:${destId}`;
+
 const CarrierReferDialog: React.FC<{
     announcements: FreightAnnouncement[];
     carriers: Array<{ id: string; name: string; hasLoginUser?: boolean }>;
     onClose: () => void;
     onRefer: (
         carrierId: string,
-        items: { announcementId: string; totalFreightCost: number }[]
+        items: {
+            announcementId: string;
+            totalFreightCost: number;
+            destinationFreightCosts: { destinationId: string; freightCost: number }[];
+        }[]
     ) => void | Promise<void>;
     onReferToCompany?: () => void;
 }> = ({ announcements, carriers, onClose, onRefer, onReferToCompany }) => {
     const isBulk = announcements.length > 1;
     const [carrierId, setCarrierId] = useState('');
-    const [rowCosts, setRowCosts] = useState<Record<string, string>>(() => {
+    const [destCosts, setDestCosts] = useState<Record<string, string>>(() => {
         const init: Record<string, string> = {};
         announcements.forEach((ann) => {
-            const existing = parseNumericField(ann.totalFreightCost);
-            init[ann.id] =
-                existing > 0 ? formatNumericInputDisplay(String(Math.round(existing))) : '';
+            const dests = ann.destinations || [];
+            dests.forEach((dest) => {
+                const existing = parseNumericField(dest.freightCost);
+                init[destFreightKey(ann.id, dest.id)] =
+                    existing > 0 ? formatNumericInputDisplay(String(Math.round(existing))) : '';
+            });
+            if (dests.length === 1 && !init[destFreightKey(ann.id, dests[0].id)]) {
+                const total = parseNumericField(ann.totalFreightCost);
+                if (total > 0) {
+                    init[destFreightKey(ann.id, dests[0].id)] = formatNumericInputDisplay(
+                        String(Math.round(total))
+                    );
+                }
+            }
         });
         return init;
     });
 
-    const handleRowCostChange = (annId: string, raw: string) => {
+    const handleDestCostChange = (annId: string, destId: string, raw: string) => {
         const digits = sanitizeNumericInputString(raw);
-        setRowCosts((prev) => ({
+        setDestCosts((prev) => ({
             ...prev,
-            [annId]: digits ? formatNumericInputDisplay(digits) : '',
+            [destFreightKey(annId, destId)]: digits ? formatNumericInputDisplay(digits) : '',
         }));
     };
+
+    const announcementTotal = (ann: FreightAnnouncement) =>
+        (ann.destinations || []).reduce(
+            (sum, dest) => sum + parseNumericField(destCosts[destFreightKey(ann.id, dest.id)] || ''),
+            0
+        );
 
     const handleSubmit = async () => {
         if (!carrierId) {
             alert('باربری را انتخاب کنید.');
             return;
         }
-        const items: { announcementId: string; totalFreightCost: number }[] = [];
+        const items: {
+            announcementId: string;
+            totalFreightCost: number;
+            destinationFreightCosts: { destinationId: string; freightCost: number }[];
+        }[] = [];
         for (const ann of announcements) {
-            const cost = parseNumericField(rowCosts[ann.id] || '');
-            if (!Number.isFinite(cost) || cost <= 0) {
-                alert(`کرایه معتبر برای بار ${ann.announcementCode} وارد کنید.`);
+            const dests = ann.destinations || [];
+            if (dests.length === 0) {
+                alert(`بار ${ann.announcementCode} مقصد ندارد.`);
                 return;
             }
-            items.push({ announcementId: ann.id, totalFreightCost: cost });
+            const destinationFreightCosts: { destinationId: string; freightCost: number }[] = [];
+            for (const dest of dests) {
+                const cost = parseNumericField(destCosts[destFreightKey(ann.id, dest.id)] || '');
+                if (!Number.isFinite(cost) || cost <= 0) {
+                    alert(
+                        `کرایه معتبر برای مقصد «${dest.city || dest.id}» در بار ${ann.announcementCode} وارد کنید.`
+                    );
+                    return;
+                }
+                destinationFreightCosts.push({ destinationId: dest.id, freightCost: cost });
+            }
+            items.push({
+                announcementId: ann.id,
+                totalFreightCost: destinationFreightCosts.reduce((s, d) => s + d.freightCost, 0),
+                destinationFreightCosts,
+            });
         }
         await onRefer(carrierId, items);
     };
@@ -5316,7 +5384,7 @@ const CarrierReferDialog: React.FC<{
     return (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div
-                className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+                className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="p-5 border-b shrink-0">
@@ -5325,12 +5393,18 @@ const CarrierReferDialog: React.FC<{
                             ? `ارجاع گروهی به باربری (${announcements.length.toLocaleString('fa-IR')} بار)`
                             : 'ارجاع به باربری'}
                     </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                        برای هر مقصد کرایه جدا ثبت کنید. کرایه کل از جمع مقاصد به‌دست می‌آید.
+                    </p>
                 </div>
                 <div className="p-5 overflow-y-auto flex-1 space-y-3">
-                    {announcements.map((ann) => (
+                    {announcements.map((ann) => {
+                        const dests = ann.destinations || [];
+                        const total = announcementTotal(ann);
+                        return (
                         <div
                             key={ann.id}
-                            className="grid grid-cols-1 sm:grid-cols-[1fr_9rem] gap-2 items-start border border-slate-200 rounded-lg p-3 bg-slate-50"
+                            className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2"
                         >
                             <div>
                                 <p className="text-xs text-slate-500 mb-1">کد: {ann.announcementCode}</p>
@@ -5338,20 +5412,40 @@ const CarrierReferDialog: React.FC<{
                                     {buildFreightReferSummary(ann)}
                                 </p>
                             </div>
-                            <div>
-                                <label className="text-xs block mb-1">کرایه کل (ریال) *</label>
-                                <input
-                                    className="input-style w-full"
-                                    value={rowCosts[ann.id] || ''}
-                                    onChange={(e) => handleRowCostChange(ann.id, e.target.value)}
-                                    placeholder="مثلاً 20000000"
-                                    inputMode="numeric"
-                                    dir="ltr"
-                                    autoComplete="off"
-                                />
+                            <div className="space-y-2">
+                                {dests.map((dest, idx) => (
+                                    <div
+                                        key={dest.id || idx}
+                                        className="grid grid-cols-1 sm:grid-cols-[1fr_10rem] gap-2 items-center"
+                                    >
+                                        <label className="text-xs text-slate-600">
+                                            کرایه مقصد {idx + 1}
+                                            {dest.city ? ` — ${dest.city}` : ''} (ریال) *
+                                        </label>
+                                        <input
+                                            className="input-style w-full"
+                                            value={destCosts[destFreightKey(ann.id, dest.id)] || ''}
+                                            onChange={(e) =>
+                                                handleDestCostChange(ann.id, dest.id, e.target.value)
+                                            }
+                                            placeholder="مثلاً 20000000"
+                                            inputMode="numeric"
+                                            dir="ltr"
+                                            autoComplete="off"
+                                        />
+                                    </div>
+                                ))}
                             </div>
+                            <p className="text-xs text-slate-600">
+                                کرایه کل:{' '}
+                                <span className="font-medium">
+                                    {total > 0 ? total.toLocaleString('fa-IR') : '—'}
+                                </span>{' '}
+                                ریال
+                            </p>
                         </div>
-                    ))}
+                        );
+                    })}
                     <div>
                         <label className="text-sm block mb-1">باربری *</label>
                         <select

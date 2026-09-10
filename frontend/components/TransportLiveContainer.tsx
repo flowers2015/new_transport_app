@@ -1618,18 +1618,26 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
-    const onReferToCarrier = async (announcementId: string, carrierId: string, totalFreightCost: number) => {
+    const onReferToCarrier = async (
+        announcementId: string,
+        carrierId: string,
+        totalFreightCost: number,
+        destinationFreightCosts?: { destinationId: string; freightCost: number }[]
+    ) => {
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(getApiUrl(`freight-announcements/${announcementId}/carrier-refer`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ carrierId, totalFreightCost }),
+                body: JSON.stringify({ carrierId, totalFreightCost, destinationFreightCosts }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'خطا در ارجاع به باربری');
             const carrierName =
                 carriers.find((c) => c.id === carrierId)?.name || data.carrierName || undefined;
+            const destCostMap = new Map(
+                (destinationFreightCosts || []).map((d) => [String(d.destinationId), d.freightCost])
+            );
             setAnnouncements((prev) =>
                 prev.map((ann) =>
                     ann.id === announcementId
@@ -1641,6 +1649,12 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
                               totalFreightCost,
                               freightCostLockedAt: new Date().toISOString(),
                               carrierName: carrierName ?? ann.carrierName,
+                              destinations: (ann.destinations || []).map((dest) => ({
+                                  ...dest,
+                                  freightCost: destCostMap.has(String(dest.id))
+                                      ? destCostMap.get(String(dest.id))
+                                      : dest.freightCost,
+                              })),
                           }
                         : ann
                 )
@@ -1654,12 +1668,21 @@ const TransportLiveContainer: React.FC<{ currentUser: User }> = ({ currentUser }
 
     const onReferToCarrierBulk = async (
         carrierId: string,
-        items: { announcementId: string; totalFreightCost: number }[]
+        items: {
+            announcementId: string;
+            totalFreightCost: number;
+            destinationFreightCosts?: { destinationId: string; freightCost: number }[];
+        }[]
     ) => {
         let successCount = 0;
         let lastError: string | null = null;
         for (const item of items) {
-            const result = await onReferToCarrier(item.announcementId, carrierId, item.totalFreightCost);
+            const result = await onReferToCarrier(
+                item.announcementId,
+                carrierId,
+                item.totalFreightCost,
+                item.destinationFreightCosts
+            );
             if (result?.ok) successCount += 1;
             else lastError = result?.message || 'خطا';
         }

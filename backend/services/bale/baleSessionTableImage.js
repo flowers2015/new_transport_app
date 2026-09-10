@@ -8,25 +8,24 @@ const {
   formatRepresentativeType,
   getDestinationDisplay,
   getOriginDisplay,
+  formatCargoValueToman,
 } = require('./baleFormat');
 
 const execFileAsync = promisify(execFile);
 
 const TABLE_WIDTH = 1680;
-const COL_UNITS = [5, 9, 26, 11, 7, 9, 18, 12, 7, 13, 11];
+const COL_UNITS = [6, 10, 16, 20, 12, 8, 14, 12, 16];
 const COL_TOTAL = COL_UNITS.reduce((a, b) => a + b, 0);
 const HEADERS = [
-  'ردیف',
-  'نوع خودرو',
+  'شماره بار',
+  'نماینده یا پخش',
+  'نام نماینده',
   'مقاصد',
   'مبدا بارگیری',
   'برند',
-  'نوع نماینده',
-  'نام نماینده',
   'محصولات',
-  'کد خودرو',
-  'نام راننده',
-  'شماره تماس',
+  'ارزش بار',
+  'توضیحات',
 ];
 
 function tableHeightPx(rowCount) {
@@ -54,27 +53,60 @@ function isDairyAnn(ann) {
   return t.includes('پاستوریزه') || t.includes('dairy') || t.includes('لبن');
 }
 
+function destList(ann) {
+  return ann.allDestinations || ann.destinations || [];
+}
+
+function uniqueJoin(values) {
+  return [...new Set((values || []).map(v => String(v || '').trim()).filter(Boolean))].join('، ');
+}
+
+function representativeTypeLabel(ann) {
+  const fromDests = destList(ann)
+    .map(d => formatRepresentativeType(d.representativeType || d.representative_type))
+    .filter(Boolean);
+  if (fromDests.length) return uniqueJoin(fromDests);
+  return formatRepresentativeType(ann.representativeType || ann.representative_type);
+}
+
+function representativeNameLabel(ann) {
+  const fromDests = destList(ann).map(d => d.representativeName || d.representative_name);
+  if (fromDests.some(Boolean)) return uniqueJoin(fromDests);
+  return String(ann.representativeName || ann.representative_name || '').trim();
+}
+
+function destinationsLabel(ann) {
+  const cities = destList(ann)
+    .map(d => String(d.city || '').trim())
+    .filter(Boolean);
+  if (cities.length) return cities.join('\n');
+  return getDestinationDisplay(ann);
+}
+
 function productsLabel(ann) {
-  const products = ann.products || [];
-  if (Array.isArray(products) && products.length) return products.join('، ');
-  return '';
+  const fromAnn = Array.isArray(ann.products) ? ann.products : [];
+  const fromDests = destList(ann).flatMap(d => (Array.isArray(d.products) ? d.products : []));
+  return uniqueJoin([...fromAnn, ...fromDests]);
+}
+
+function notesLabel(ann) {
+  const notes = String(ann.notes || '').trim();
+  if (!notes) return '';
+  return notes;
 }
 
 function announcementsToTableRows(announcements, vehicleCategory) {
+  void vehicleCategory;
   return (announcements || []).map((ann, idx) => ({
     row: idx + 1,
-    vehicleType: dash(ann.vehicleType || ann.vehicle_type || vehicleCategory),
-    destinations: dash(getDestinationDisplay(ann)),
+    representativeType: dash(representativeTypeLabel(ann)),
+    representativeName: dash(representativeNameLabel(ann)),
+    destinations: dash(destinationsLabel(ann)),
     origin: dash(getOriginDisplay(ann)),
     brand: dash(ann.brand),
-    representativeType: dash(
-      formatRepresentativeType(ann.representativeType || ann.representative_type)
-    ),
-    representativeName: dash(ann.representativeName || ann.representative_name),
-    products: productsLabel(ann),
-    vehicleCode: '—',
-    driverName: '—',
-    driverContact: '—',
+    products: dash(productsLabel(ann)),
+    cargoValue: dash(formatCargoValueToman(ann.cargoValue ?? ann.cargo_value)),
+    notes: dash(notesLabel(ann)),
     isDairy: isDairyAnn(ann),
   }));
 }
@@ -99,17 +131,15 @@ function buildTableHtml(rows, title) {
     .map((r) => {
       const bg = r.isDairy ? '#fef9c3' : r.row % 2 === 0 ? '#f8fafc' : '#ffffff';
       return `<tr style="background:${bg};">${[
-        cellHtml(r.row),
-        cellHtml(r.vehicleType),
+        cellHtml(String(r.row)),
+        cellHtml(r.representativeType),
+        cellHtml(r.representativeName, true),
         cellHtml(r.destinations, true),
         cellHtml(r.origin),
         cellHtml(r.brand),
-        cellHtml(r.representativeType),
-        cellHtml(r.representativeName, true),
         cellHtml(r.products, true),
-        cellHtml(r.vehicleCode),
-        cellHtml(r.driverName),
-        cellHtml(r.driverContact),
+        cellHtml(r.cargoValue),
+        cellHtml(r.notes, true),
       ].join('')}</tr>`;
     })
     .join('');
@@ -250,7 +280,38 @@ async function renderAnnouncementTablePng(announcements, { vehicleCategory } = {
   return { buffer, rowCount: rows.length, rows };
 }
 
+async function renderAnnouncementTableXlsx(announcements, { vehicleCategory } = {}) {
+  const ExcelJS = require('exceljs');
+  const rows = announcementsToTableRows(announcements, vehicleCategory);
+  if (rows.length === 0) {
+    throw new Error('باری برای تصویر وجود ندارد.');
+  }
+  const workbook = new ExcelJS.Workbook();
+  workbook.views = [{ rightToLeft: true }];
+  const sheet = workbook.addWorksheet('لیست بار', {
+    views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }],
+  });
+  const headerRow = sheet.addRow(HEADERS);
+  headerRow.font = { bold: true };
+  rows.forEach(r => {
+    sheet.addRow([
+      r.row,
+      r.representativeType,
+      r.representativeName,
+      r.destinations,
+      r.origin,
+      r.brand,
+      r.products,
+      r.cargoValue,
+      r.notes,
+    ]);
+  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  return { buffer, rowCount: rows.length, rows };
+}
+
 module.exports = {
   announcementsToTableRows,
   renderAnnouncementTablePng,
+  renderAnnouncementTableXlsx,
 };

@@ -194,7 +194,46 @@ async function sendSurveyText(chatId, text, replyMarkup, messageId) {
   }
 }
 
-async function paintSurvey(survey) {
+async function freezeMessage(chatId, messageId, text) {
+  if (!chatId || !messageId) return;
+  await sendSurveyText(chatId, text, { inline_keyboard: [] }, messageId);
+}
+
+function answeredText(question, answer) {
+  return `${question}\n\n✅ ${mdBold('جواب شما:')} ${answer}`;
+}
+
+function lineAnswerLabel(extra) {
+  if (extra === 'ice') return 'بستنی نمی‌روم';
+  if (extra === 'dairy') return 'پاستوریزه نمی‌روم';
+  return 'بستنی یا لبنیات فرقی ندارد';
+}
+
+function distanceAnswerLabel(extra) {
+  if (extra === 'near') return 'نزدیک نمی‌روم';
+  if (extra === 'far') return 'دور نمی‌روم';
+  if (extra === 'veryFar') return 'خیلی‌دور نمی‌روم';
+  return 'فرقی ندارد';
+}
+
+function provincesAnswerLabel(list) {
+  const names = (list || []).filter(Boolean);
+  return names.length ? names.join('، ') : 'هیچ‌کدام';
+}
+
+async function persistDraftPref(survey) {
+  if (!survey?.driverId) return;
+  const draft = survey.draft || {};
+  await saveCompletedPref(survey.driverId, {
+    followTurn: false,
+    rejectLine: draft.rejectLine,
+    rejectDistance: draft.rejectDistance,
+    rejectProvinces: draft.rejectProvinces,
+    preferProvinces: draft.preferProvinces,
+  });
+}
+
+async function paintSurvey(survey, { asNew = false } = {}) {
   const withGeo = await attachProvinces(survey);
   const text = renderBody(withGeo.step, withGeo.draft);
   const replyMarkup = keyboardFor(withGeo);
@@ -202,7 +241,7 @@ async function paintSurvey(survey) {
     withGeo.chatId,
     text,
     replyMarkup,
-    withGeo.messageId
+    asNew ? null : withGeo.messageId
   );
   if (messageId && messageId !== withGeo.messageId) {
     await updateSurvey(withGeo.id, { messageId });
@@ -219,35 +258,42 @@ async function startNextLoadSurvey(driverId) {
   const chatId = rows[0]?.outreach_chat_id;
   if (!chatId) return;
   const survey = await createSurvey(driverId, chatId);
-  await paintSurvey(survey);
+  await paintSurvey(survey, { asNew: true });
 }
 
 async function finishSkip(survey) {
   await saveCompletedPref(survey.driverId, { followTurn: true });
+  await freezeMessage(
+    survey.chatId,
+    survey.messageId,
+    answeredText(renderBody('intro', survey.draft), 'ترجیحی ندارم؛ طبق نوبت دفتر یا سیستم')
+  );
   await deleteSurvey(survey.id);
   const text =
     `✅ ${mdBold('طبق نوبت ثبت شد')}.\n` +
     'اگر چند ردیف باشد بیشترین کیلومتر باقی‌مانده انتخاب می‌شود.\n' +
     NOT_RESERVED;
-  await sendSurveyText(survey.chatId, text, { inline_keyboard: [] }, survey.messageId);
+  await sendSurveyText(survey.chatId, text, { inline_keyboard: [] }, null);
 }
 
 async function finishSave(survey) {
-  await saveCompletedPref(survey.driverId, {
-    followTurn: false,
-    rejectLine: survey.draft.rejectLine,
-    rejectDistance: survey.draft.rejectDistance,
-    rejectProvinces: survey.draft.rejectProvinces,
-    preferProvinces: survey.draft.preferProvinces,
-  });
+  await persistDraftPref(survey);
   const pref = {
     followTurn: false,
     ...survey.draft,
   };
   const summary = formatPrefSummary(pref, { audience: 'driver' });
+  await freezeMessage(
+    survey.chatId,
+    survey.messageId,
+    answeredText(
+      renderBody('prefer_province', survey.draft),
+      provincesAnswerLabel(survey.draft.preferProvinces)
+    )
+  );
   await deleteSurvey(survey.id);
   const text = `✅ ${mdBold('ثبت شد')}.\n${summary}\n\n${NOT_RESERVED}`;
-  await sendSurveyText(survey.chatId, text, { inline_keyboard: [] }, survey.messageId);
+  await sendSurveyText(survey.chatId, text, { inline_keyboard: [] }, null);
 }
 
 function toggleProvince(list, name, max) {
@@ -282,8 +328,13 @@ async function handleNextLoadCallback(callbackQuery) {
 
   if (survey.step === 'intro' && cmd === 'ask') {
     await baleApi.safeAnswerCallbackQuery(callbackQuery.id);
-    const next = await updateSurvey(survey.id, { step: 'reject_line' });
-    await paintSurvey({ ...survey, ...next, messageId: survey.messageId });
+    await freezeMessage(
+      survey.chatId,
+      survey.messageId,
+      answeredText(renderBody('intro', survey.draft), 'ترجیحات را ثبت می‌کنم')
+    );
+    const next = await updateSurvey(survey.id, { step: 'reject_line', messageId: null });
+    await paintSurvey({ ...survey, ...next, messageId: null }, { asNew: true });
     return { handled: true };
   }
 
@@ -293,8 +344,14 @@ async function handleNextLoadCallback(callbackQuery) {
       ...survey.draft,
       rejectLine: extra === 'ice' || extra === 'dairy' ? extra : null,
     };
-    const next = await updateSurvey(survey.id, { step: 'reject_province', draft });
-    await paintSurvey({ ...survey, ...next, draft, messageId: survey.messageId });
+    await persistDraftPref({ ...survey, draft });
+    await freezeMessage(
+      survey.chatId,
+      survey.messageId,
+      answeredText(renderBody('reject_line', draft), lineAnswerLabel(extra))
+    );
+    const next = await updateSurvey(survey.id, { step: 'reject_province', draft, messageId: null });
+    await paintSurvey({ ...survey, ...next, draft, messageId: null }, { asNew: true });
     return { handled: true };
   }
 
@@ -319,14 +376,24 @@ async function handleNextLoadCallback(callbackQuery) {
     }
     const draft = { ...survey.draft, rejectProvinces: nextList };
     const next = await updateSurvey(survey.id, { draft });
+    await persistDraftPref({ ...survey, draft });
     await paintSurvey({ ...survey, ...next, draft, messageId: survey.messageId });
     return { handled: true };
   }
 
   if (survey.step === 'reject_province' && cmd === 'done') {
     await baleApi.safeAnswerCallbackQuery(callbackQuery.id);
-    const next = await updateSurvey(survey.id, { step: 'reject_distance' });
-    await paintSurvey({ ...survey, ...next, messageId: survey.messageId });
+    await persistDraftPref(survey);
+    await freezeMessage(
+      survey.chatId,
+      survey.messageId,
+      answeredText(
+        renderBody('reject_province', survey.draft),
+        provincesAnswerLabel(survey.draft.rejectProvinces)
+      )
+    );
+    const next = await updateSurvey(survey.id, { step: 'reject_distance', messageId: null });
+    await paintSurvey({ ...survey, ...next, messageId: null }, { asNew: true });
     return { handled: true };
   }
 
@@ -336,8 +403,14 @@ async function handleNextLoadCallback(callbackQuery) {
       ...survey.draft,
       rejectDistance: extra === 'near' || extra === 'far' || extra === 'veryFar' ? extra : null,
     };
-    const next = await updateSurvey(survey.id, { step: 'prefer_province', draft });
-    await paintSurvey({ ...survey, ...next, draft, messageId: survey.messageId });
+    await persistDraftPref({ ...survey, draft });
+    await freezeMessage(
+      survey.chatId,
+      survey.messageId,
+      answeredText(renderBody('reject_distance', draft), distanceAnswerLabel(extra))
+    );
+    const next = await updateSurvey(survey.id, { step: 'prefer_province', draft, messageId: null });
+    await paintSurvey({ ...survey, ...next, draft, messageId: null }, { asNew: true });
     return { handled: true };
   }
 
@@ -377,6 +450,7 @@ async function handleNextLoadCallback(callbackQuery) {
     }
     const draft = { ...survey.draft, preferProvinces: nextList };
     const next = await updateSurvey(survey.id, { draft });
+    await persistDraftPref({ ...survey, draft });
     await paintSurvey({ ...survey, ...next, draft, messageId: survey.messageId });
     return { handled: true };
   }

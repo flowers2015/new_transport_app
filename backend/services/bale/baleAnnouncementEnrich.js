@@ -10,20 +10,33 @@ function combineBrands(row) {
   return String(row.brand).trim() || '—';
 }
 
+function parseProducts(raw) {
+  if (Array.isArray(raw)) return raw.filter(Boolean).map(String);
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String);
+    } catch {
+      return [raw.trim()];
+    }
+  }
+  return [];
+}
+
 async function enrichAnnouncements(announcements) {
   const ids = (announcements || []).map(a => a.id).filter(Boolean);
   if (!ids.length) return announcements || [];
 
   const { rows: faRows } = await pool.query(
     `SELECT id, brand, origin_city, cargo_value, notes, delivery_date, line_type, loading_date,
-            representative_type, representative_name
+            representative_type, representative_name, products
      FROM freight_announcements WHERE id = ANY($1::varchar[])`,
     [ids]
   );
   const faMap = new Map(faRows.map(r => [r.id, r]));
 
   const { rows: destRows } = await pool.query(
-    `SELECT freight_announcement_id, city, delivery_date, representative_name, representative_type
+    `SELECT freight_announcement_id, city, delivery_date, representative_name, representative_type, products
      FROM freight_destinations WHERE freight_announcement_id = ANY($1::varchar[])
      ORDER BY created_at ASC`,
     [ids]
@@ -76,6 +89,11 @@ async function enrichAnnouncements(announcements) {
         row?.representative_name ||
         destRepNames.join('، ') ||
         null,
+      products: (() => {
+        const fromAnn = parseProducts(ann.products).concat(parseProducts(row?.products));
+        const fromDests = dests.flatMap(d => parseProducts(d.products));
+        return [...new Set([...fromAnn, ...fromDests].filter(Boolean))];
+      })(),
       allDestinations: dests.length ? dests : ann.allDestinations,
       deliveryDate: (() => {
         const raw = row?.delivery_date;

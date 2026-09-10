@@ -56,7 +56,7 @@ function notifyUpdate(announcementId, patch, userId) {
 /** POST /freight-announcements/:id/carrier-refer */
 async function referToCarrier(req, res) {
   const { id: announcementId } = req.params;
-  const { carrierId, totalFreightCost } = req.body;
+  const { carrierId, totalFreightCost, destinationFreightCosts } = req.body;
   const role = req.user?.role;
   const userId = req.user?.userId || req.user?.id;
   const userName = await buildUserName(req);
@@ -69,7 +69,8 @@ async function referToCarrier(req, res) {
   if (!carrierId) {
     return res.status(400).json({ message: 'انتخاب باربری الزامی است.' });
   }
-  if (!Number.isFinite(cost) || cost <= 0) {
+  const hasDestCosts = Array.isArray(destinationFreightCosts) && destinationFreightCosts.length > 0;
+  if (!hasDestCosts && (!Number.isFinite(cost) || cost <= 0)) {
     return res.status(400).json({ message: 'ثبت کرایه قبل از ارجاع الزامی است.' });
   }
 
@@ -123,6 +124,71 @@ async function referToCarrier(req, res) {
     }
     const carrier = carrierRes.rows[0];
 
+    const destRes = await client.query(
+      `
+      SELECT id, city, freight_cost
+      FROM freight_destinations
+      WHERE freight_announcement_id = $1
+      ORDER BY created_at ASC, id ASC
+      `,
+      [announcementId]
+    );
+    if (destRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'این بار مقصد ندارد.' });
+    }
+
+    const destIds = new Set(destRes.rows.map((r) => String(r.id)));
+    const incoming = Array.isArray(destinationFreightCosts) ? destinationFreightCosts : [];
+    const costsById = {};
+
+    if (destRes.rows.length > 1) {
+      if (incoming.length !== destRes.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'برای هر مقصد باید کرایه جدا ثبت شود.' });
+      }
+      for (const item of incoming) {
+        const destId = String(item?.destinationId || item?.id || '');
+        const destCost = Number(item?.freightCost ?? item?.freight_cost);
+        if (!destIds.has(destId) || !Number.isFinite(destCost) || destCost <= 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'کرایه هر مقصد باید عدد معتبر بزرگ‌تر از صفر باشد.' });
+        }
+        if (costsById[destId] != null) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'کرایه هر مقصد باید یک‌بار ثبت شود.' });
+        }
+        costsById[destId] = destCost;
+      }
+      if (destRes.rows.some((row) => costsById[String(row.id)] == null)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'برای هر مقصد باید کرایه جدا ثبت شود.' });
+      }
+    } else if (incoming.length === 1) {
+      const destId = String(incoming[0]?.destinationId || incoming[0]?.id || destRes.rows[0].id);
+      const destCost = Number(incoming[0]?.freightCost ?? incoming[0]?.freight_cost ?? cost);
+      if (!destIds.has(destId) || !Number.isFinite(destCost) || destCost <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'کرایه مقصد نامعتبر است.' });
+      }
+      costsById[destId] = destCost;
+    } else {
+      costsById[String(destRes.rows[0].id)] = cost;
+    }
+
+    const summedCost = destRes.rows.reduce((sum, row) => sum + Number(costsById[String(row.id)] || 0), 0);
+    if (!Number.isFinite(summedCost) || summedCost <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'ثبت کرایه قبل از ارجاع الزامی است.' });
+    }
+
+    for (const row of destRes.rows) {
+      await client.query(
+        `UPDATE freight_destinations SET freight_cost = $1 WHERE id = $2 AND freight_announcement_id = $3`,
+        [costsById[String(row.id)], row.id, announcementId]
+      );
+    }
+
     await client.query(
       `
       UPDATE freight_announcements SET
@@ -134,8 +200,16 @@ async function referToCarrier(req, res) {
         updated_at = NOW()
       WHERE id = $4
       `,
-      [carrierId, cost, carrier.name, announcementId]
+      [carrierId, summedCost, carrier.name, announcementId]
     );
+
+    const destFreightChanges = {};
+    destRes.rows.forEach((row, idx) => {
+      destFreightChanges[`کرایه مقصد ${idx + 1} (${row.city || ''})`] = {
+        old: row.freight_cost || null,
+        new: costsById[String(row.id)],
+      };
+    });
 
     await logFreightHistory({
       announcementId,
@@ -146,11 +220,12 @@ async function referToCarrier(req, res) {
       newStatus: ann.status,
       fieldChanges: {
         باربری: { old: ann.carrier_name || null, new: carrier.name },
-        total_freight_cost: { old: ann.total_freight_cost || null, new: cost },
+        total_freight_cost: { old: ann.total_freight_cost || null, new: summedCost },
+        ...destFreightChanges,
       },
       description: carrierChanged
-        ? `تغییر باربری به «${carrier.name}» با کرایه ${cost}`
-        : `ارجاع به باربری «${carrier.name}» با کرایه ${cost}`,
+        ? `تغییر باربری به «${carrier.name}» با کرایه ${summedCost}`
+        : `ارجاع به باربری «${carrier.name}» با کرایه ${summedCost}`,
       ipAddress: req.ip,
       client,
     });
@@ -164,14 +239,22 @@ async function referToCarrier(req, res) {
       });
     });
 
+    const destinationsPayload = destRes.rows.map((row) => ({
+      id: row.id,
+      city: row.city,
+      freightCost: costsById[String(row.id)],
+      freight_cost: costsById[String(row.id)],
+    }));
+
     notifyUpdate(
       announcementId,
       {
         handoff_carrier_id: carrierId,
         handoff_status: 'with_carrier',
-        total_freight_cost: cost,
+        total_freight_cost: summedCost,
         carrier_name: carrier.name,
         freight_cost_locked_at: new Date().toISOString(),
+        destinations: destinationsPayload,
       },
       userId
     );
@@ -180,8 +263,9 @@ async function referToCarrier(req, res) {
       message: `بار به باربری «${carrier.name}» ارجاع شد.`,
       handoffCarrierId: carrierId,
       handoffStatus: 'with_carrier',
-      totalFreightCost: cost,
+      totalFreightCost: summedCost,
       carrierName: carrier.name,
+      destinations: destinationsPayload,
     });
   } catch (error) {
     await client.query('ROLLBACK');
