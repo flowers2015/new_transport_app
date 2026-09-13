@@ -515,28 +515,17 @@ async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { 
 }
 
 async function sendGroupQueueNames(session, stage, namesQueue) {
-  const htmlText = namesAfterImageText(
-    stage,
-    formatAnnouncementOrderNames(namesQueue, { html: true }),
-    { html: true }
-  );
-  const mdText = namesAfterImageText(stage, formatAnnouncementOrderNames(namesQueue));
+  const text = namesAfterImageText(stage, formatAnnouncementOrderNames(namesQueue));
   if (!session?.group_channel_slot) return;
   const groupChatId = await getChannelChatId(session.group_channel_slot);
   if (!groupChatId) return;
   try {
-    await baleApi.sendMessage(groupChatId, htmlText, { parseMode: 'HTML' });
+    await baleApi.sendMessage(groupChatId, text);
     return;
   } catch (err) {
-    console.warn('⚠️ [bale] group names HTML:', err.message);
+    console.warn('⚠️ [bale] group names:', err.message);
+    await baleApi.sendMessage(groupChatId, stripMarkdown(text));
   }
-  try {
-    await baleApi.sendMessage(groupChatId, mdText, { parseMode: BALE_PARSE_MODE });
-    return;
-  } catch (err) {
-    console.warn('⚠️ [bale] group names markdown:', err.message);
-  }
-  await baleApi.sendMessage(groupChatId, stripMarkdown(mdText));
 }
 
 async function announceToGroup(session, text, options = {}) {

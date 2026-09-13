@@ -24,28 +24,21 @@ function sessionStartIntro(stage) {
   return 'اعلام بار نهایی آغاز شد.\nمسیرهای باقی‌مانده طبق نوبت از ابتدا اعلام می‌شود.';
 }
 
-function escapeHtml(text) {
-  return String(text || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function boldTitle(text) {
+  const clean = String(text || '').replace(/\*/g, '');
+  return ` *${clean}* `;
 }
 
-function titleText(text, html) {
-  const clean = String(text || '');
-  return html ? `<b>${escapeHtml(clean)}</b>` : boldTitle(clean);
-}
-
-function namesAfterImageText(stage, namesText, { html = false } = {}) {
+function namesAfterImageText(stage, namesText) {
   if (isVeryFarPublicStage(stage)) {
     return (
-      `${titleText('اعلام بار مسیرهای خیلی دور', html)}\n` +
+      `${boldTitle('اعلام بار مسیرهای خیلی دور')}\n` +
       'ابتدا به نفراتی که اعزام نشده‌اند اعلام خواهد شد:\n\n' +
       namesText
     );
   }
   return (
-    `${titleText('اعلام بار نهایی', html)}\n` +
+    `${boldTitle('اعلام بار نهایی')}\n` +
     'ترتیب اعلام طبق نوبت از ابتدا:\n\n' +
     namesText
   );
@@ -80,10 +73,6 @@ function namesQueueForGroup(_stage, turnQueue, displayQueue) {
   return orderQueueFarThenNear(board);
 }
 
-function boldTitle(text) {
-  return `*${String(text || '').replace(/\*/g, '')}*`;
-}
-
 function driverWentVeryFar(item) {
   return Boolean(
     item?.lastVeryFarAtJalali ||
@@ -91,18 +80,13 @@ function driverWentVeryFar(item) {
   );
 }
 
-function formatQueueNameLine(item, index, html) {
-  const rawName = item.driver?.name || item.driver_name || '—';
-  const name = html ? escapeHtml(rawName) : rawName;
-  const mark = driverWentVeryFar(item)
-    ? html
-      ? ' <font color="#cc0000">قبلا دور رفته</font>'
-      : ' 🔴 قبلا دور رفته'
-    : '';
+function formatQueueNameLine(item, index) {
+  const name = item.driver?.name || item.driver_name || '—';
+  const mark = driverWentVeryFar(item) ? ' 🔴 قبلا دور رفته' : '';
   return `${index}. ${name}${mark}`;
 }
 
-function formatAnnouncementOrderNames(queue, { html = false } = {}) {
+function formatAnnouncementOrderNames(queue) {
   const list = queue || [];
   if (list.length === 0) return 'راننده‌ای در صف این اعلام نیست.';
 
@@ -112,16 +96,16 @@ function formatAnnouncementOrderNames(queue, { html = false } = {}) {
 
   const parts = [];
   if (far.length) {
-    parts.push(titleText('دور', html));
-    far.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1, html)));
+    parts.push(boldTitle('دور'));
+    far.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1)));
   }
   if (near.length) {
     if (parts.length) parts.push('');
-    parts.push(titleText('نزدیک', html));
-    near.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1, html)));
+    parts.push(boldTitle('نزدیک'));
+    near.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1)));
   }
   if (!far.length && !near.length && other.length) {
-    other.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1, html)));
+    other.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1)));
   }
   return parts.join('\n');
 }
