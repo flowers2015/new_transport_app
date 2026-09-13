@@ -1369,9 +1369,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                     
                     // ساخت یک Map از savedData برای دسترسی سریع
                     const savedDataMap = new Map<string, any>();
-                    savedData.forEach((item: any) => {
+                        savedData.forEach((item: any) => {
                         const key = `${item.driver_id}_${item.announcement_id}`;
                         savedDataMap.set(key, item);
+                        if (item.announcement_id) {
+                            savedDataMap.set(`ann:${item.announcement_id}`, item);
+                        }
                     });
                     
                     // 🔴 DEBUG: ذخیره در window برای بررسی
@@ -1393,7 +1396,8 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             const ann = announcements.find(a => a.id === saved.announcement_id);
                             if (!ann || isExcludedTour(saved.announcement_id)) return;
                             
-                            const driver = drivers.find(d => d.id === saved.driver_id);
+                            const liveDriverId = ann.assigned_driver_id || saved.driver_id;
+                            const driver = drivers.find(d => d.id === liveDriverId);
                             const vehicle = vehicles.find(v => v.id === ann.assigned_vehicle_id);
                             
                             if (!driver || !vehicle) return;
@@ -1457,16 +1461,16 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         
                         savedData.forEach((saved: any) => {
                             if (isExcludedTour(saved.announcement_id)) return;
-                            
-                            const driver = drivers.find(d => d.id === saved.driver_id);
+
+                            const ann = announcements.find(a => a.id === saved.announcement_id);
+                            if (ann && isFinanceRejectedAnn(ann as any)) return;
+
+                            const liveDriverId = ann?.assigned_driver_id || saved.driver_id;
+                            const driver = drivers.find(d => d.id === liveDriverId);
                             if (!driver) return;
                             
                             const driverId = driver.id;
                             const existing = driverMap.get(driverId);
-                            
-                            // اگر announcement نداریم، از saved data استفاده کن
-                            const ann = announcements.find(a => a.id === saved.announcement_id);
-                            if (ann && isFinanceRejectedAnn(ann as any)) return;
                             const roundTripKm = ann?.route?.round_trip_km || (saved.approved_kilometers || 0) + (saved.excess_kilometers || 0);
                             
                             // پیدا کردن vehicle از announcements یا vehicles
@@ -1566,7 +1570,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                             const updatedTours = openTours.map(tour => {
                                 // استفاده از Map برای دسترسی سریع‌تر
                                 const key = `${calc.driverId}_${tour.announcementId}`;
-                                const saved = savedDataMap.get(key);
+                                const saved =
+                                    savedDataMap.get(key) ||
+                                    savedDataMap.get(`ann:${tour.announcementId}`);
                                 const freshAnn = getFreshAnnouncementTourFields(tour.announcementId);
                                 const tourWithFreshMeta = freshAnn
                                     ? {
@@ -1705,12 +1711,18 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         
                         // اگر این تور قبلاً در baseData هست، نادیده بگیر
                         if (baseTourIds.has(saved.announcement_id)) return;
+
+                        const ann = announcements.find((a: any) => a.id === saved.announcement_id);
+                        if (
+                            ann?.assigned_driver_id &&
+                            String(ann.assigned_driver_id) !== String(saved.driver_id)
+                        ) {
+                            return;
+                        }
                         
                         // پیدا کردن یا ساختن راننده
                         const driver = drivers.find(d => d.id === saved.driver_id);
                         if (!driver) return;
-
-                        const ann = announcements.find((a: any) => a.id === saved.announcement_id);
                         
                         // ساختن tour از savedData
                         const tourFromSaved: DriverTourDetailWithCalculation = {

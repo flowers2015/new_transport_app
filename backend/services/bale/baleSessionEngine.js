@@ -14,7 +14,6 @@ const {
 } = require('./balePreferenceBrief');
 const {
   formatCountdown,
-  formatAnnouncementList,
   formatAnnouncementListMarkdown,
   formatAnnouncementRowMarkdown,
   formatAssignmentGroupMessage,
@@ -319,6 +318,55 @@ function confirmKeyboard(sessionId) {
   };
 }
 
+function buildConfirmPromptText(rowNum, ann, footer) {
+  return (
+    `${mdBold('انتخاب شما:')}\n` +
+    formatAnnouncementRowMarkdown(rowNum, ann) +
+    (footer ? `\n\n${footer}` : '')
+  );
+}
+
+function parsePendingSelection(session) {
+  if (!session?.pending_selection) return null;
+  return typeof session.pending_selection === 'object'
+    ? session.pending_selection
+    : JSON.parse(session.pending_selection);
+}
+
+async function freezeConfirmPrompt(chatId, messageId, text) {
+  if (!chatId || !messageId) return;
+  const replyMarkup = { inline_keyboard: [] };
+  if (text) {
+    try {
+      await baleApi.editMessageText(chatId, messageId, text, {
+        parseMode: BALE_PARSE_MODE,
+        replyMarkup,
+      });
+      return;
+    } catch (err) {
+      if (String(err.message).includes('message is not modified')) return;
+    }
+    try {
+      await baleApi.editMessageText(chatId, messageId, stripMarkdown(text), { replyMarkup });
+      return;
+    } catch (_) {}
+  }
+  try {
+    await baleApi.editMessageReplyMarkup(chatId, messageId, replyMarkup);
+  } catch (err2) {
+    if (!String(err2.message).includes('message is not modified')) {
+      console.warn('⚠️ [bale] freeze confirm buttons:', err2.message);
+    }
+  }
+}
+
+function confirmPromptIds(callbackQuery, pending) {
+  return {
+    chatId: callbackQuery?.message?.chat?.id || pending?.confirmChatId || null,
+    messageId: callbackQuery?.message?.message_id || pending?.confirmMessageId || null,
+  };
+}
+
 function turnKeyboard(sessionId, turnIndex) {
   return {
     inline_keyboard: [
@@ -442,6 +490,7 @@ async function sendGroupPhoto(session, buffer, filename, options = {}) {
 
 async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { allCategory = false } = {}) {
   const list = announcements || [];
+  if (!list.length) return null;
   const caption = loadsImageCaption(vehicleCategory, list.length, { allCategory });
   try {
     const { buffer } = await renderAnnouncementTablePng(list, { vehicleCategory });
@@ -451,16 +500,6 @@ async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { 
     if (sent) return 'image';
   } catch (err) {
     console.warn('⚠️ [bale] loads table image:', err.message);
-  }
-  try {
-    const { buffer } = await renderAnnouncementTablePng(list, { vehicleCategory });
-    const sent = await sendGroupFile(session, buffer, `loads-${Date.now()}.png`, {
-      mimeType: 'image/png',
-      caption: `${caption}\n(تصویر به‌صورت فایل ارسال شد)`,
-    });
-    if (sent) return 'image';
-  } catch (err) {
-    console.warn('⚠️ [bale] loads table png file:', err.message);
   }
   try {
     const { buffer } = await renderAnnouncementTableXlsx(list, { vehicleCategory });
@@ -473,6 +512,31 @@ async function sendLoadsTableToGroup(session, announcements, vehicleCategory, { 
     console.warn('⚠️ [bale] loads table excel:', err.message);
   }
   return null;
+}
+
+async function sendGroupQueueNames(session, stage, namesQueue) {
+  const htmlText = namesAfterImageText(
+    stage,
+    formatAnnouncementOrderNames(namesQueue, { html: true }),
+    { html: true }
+  );
+  const mdText = namesAfterImageText(stage, formatAnnouncementOrderNames(namesQueue));
+  if (!session?.group_channel_slot) return;
+  const groupChatId = await getChannelChatId(session.group_channel_slot);
+  if (!groupChatId) return;
+  try {
+    await baleApi.sendMessage(groupChatId, htmlText, { parseMode: 'HTML' });
+    return;
+  } catch (err) {
+    console.warn('⚠️ [bale] group names HTML:', err.message);
+  }
+  try {
+    await baleApi.sendMessage(groupChatId, mdText, { parseMode: BALE_PARSE_MODE });
+    return;
+  } catch (err) {
+    console.warn('⚠️ [bale] group names markdown:', err.message);
+  }
+  await baleApi.sendMessage(groupChatId, stripMarkdown(mdText));
 }
 
 async function announceToGroup(session, text, options = {}) {
@@ -497,25 +561,30 @@ async function broadcastSessionStartToGroup(
   const namesQueue = namesQueueForGroup(stage, queue, displayQueue);
   const includeIntro = options.includeIntro !== false;
   const allCategoryImage = Boolean(options.allCategoryImage);
+  const sendLoadsFile = options.sendLoadsFile !== false;
 
   if (includeIntro) {
     await sendGroupMessage(session, sessionStartIntro(stage));
   }
 
-  await sendLoadsTableToGroup(session, imageList, vehicleCategory, {
-    allCategory: allCategoryImage,
-  });
+  if (sendLoadsFile) {
+    try {
+      await sendLoadsTableToGroup(session, imageList, vehicleCategory, {
+        allCategory: allCategoryImage,
+      });
+    } catch (err) {
+      console.warn('⚠️ [bale] loads file skipped, session continues:', err.message);
+    }
+  }
 
-  await sendGroupMessage(
-    session,
-    namesAfterImageText(stage, formatAnnouncementOrderNames(namesQueue))
-  );
+  await sendGroupQueueNames(session, stage, namesQueue);
 
   await logEvent(session.id, 'group_broadcast', {
     type: 'session_start',
     queueMessage: true,
-    announcementCount: imageList.length,
+    announcementCount: sendLoadsFile ? imageList.length : 0,
     namesOnly: true,
+    loadsFileSent: sendLoadsFile,
     publicStage: publicStageName(stage),
   });
 }
@@ -840,7 +909,7 @@ async function startDispatchPhase(sessionId, newStage, { groupTitle, logType }) 
     newStage,
     vehicleCategory,
     liveDisplayQueue,
-    { includeIntro: false }
+    { includeIntro: false, sendLoadsFile: false }
   );
   await logEvent(sessionId, logType, {
     stage: newStage,
@@ -899,9 +968,7 @@ async function finishQueueIfDone(sessionId) {
     await announceToGroup(
       session,
       `⚠️ نوبت‌ها تمام شد (${queue.length} راننده).\n` +
-        `${remaining.length} بار هنوز بدون تخصیص مانده:\n\n` +
-        formatAnnouncementList(remaining) +
-        `\n\nاپراتور از وب تخصیص دستی کنید.`
+        `${remaining.length} بار بدون تخصیص مانده — اپراتور از وب تخصیص دستی کنید.`
     );
     await logEvent(sessionId, 'queue_exhausted_loads_remain', {
       drivers: queue.length,
@@ -1519,11 +1586,7 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
     return { handled: true };
   }
 
-  const pending = session.pending_selection
-    ? typeof session.pending_selection === 'object'
-      ? session.pending_selection
-      : JSON.parse(session.pending_selection)
-    : null;
+  const pending = parsePendingSelection(session);
 
   if (pending) {
     await baleApi.sendMessage(chatId, 'ابتدا گزینه تأیید یا انصراف را انتخاب کنید.');
@@ -1549,13 +1612,15 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
   }
 
   const ann = eligible[rowNum - 1];
-  const confirmText =
-    `${mdBold('انتخاب شما:')}\n` +
-    formatAnnouncementRowMarkdown(rowNum, ann) +
-    `\n\nآیا تأیید می‌کنید؟`;
+  const confirmText = buildConfirmPromptText(rowNum, ann, 'آیا تأیید می‌کنید؟');
 
   await clearTurnTimer(session.id, {
     freezeText: `⏸ منتظر تأیید شما — تایمر متوقف شد\n👤 ${entry.driver?.name || entry.driver_name || '—'}`,
+  });
+
+  const sent = await baleApi.sendMessage(chatId, confirmText, {
+    parseMode: BALE_PARSE_MODE,
+    replyMarkup: confirmKeyboard(session.id),
   });
 
   await updateSession(session.id, {
@@ -1567,13 +1632,10 @@ async function handleTextMessage(chatId, text, fromUserId, chat = null) {
       driverId: turnDriverId,
       queueEntryId: entry.id,
       vehicleId: entry.vehicleId || entry.vehicle_id,
+      confirmChatId: chatId,
+      confirmMessageId: sent?.message_id || null,
     }),
     turn_deadline_at: null,
-  });
-
-  const sent = await baleApi.sendMessage(chatId, confirmText, {
-    parseMode: BALE_PARSE_MODE,
-    replyMarkup: confirmKeyboard(session.id),
   });
   await logEvent(session.id, 'selection_pending', { rowNum, announcementId: ann.id });
   return { handled: true, messageId: sent?.message_id };
@@ -1782,20 +1844,46 @@ async function handleCallback(callbackQuery) {
     return { handled: true };
   }
 
-  const pending = session.pending_selection
-    ? typeof session.pending_selection === 'object'
-      ? session.pending_selection
-      : JSON.parse(session.pending_selection)
-    : null;
+  const pending = parsePendingSelection(session);
+  const { chatId: confirmChatId, messageId: confirmMessageId } = confirmPromptIds(
+    callbackQuery,
+    pending
+  );
+
+  async function freezePendingConfirm(footer) {
+    const rowNum = pending?.rowNumber;
+    const ann = parseAnnouncements(session).find(
+      a => String(a.id) === String(pending?.announcementId)
+    );
+    const text =
+      rowNum && ann
+        ? buildConfirmPromptText(rowNum, ann, footer)
+        : footer;
+    await freezeConfirmPrompt(confirmChatId, confirmMessageId, text);
+  }
 
   if (action === 'bale_confirm') {
+    if (session.status === 'assigning') {
+      await freezePendingConfirm('⏳ در حال ثبت تخصیص...');
+      await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'در حال ثبت است');
+      return { handled: true };
+    }
     if (!pending) {
+      await freezeConfirmPrompt(
+        confirmChatId,
+        confirmMessageId,
+        callbackQuery.message?.text
+          ? `${String(callbackQuery.message.text).replace(/\nآیا تأیید می‌کنید؟\s*$/, '')}\n\n✅ این بار برای شما ثبت شد.`
+          : '✅ این بار برای شما ثبت شد.'
+      );
       await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'قبلاً ثبت شده');
       return { handled: true };
     }
+    await freezePendingConfirm('⏳ در حال ثبت تخصیص...');
     await baleApi.safeAnswerCallbackQuery(callbackQuery.id);
     try {
       const assignResult = await completeAssignment(session, pending, 'driver');
+      await freezePendingConfirm('✅ این بار برای شما ثبت شد.');
       const durationNote =
         assignResult.selectionDurationSec != null
           ? `\n⏱ زمان انتخاب: ${assignResult.selectionDurationSec} ثانیه`
@@ -1805,12 +1893,19 @@ async function handleCallback(callbackQuery) {
         `✅ تخصیص با موفقیت ثبت شد.${durationNote}`
       );
     } catch (err) {
+      await freezePendingConfirm(`❌ ${err.message}`);
       await baleApi.sendMessage(driverChatId, `❌ ${err.message}`);
     }
     return { handled: true };
   }
 
   if (action === 'bale_cancel') {
+    if (!pending || session.status === 'assigning') {
+      await freezeConfirmPrompt(confirmChatId, confirmMessageId, null);
+      await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'قبلاً ثبت شده');
+      return { handled: true };
+    }
+    await freezePendingConfirm('انصراف شد.');
     await baleApi.safeAnswerCallbackQuery(callbackQuery.id, 'انصراف');
     await updateSession(sessionId, {
       status: 'running',

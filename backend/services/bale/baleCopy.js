@@ -24,15 +24,31 @@ function sessionStartIntro(stage) {
   return 'اعلام بار نهایی آغاز شد.\nمسیرهای باقی‌مانده طبق نوبت از ابتدا اعلام می‌شود.';
 }
 
-function namesAfterImageText(stage, namesText) {
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function titleText(text, html) {
+  const clean = String(text || '');
+  return html ? `<b>${escapeHtml(clean)}</b>` : boldTitle(clean);
+}
+
+function namesAfterImageText(stage, namesText, { html = false } = {}) {
   if (isVeryFarPublicStage(stage)) {
     return (
-      'اعلام بار مسیرهای خیلی دور\n' +
+      `${titleText('اعلام بار مسیرهای خیلی دور', html)}\n` +
       'ابتدا به نفراتی که اعزام نشده‌اند اعلام خواهد شد:\n\n' +
       namesText
     );
   }
-  return `اعلام بار نهایی\nترتیب اعلام طبق نوبت از ابتدا:\n\n${namesText}`;
+  return (
+    `${titleText('اعلام بار نهایی', html)}\n` +
+    'ترتیب اعلام طبق نوبت از ابتدا:\n\n' +
+    namesText
+  );
 }
 
 function loadsImageCaption(vehicleCategory, count, { allCategory = false } = {}) {
@@ -59,23 +75,55 @@ function orderQueueFarThenNear(queue) {
   return [...far, ...near, ...other];
 }
 
-function namesQueueForGroup(stage, turnQueue, displayQueue) {
-  if (isVeryFarPublicStage(stage)) {
-    return turnQueue && turnQueue.length ? turnQueue : displayQueue || [];
-  }
+function namesQueueForGroup(_stage, turnQueue, displayQueue) {
   const board = displayQueue && displayQueue.length ? displayQueue : turnQueue || [];
   return orderQueueFarThenNear(board);
 }
 
-function formatAnnouncementOrderNames(queue) {
+function boldTitle(text) {
+  return `*${String(text || '').replace(/\*/g, '')}*`;
+}
+
+function driverWentVeryFar(item) {
+  return Boolean(
+    item?.lastVeryFarAtJalali ||
+      (Array.isArray(item?.longRouteHistory) && item.longRouteHistory.length > 0)
+  );
+}
+
+function formatQueueNameLine(item, index, html) {
+  const rawName = item.driver?.name || item.driver_name || '—';
+  const name = html ? escapeHtml(rawName) : rawName;
+  const mark = driverWentVeryFar(item)
+    ? html
+      ? ' <font color="#cc0000">قبلا دور رفته</font>'
+      : ' 🔴 قبلا دور رفته'
+    : '';
+  return `${index}. ${name}${mark}`;
+}
+
+function formatAnnouncementOrderNames(queue, { html = false } = {}) {
   const list = queue || [];
   if (list.length === 0) return 'راننده‌ای در صف این اعلام نیست.';
-  return list
-    .map((item, i) => {
-      const name = item.driver?.name || item.driver_name || '—';
-      return `${i + 1}. ${name}`;
-    })
-    .join('\n');
+
+  const far = list.filter(item => queueTypeOf(item) === 'far');
+  const near = list.filter(item => queueTypeOf(item) === 'near');
+  const other = list.filter(item => !['far', 'near'].includes(queueTypeOf(item)));
+
+  const parts = [];
+  if (far.length) {
+    parts.push(titleText('دور', html));
+    far.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1, html)));
+  }
+  if (near.length) {
+    if (parts.length) parts.push('');
+    parts.push(titleText('نزدیک', html));
+    near.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1, html)));
+  }
+  if (!far.length && !near.length && other.length) {
+    other.forEach((item, i) => parts.push(formatQueueNameLine(item, i + 1, html)));
+  }
+  return parts.join('\n');
 }
 
 function skippedStage1ToFinal(reason) {

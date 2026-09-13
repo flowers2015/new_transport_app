@@ -1,18 +1,46 @@
 const pool = require('../db');
 
+/** DDL must not run inside a CRUD transaction; a failed ALTER aborts the UPDATE. */
+async function ensureExpectedDaysVarchar() {
+  try {
+    await pool.query(`
+      ALTER TABLE dispatch_routes
+      ALTER COLUMN expected_days TYPE VARCHAR(255)
+    `);
+  } catch (_) {
+    // ستون از قبل مناسب است یا دسترسی DDL نیست
+  }
+}
+
+function cityWriteError(res, error, fallbackMessage) {
+  if (error?.code === '23505') {
+    return res.status(409).json({
+      message: 'این ترکیب شهر و استان از قبل ثبت شده است.',
+      error: error.message,
+    });
+  }
+  if (error?.code === '23503') {
+    return res.status(409).json({
+      message: 'این مسیر در داده‌های دیگر استفاده شده و این تغییر مجاز نیست.',
+      error: error.message,
+    });
+  }
+  if (error?.code === '22P02' || /invalid input syntax/i.test(String(error?.message || ''))) {
+    return res.status(400).json({
+      message: 'مقدار روزهای مورد انتظار با نوع ستون سازگار نیست. متن آزاد ذخیره نشد.',
+      error: error.message,
+    });
+  }
+  return res.status(500).json({ message: fallbackMessage, error: error.message });
+}
+
 /**
  * دریافت لیست همه مسیرها از dispatch_routes
  */
 async function getCities(req, res) {
   try {
-    // اطمینان از اینکه expected_days می‌تواند string هم باشد
-    await pool.query(`
-      ALTER TABLE dispatch_routes 
-      ALTER COLUMN expected_days TYPE VARCHAR(255)
-    `).catch(() => {
-      // اگر ستون وجود ندارد یا خطا داد، نادیده بگیر
-    });
-    
+    await ensureExpectedDaysVarchar();
+
     const result = await pool.query(`
       SELECT 
         id,
@@ -97,6 +125,7 @@ async function getCityById(req, res) {
 async function createCity(req, res) {
   const client = await pool.connect();
   try {
+    await ensureExpectedDaysVarchar();
     await client.query('BEGIN');
     
     const { city, province, roundTripKm, expectedDays, approvedAllowance, routeCategory, distanceCategory, isActive } = req.body;
@@ -105,14 +134,6 @@ async function createCity(req, res) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'شهر و استان الزامی است' });
     }
-    
-    // اطمینان از اینکه expected_days می‌تواند string هم باشد
-    await client.query(`
-      ALTER TABLE dispatch_routes 
-      ALTER COLUMN expected_days TYPE VARCHAR(255)
-    `).catch(() => {
-      // اگر خطا داد، نادیده بگیر
-    });
     
     const id = require('crypto').randomUUID();
     
@@ -173,7 +194,7 @@ async function createCity(req, res) {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [createCity] Error:', error);
-    res.status(500).json({ message: 'خطا در ایجاد مسیر', error: error.message });
+    cityWriteError(res, error, 'خطا در ایجاد مسیر');
   } finally {
     client.release();
   }
@@ -185,6 +206,7 @@ async function createCity(req, res) {
 async function updateCity(req, res) {
   const client = await pool.connect();
   try {
+    await ensureExpectedDaysVarchar();
     await client.query('BEGIN');
     
     const { id } = req.params;
@@ -194,14 +216,6 @@ async function updateCity(req, res) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'شهر و استان الزامی است' });
     }
-    
-    // اطمینان از اینکه expected_days می‌تواند string هم باشد
-    await client.query(`
-      ALTER TABLE dispatch_routes 
-      ALTER COLUMN expected_days TYPE VARCHAR(255)
-    `).catch(() => {
-      // اگر خطا داد، نادیده بگیر
-    });
     
     // تبدیل expectedDays: اگر عدد است به string، اگر string است همانطور نگه دار
     let expectedDaysValue = null;
@@ -271,7 +285,7 @@ async function updateCity(req, res) {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [updateCity] Error:', error);
-    res.status(500).json({ message: 'خطا در به‌روزرسانی مسیر', error: error.message });
+    cityWriteError(res, error, 'خطا در به‌روزرسانی مسیر');
   } finally {
     client.release();
   }
@@ -303,7 +317,7 @@ async function deleteCity(req, res) {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ [deleteCity] Error:', error);
-    res.status(500).json({ message: 'خطا در حذف مسیر', error: error.message });
+    cityWriteError(res, error, 'خطا در حذف مسیر');
   } finally {
     client.release();
   }
@@ -315,15 +329,8 @@ async function deleteCity(req, res) {
 async function importCitiesFromExcel(req, res) {
   const client = await pool.connect();
   try {
+    await ensureExpectedDaysVarchar();
     await client.query('BEGIN');
-    
-    // اطمینان از اینکه expected_days می‌تواند string هم باشد
-    await client.query(`
-      ALTER TABLE dispatch_routes 
-      ALTER COLUMN expected_days TYPE VARCHAR(255)
-    `).catch(() => {
-      // اگر خطا داد، نادیده بگیر
-    });
     
     if (!req.file) {
       await client.query('ROLLBACK');

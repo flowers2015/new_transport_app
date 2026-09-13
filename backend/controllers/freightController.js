@@ -1558,6 +1558,82 @@ async function getFreightAnnouncementById(req, res) {
   }
 }
 
+function isLockedDriverCalculation(row) {
+  const status = String(row?.commission_status || '').toLowerCase();
+  return Boolean(
+    row?.is_paid === true ||
+      row?.period_id ||
+      status === 'commission_calculated' ||
+      status === 'paid'
+  );
+}
+
+/** وقتی ادمین راننده/خودرو را در مدیریت اعلام بار عوض می‌کند، مالی و تخصیص نوبت هم باید همان را ببینند. */
+async function syncLinkedAssignmentAfterAdminEdit(client, {
+  announcementId,
+  oldDriverId,
+  newDriverId,
+  newVehicleId,
+}) {
+  const nextDriver = newDriverId ? String(newDriverId).trim() : '';
+  const prevDriver = oldDriverId ? String(oldDriverId).trim() : '';
+  const nextVehicle = newVehicleId ? String(newVehicleId).trim() : '';
+  if (!nextDriver) return;
+  const driverChanged = Boolean(prevDriver && prevDriver !== nextDriver);
+
+  try {
+    await client.query(
+      `UPDATE dispatch_assignments
+       SET driver_id = $2,
+           vehicle_id = COALESCE($3, vehicle_id)
+       WHERE freight_announcement_id = $1
+         AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
+      [announcementId, nextDriver, nextVehicle || null]
+    );
+  } catch (err) {
+    console.warn('⚠️ [updateFreightAnnouncement] sync dispatch_assignments:', err.message);
+  }
+
+  if (!driverChanged) return;
+
+  try {
+    const tableCheck = await client.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'driver_calculations'`
+    );
+    if (!tableCheck.rowCount) return;
+
+    const oldCalcs = await client.query(
+      `SELECT id, is_paid, period_id, commission_status
+       FROM driver_calculations
+       WHERE announcement_id = $1 AND driver_id = $2`,
+      [announcementId, prevDriver]
+    );
+    const newCalcs = await client.query(
+      `SELECT id, is_paid, period_id, commission_status
+       FROM driver_calculations
+       WHERE announcement_id = $1 AND driver_id = $2`,
+      [announcementId, nextDriver]
+    );
+    const newHasOpen = newCalcs.rows.some((r) => !isLockedDriverCalculation(r));
+    const newHasAny = newCalcs.rowCount > 0;
+
+    for (const row of oldCalcs.rows) {
+      if (isLockedDriverCalculation(row)) continue;
+      if (newHasOpen || newHasAny) {
+        await client.query(`DELETE FROM driver_calculations WHERE id = $1`, [row.id]);
+      } else {
+        await client.query(
+          `UPDATE driver_calculations SET driver_id = $1 WHERE id = $2`,
+          [nextDriver, row.id]
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ [updateFreightAnnouncement] sync driver_calculations:', err.message);
+  }
+}
+
 /**
  * Updates an existing freight announcement. Supports updating status and core fields.
  * If destinations are provided, replaces existing destinations.
@@ -1929,11 +2005,14 @@ async function updateFreightAnnouncement(req, res) {
               [driverIdForSnapshot]
             );
             const d = driverSnap.rows[0];
+            const driverChanged =
+              incomingDriverId &&
+              String(oldRecord.assigned_driver_id || '') !== incomingDriverId;
             if (d) {
-              if (!assignedDriverName || !String(assignedDriverName).trim()) {
+              if (driverChanged || !assignedDriverName || !String(assignedDriverName).trim()) {
                 assignedDriverName = d.name || oldRecord.assigned_driver_name || null;
               }
-              if (!assignedDriverEmployeeId || !String(assignedDriverEmployeeId).trim()) {
+              if (driverChanged || !assignedDriverEmployeeId || !String(assignedDriverEmployeeId).trim()) {
                 assignedDriverEmployeeId =
                   d.employee_id || oldRecord.assigned_driver_employee_id || null;
               }
@@ -2265,6 +2344,13 @@ async function updateFreightAnnouncement(req, res) {
           );
         }
       }
+
+      await syncLinkedAssignmentAfterAdminEdit(client, {
+        announcementId: id,
+        oldDriverId: oldRecord.assigned_driver_id,
+        newDriverId: newRecord.assigned_driver_id,
+        newVehicleId: newRecord.assigned_vehicle_id,
+      });
 
       await client.query('COMMIT');
 

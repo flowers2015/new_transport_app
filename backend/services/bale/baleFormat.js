@@ -157,7 +157,10 @@ function formatAnnouncementMetaLines(ann, { markdown = false } = {}) {
       ? String(ann.notes).trim()
       : null;
   const rep = formatRepLine(ann);
-  const lines = [`   برند ${brand} | ارزش ${cargo} | تحویل ${delivery}`];
+  const lines = [
+    `   برند ${brand} | تحویل ${delivery}`,
+    `   ارزش ${cargo}`,
+  ];
   if (rep) lines.push(`   ${markdown ? wrap(rep) : rep}`);
   if (noteRaw) lines.push(`   ${markdown ? wrap(noteRaw) : noteRaw}`);
   return lines.join('\n');
