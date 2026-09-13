@@ -82,8 +82,10 @@ function driverWentVeryFar(item) {
 
 function formatQueueNameLine(item, index) {
   const name = item.driver?.name || item.driver_name || '—';
-  const mark = driverWentVeryFar(item) ? ' 🔴 قبلا دور رفته' : '';
-  return `${index}. ${name}${mark}`;
+  if (driverWentVeryFar(item)) {
+    return `🔴 ${index}. ${name}  _قبلا خیلی دور رفته_ `;
+  }
+  return `🟢 ${index}. ${name}`;
 }
 
 function formatAnnouncementOrderNames(queue) {
