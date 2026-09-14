@@ -833,6 +833,137 @@ async function insertFreightDestinations(clientOrPool, announcementId, destinati
   }
 }
 
+async function collectReferencedDestinationIds(client, announcementId) {
+  const referenced = new Set();
+  try {
+    const da = await client.query(
+      `SELECT freight_destination_id AS id
+       FROM dispatch_assignments
+       WHERE freight_announcement_id = $1 AND freight_destination_id IS NOT NULL`,
+      [announcementId]
+    );
+    for (const row of da.rows) {
+      if (row.id) referenced.add(String(row.id));
+    }
+  } catch (_) {
+    /* جدول/ستون ممکن است نباشد */
+  }
+  try {
+    const tx = await client.query(
+      `SELECT destination_id AS id
+       FROM freight_transactions
+       WHERE announcement_id = $1 AND destination_id IS NOT NULL`,
+      [announcementId]
+    );
+    for (const row of tx.rows) {
+      if (row.id) referenced.add(String(row.id));
+    }
+  } catch (_) {
+    /* جدول/ستون ممکن است نباشد */
+  }
+  return referenced;
+}
+
+/**
+ * ویرایش ادمین: مقصدهای موجود را درجا آپدیت کن (DELETE+INSERT با FK تخصیص/مالی کل تراکنش را برمی‌گرداند).
+ */
+async function upsertFreightDestinations(client, announcementId, destinations, originalCreatedByUserId = null) {
+  const existing = await client.query(
+    `SELECT id FROM freight_destinations WHERE freight_announcement_id = $1`,
+    [announcementId]
+  );
+  const existingIds = new Set(existing.rows.map((r) => String(r.id)));
+  const referenced = await collectReferencedDestinationIds(client, announcementId);
+  const hasSortOrder = await ensureDestinationSortOrderColumn();
+  const keepIds = new Set();
+  const toInsert = [];
+
+  for (let index = 0; index < destinations.length; index++) {
+    const d = destinations[index];
+    const rawId = d.id || d.destinationId;
+    const idStr = rawId != null ? String(rawId).trim() : '';
+    if (idStr && existingIds.has(idStr)) {
+      keepIds.add(idStr);
+      const city = d.city != null ? String(d.city).trim() : null;
+      const tonnage = normalizeTonnageKg(d.tonnage);
+      const freightCost = d.freightCost ?? d.freight_cost ?? null;
+      const cargoRaw = d.cargoValue ?? d.cargo_value;
+      const cargoValue =
+        cargoRaw === undefined || cargoRaw === null || cargoRaw === ''
+          ? null
+          : Number(cargoRaw);
+      if (hasSortOrder) {
+        await client.query(
+          `UPDATE freight_destinations
+           SET city = COALESCE($1, city),
+               tonnage = COALESCE($2, tonnage),
+               freight_cost = $3,
+               cargo_value = COALESCE($4, cargo_value),
+               sort_order = $5
+           WHERE id = $6 AND freight_announcement_id = $7`,
+          [
+            city || null,
+            tonnage,
+            freightCost,
+            Number.isFinite(cargoValue) && cargoValue > 0 ? cargoValue : null,
+            index,
+            idStr,
+            announcementId,
+          ]
+        );
+      } else {
+        await client.query(
+          `UPDATE freight_destinations
+           SET city = COALESCE($1, city),
+               tonnage = COALESCE($2, tonnage),
+               freight_cost = $3,
+               cargo_value = COALESCE($4, cargo_value)
+           WHERE id = $5 AND freight_announcement_id = $6`,
+          [
+            city || null,
+            tonnage,
+            freightCost,
+            Number.isFinite(cargoValue) && cargoValue > 0 ? cargoValue : null,
+            idStr,
+            announcementId,
+          ]
+        );
+      }
+    } else {
+      toInsert.push({
+        ...d,
+        id: crypto.randomUUID(),
+      });
+    }
+  }
+
+  const toDelete = [...existingIds].filter((destId) => !keepIds.has(destId));
+  const deletable = toDelete.filter((destId) => !referenced.has(destId));
+  const blocked = toDelete.filter((destId) => referenced.has(destId));
+  if (deletable.length > 0) {
+    await client.query(
+      `DELETE FROM freight_destinations
+       WHERE freight_announcement_id = $1 AND id = ANY($2::varchar[])`,
+      [announcementId, deletable]
+    );
+  }
+  if (toInsert.length > 0) {
+    await insertFreightDestinations(client, announcementId, toInsert, originalCreatedByUserId);
+  } else {
+    try {
+      await materializeDestinationBlockFieldsFromAnnouncement(client, announcementId);
+    } catch (e) {
+      console.warn('⚠️ [upsertFreightDestinations] materialize:', e.message);
+    }
+  }
+  if (blocked.length > 0) {
+    console.warn('⚠️ [upsertFreightDestinations] kept referenced destinations:', {
+      announcementId,
+      blocked,
+    });
+  }
+}
+
 async function updateAnnouncementStatusWithFallback(client, announcementId, candidates) {
   let lastError = null;
   for (const statusValue of candidates) {
@@ -2161,14 +2292,11 @@ async function updateFreightAnnouncement(req, res) {
         await client.query(updateQuery, values);
       }
 
-      // 3. آپدیت مقاصد (اگر ارسال شده) - با فیلدهای جدید deliveryDate و representativeType
+      // 3. آپدیت مقاصد — درجا (نه DELETE همه) تا FK تخصیص/مالی ویرایش را برنگرداند
       let newDestinations = oldDestinations;
       if (Array.isArray(destinations)) {
-        await client.query('DELETE FROM freight_destinations WHERE freight_announcement_id = $1', [id]);
+        await upsertFreightDestinations(client, id, destinations, oldRecord.created_by_user_id);
 
-        await insertFreightDestinations(client, id, destinations);
-        
-        // محاسبه و آپدیت کرایه کل (فقط اگر admin مقدار صریح نداده باشد)
         if (totalFreightCost === undefined) {
           const newTotalFreight = calculateTotalFreightCost(destinations);
           await client.query(
@@ -2176,8 +2304,29 @@ async function updateFreightAnnouncement(req, res) {
             [newTotalFreight, id]
           );
         }
-        
-        newDestinations = destinations;
+
+        const destCountRes = await client.query(
+          `SELECT COUNT(*)::int AS c FROM freight_destinations WHERE freight_announcement_id = $1`,
+          [id]
+        );
+        const destCount = Number(destCountRes.rows[0]?.c) || 0;
+        const cargoNum = cargoValue !== undefined ? Number(cargoValue) : Number(oldRecord.cargo_value);
+        if (destCount === 1 && Number.isFinite(cargoNum) && cargoNum > 0) {
+          await client.query(
+            `UPDATE freight_destinations
+             SET cargo_value = $1
+             WHERE freight_announcement_id = $2`,
+            [cargoNum, id]
+          );
+        }
+
+        const destAfter = await client.query(
+          `SELECT * FROM freight_destinations
+           WHERE freight_announcement_id = $1
+           ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
+          [id]
+        );
+        newDestinations = destAfter.rows;
       }
 
       // 4. گرفتن رکورد جدید (برای مقایسه)
@@ -2416,6 +2565,14 @@ async function updateFreightAnnouncement(req, res) {
             delivery_date: updated.delivery_date,
             cargoValue: updated.cargo_value,
             cargo_value: updated.cargo_value,
+            totalFreightCost: updated.total_freight_cost,
+            total_freight_cost: updated.total_freight_cost,
+            tariffFreightCost: updated.tariff_freight_cost,
+            tariff_freight_cost: updated.tariff_freight_cost,
+            billOfLadingNumber: updated.bill_of_lading_number,
+            bill_of_lading_number: updated.bill_of_lading_number,
+            assignedDriverName: updated.assigned_driver_name,
+            assigned_driver_name: updated.assigned_driver_name,
             vehicleType: updated.vehicle_type,
             vehicle_type: updated.vehicle_type,
             notes: updated.notes,
@@ -2437,6 +2594,12 @@ async function updateFreightAnnouncement(req, res) {
       return res.json(updated);
     } catch (e) {
       await client.query('ROLLBACK');
+      if (e?.code === '23503') {
+        return res.status(409).json({
+          message:
+            'مقصد به تخصیص نوبت یا سند مالی وصل است. مقصد را ویرایش کنید یا مقصد جدید اضافه کنید؛ حذف کامل این مقصد ممکن نیست.',
+        });
+      }
       throw e;
     } finally {
       client.release();

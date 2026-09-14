@@ -157,6 +157,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
   const [history, setHistory] = useState<AdminAction[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const currentPageRef = useRef(1);
+  const fetchGenRef = useRef(0);
   const [tableKey, setTableKey] = useState(0); // برای force re-render جدول
   const [refreshTrigger, setRefreshTrigger] = useState(0); // برای force re-render کامل
   
@@ -182,6 +183,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
 
   // دریافت لیست اعلام بارها
   const fetchAnnouncements = useCallback(async (silent: boolean = false) => {
+    const gen = ++fetchGenRef.current;
     try {
       if (!silent) {
         setLoading(true);
@@ -198,6 +200,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       );
       if (!res.ok) throw new Error('خطا در دریافت لیست اعلام بارها');
       const raw = await res.json();
+      if (gen !== fetchGenRef.current) return;
       
       // Normalize داده‌ها (مثل FreightPlanningContainer)
       const statusMap: Record<string, FreightAnnouncementStatus> = {
@@ -272,10 +275,17 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           destinations: (a.destinations || []).map((d: any) => ({
             id: d.id,
             city: d.city || '',
-            representativeName: d.representative_name || '',
-            tonnage: d.tonnage ? Number(d.tonnage) : 0,
-            freightCost: d.freight_cost ? Number(d.freight_cost) : 0,
-            unloadTime: d.unload_time || '',
+            representativeName: d.representative_name || d.representativeName || '',
+            representativeType: d.representative_type || d.representativeType,
+            tonnage: d.tonnage != null && d.tonnage !== '' ? Number(d.tonnage) : 0,
+            freightCost: Number(d.freight_cost ?? d.freightCost ?? 0) || 0,
+            cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
+            unloadTime: d.unload_time || d.unloadTime || '',
+            deliveryDate: d.delivery_date || d.deliveryDate,
+            lisCode: d.lis_code || d.lisCode,
+            brandType: d.brand_type || d.brandType,
+            brand: d.brand,
+            brand2: d.brand2,
             products: Array.isArray(d.products)
               ? d.products
               : typeof d.products === 'string'
@@ -434,12 +444,13 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
         timestamp: new Date().toISOString()
       });
     } catch (err: any) {
+      if (gen !== fetchGenRef.current) return;
       console.error('❌ [FreightManagement] خطا در دریافت اعلام بارها:', err);
       if (!silent) {
         setError(err.message);
       }
     } finally {
-      if (!silent) {
+      if (gen === fetchGenRef.current && !silent) {
         setLoading(false);
       }
     }
@@ -787,11 +798,56 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       });
 
       if (!res.ok) {
-        const error = await res.json();
+        const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'خطا در به‌روزرسانی اعلام بار');
       }
 
+      const savedRaw = await res.json().catch(() => null);
       const editedAnnouncementId = selectedAnnouncement?.id;
+
+      if (savedRaw && editedAnnouncementId) {
+        const savedDests = (savedRaw.destinations || []).map((d: any) => ({
+          id: d.id,
+          city: d.city || '',
+          representativeName: d.representative_name || d.representativeName || '',
+          tonnage: d.tonnage != null && d.tonnage !== '' ? Number(d.tonnage) : 0,
+          freightCost: Number(d.freight_cost ?? d.freightCost ?? 0) || 0,
+          cargoValue: Number(d.cargo_value ?? d.cargoValue ?? 0) || 0,
+        }));
+        setAnnouncements((prev) =>
+          prev.map((ann) =>
+            ann.id === editedAnnouncementId
+              ? {
+                  ...ann,
+                  loadingDate: savedRaw.loading_date || savedRaw.loadingDate || ann.loadingDate,
+                  lineType: savedRaw.line_type || savedRaw.lineType || ann.lineType,
+                  cargoValue: Number(savedRaw.cargo_value ?? savedRaw.cargoValue ?? ann.cargoValue) || 0,
+                  vehicleType: savedRaw.vehicle_type || savedRaw.vehicleType || ann.vehicleType,
+                  originCity: savedRaw.origin_city ?? savedRaw.originCity ?? ann.originCity,
+                  brand: savedRaw.brand ?? ann.brand,
+                  notes: savedRaw.notes ?? ann.notes,
+                  totalFreightCost: Number(
+                    savedRaw.total_freight_cost ?? savedRaw.totalFreightCost ?? ann.totalFreightCost
+                  ) || 0,
+                  tariffFreightCost:
+                    savedRaw.tariff_freight_cost != null || savedRaw.tariffFreightCost != null
+                      ? Number(savedRaw.tariff_freight_cost ?? savedRaw.tariffFreightCost)
+                      : ann.tariffFreightCost,
+                  billOfLadingNumber:
+                    savedRaw.bill_of_lading_number ??
+                    savedRaw.billOfLadingNumber ??
+                    ann.billOfLadingNumber,
+                  assignedDriverName:
+                    savedRaw.assigned_driver_name ??
+                    savedRaw.assignedDriverName ??
+                    ann.assignedDriverName,
+                  vehiclePlate: savedRaw.vehicle_plate ?? savedRaw.vehiclePlate ?? ann.vehiclePlate,
+                  destinations: savedDests.length ? savedDests : ann.destinations,
+                }
+              : ann
+          )
+        );
+      }
       
       alert('اعلام بار با موفقیت به‌روزرسانی شد');
       apiCache.invalidateContaining('freight-announcements/history');
@@ -1517,7 +1573,15 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   <button
                     type="button"
                     onClick={() => {
-                      const newDests = [...(formData.destinations || []), { city: '', tonnage: 0, freightCost: 0 }];
+                      const newDests = [
+                        ...(formData.destinations || []),
+                        {
+                          id: crypto.randomUUID(),
+                          city: '',
+                          tonnage: 0,
+                          freightCost: 0,
+                        },
+                      ];
                       setFormData({ ...formData, destinations: newDests });
                     }}
                     className="w-full px-3 py-2 bg-blue-500 text-white rounded text-sm"

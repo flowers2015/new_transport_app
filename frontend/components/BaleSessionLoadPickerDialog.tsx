@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { formatJalali } from '../utils/jalali';
+import { formatJalali, formatJalaliDateTime } from '../utils/jalali';
 
 export type BalePreviewLoad = {
     id: string;
@@ -14,6 +14,7 @@ export type BalePreviewLoad = {
     allDestinations?: Array<{ city?: string | null }>;
     loadingDate?: string | Date | null;
     createdAt?: string | Date | null;
+    created_at?: string | Date | null;
     cargoValue?: number | null;
 };
 
@@ -61,7 +62,10 @@ function formatLoadingDate(ann: BalePreviewLoad): string {
 }
 
 function formatAnnouncementDate(ann: BalePreviewLoad): string {
-    return formatDateValue(ann.createdAt || null);
+    const raw = ann.createdAt || ann.created_at || null;
+    if (!raw) return '—';
+    const formatted = formatJalaliDateTime(raw);
+    return !formatted || formatted === '-' ? '—' : formatted;
 }
 
 function formatCargo(value?: number | null): string {
@@ -76,7 +80,7 @@ function toTime(value?: string | Date | null): number {
 }
 
 function sortValue(ann: BalePreviewLoad, key: SortKey): string | number {
-    if (key === 'createdAt') return toTime(ann.createdAt || null);
+    if (key === 'createdAt') return toTime(ann.createdAt || ann.created_at || null);
     if (key === 'loadingDate') return toTime(ann.loadingDate || null);
     if (key === 'origin') return String(ann.originCity || ann.origin_city || '');
     if (key === 'brand') return String(ann.brand || '');
