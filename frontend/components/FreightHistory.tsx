@@ -9,6 +9,7 @@ import {
     getDestinationRepNamesColumnLabel,
     getAssignedDriverDisplayName,
     getAssignedDriverContact,
+    getHelperDriverDisplayName,
     getAssignedVehiclePlate,
     getCarrierName,
     TOTAL_FREIGHT_HEADER,
@@ -88,6 +89,7 @@ const DAIRY_COMPACT_COLUMN_CLASSES: Record<string, string> = {
     'تاریخ تخصیص': 'col-assigned-at',
     باربری: 'col-carrier',
     'نام راننده': 'col-driver',
+    'نام راننده کمکی': 'col-helper-driver',
     'تماس راننده': 'col-driver-contact',
     'کد خودرو': 'col-vehicle-code',
     'پلاک خودرو': 'col-plate',
@@ -458,6 +460,8 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 // console.log('🔍 [Render] Driver name for', ann.id, ':', result);
                 return result;
             }},
+            { header: 'نام راننده کمکی', display: () => true, render: (ann: FreightAnnouncement) =>
+                getHelperDriverDisplayName(ann, drivers) },
             { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => {
                 const result = getAssignedDriverContact(ann, drivers, props.personalDrivers);
                 return <span className="font-mono">{result}</span>;
@@ -626,6 +630,7 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                 ? [{ header: 'باربری', render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) }]
                 : []),
             { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
+            { header: 'نام راننده کمکی', render: (ann: FreightAnnouncement) => getHelperDriverDisplayName(ann, props.drivers) },
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
             ...(showVehicleCode
                 ? [{

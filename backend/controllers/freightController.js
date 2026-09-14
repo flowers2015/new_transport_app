@@ -5405,6 +5405,7 @@ function sqlJalaliLoadingDate(alias) {
  */
 async function getFreightHistory(req, res) {
   try {
+    await ensureFreightHelperDriverColumns(pool);
     const { date, loadingDate, destination, billOfLading, driverName, creatorName, lineType, page = 1, limit = 50 } = req.query;
     
     // Pagination parameters
@@ -5477,6 +5478,7 @@ async function getFreightHistory(req, res) {
         ) as creator_full_name,
         u_creator.username as creator_username,
         COALESCE(NULLIF(TRIM(d.name), ''), NULLIF(TRIM(pd.name), ''), fa.assigned_driver_name) as assigned_driver_name,
+        COALESCE(NULLIF(TRIM(hd.name), ''), fa.helper_driver_name) as helper_driver_name,
         COALESCE(NULLIF(TRIM(d.employee_id), ''), NULLIF(TRIM(pd.driver_smart_id), ''), fa.assigned_driver_employee_id) as assigned_driver_employee_id,
         COALESCE(NULLIF(TRIM(v.model), ''), fa.assigned_vehicle_model) as assigned_vehicle_model,
         COALESCE(NULLIF(TRIM(v.brand), ''), fa.assigned_vehicle_brand) as assigned_vehicle_brand,
@@ -5519,6 +5521,7 @@ async function getFreightHistory(req, res) {
       ) creator_hist ON true
       LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
       LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
+      LEFT JOIN drivers hd ON fa.helper_driver_id = hd.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
       WHERE fa.status IN ('Finalized', 'InTransit')
     `;
