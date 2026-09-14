@@ -140,10 +140,7 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
     const selectedCount = selected.size;
     const extraNeeded = selectedCount > queueCount;
     const shortOnLoads = selectedCount > 0 && selectedCount < queueCount;
-    const canConfirm =
-        !locked &&
-        selectedCount > 0 &&
-        (!extraNeeded || allowExtra);
+    const canConfirm = !locked;
 
     const allChecked = loads.length > 0 && selectedCount === loads.length;
 
@@ -151,12 +148,12 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
         if (!loads.length) return 'بار قابل اعلامی برای این دسته نیست.';
         if (selectedCount === 0) return 'حداقل یک بار را تیک بزنید.';
         if (extraNeeded) {
-            return `${selectedCount.toLocaleString('fa-IR')} بار و ${queueCount.toLocaleString('fa-IR')} راننده — ${
+            return `${selectedCount.toLocaleString('fa-IR')} بار و ${queueCount.toLocaleString('fa-IR')} راننده (صف دور و نزدیک) — ${
                 (selectedCount - queueCount).toLocaleString('fa-IR')
-            } بار اضافه است. تیک را کم کنید یا اعلام با بار اضافه را تأیید کنید.`;
+            } بار اضافه است.`;
         }
         if (shortOnLoads) {
-            return `${queueCount.toLocaleString('fa-IR')} راننده و ${selectedCount.toLocaleString('fa-IR')} بار — ${
+            return `${queueCount.toLocaleString('fa-IR')} راننده در صف دور و نزدیک و ${selectedCount.toLocaleString('fa-IR')} بار — ${
                 (queueCount - selectedCount).toLocaleString('fa-IR')
             } راننده بدون بار می‌ماند.`;
         }
@@ -228,7 +225,7 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
 
                 <div className="px-4 py-2 text-xs text-slate-600 flex flex-wrap gap-3 border-b border-slate-100">
                     <span>
-                        راننده صف:{' '}
+                        راننده صف (دور و نزدیک):{' '}
                         <strong>{queueCount.toLocaleString('fa-IR')}</strong>
                     </span>
                     <span>
@@ -363,8 +360,8 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
                     <label className={`flex items-center gap-2 text-xs ${extraNeeded ? 'text-amber-800' : 'text-slate-500'}`}>
                         <input
                             type="checkbox"
-                            checked={allowExtra}
-                            disabled={locked || !extraNeeded}
+                            checked={allowExtra || extraNeeded}
+                            disabled={locked}
                             onChange={e => setAllowExtra(e.target.checked)}
                         />
                         اعلام با بار بیشتر از تعداد راننده
@@ -380,7 +377,7 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
                         <button
                             type="button"
                             disabled={!canConfirm || busy}
-                            onClick={() => onConfirm(Array.from(selected), allowExtra)}
+                            onClick={() => onConfirm(Array.from(selected), extraNeeded || allowExtra)}
                             className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm disabled:opacity-50"
                         >
                             تأیید سبد این جلسه

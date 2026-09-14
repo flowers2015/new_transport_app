@@ -515,16 +515,17 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         setPickerError(null);
         setPickerLoading(true);
         try {
+            const preview = await fetchPreviewLoads(vehicleCategory);
+            const previewCount = preview.queueCount || 0;
             if (locked) {
                 const catSession = sessionForCategory(vehicleCategory);
                 const loads = parseJsonArray<BalePreviewLoad>(catSession?.eligibleAnnouncements);
-                setPickerLoads(loads);
-                setPickerQueueCount(parseJsonArray(catSession?.queueSnapshot).length);
+                setPickerLoads(loads.length ? loads : preview.announcements || []);
+                setPickerQueueCount(previewCount);
                 return;
             }
-            const preview = await fetchPreviewLoads(vehicleCategory);
             setPickerLoads(preview.announcements || []);
-            setPickerQueueCount(preview.queueCount || 0);
+            setPickerQueueCount(previewCount);
         } catch (e) {
             setPickerLoads([]);
             setPickerQueueCount(0);
@@ -553,7 +554,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                     turnTimeoutSec: settings.turnTimeoutSec,
                     vehicleCategory,
                     announcementIds: basket.selectedIds,
-                    allowExtraLoads: basket.allowExtra,
+                    allowExtraLoads: true,
                 }),
             });
             if (!res.ok) throw new Error(await readApiError(res));
@@ -593,7 +594,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         turnTimeoutSec: settings.turnTimeoutSec,
                         vehicleCategory: category,
                         announcementIds: basket.selectedIds,
-                        allowExtraLoads: basket.allowExtra,
+                        allowExtraLoads: true,
                     }),
                 });
                 if (!res.ok) {
@@ -1199,7 +1200,7 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                 )}
                                                 {extraPending && (
                                                     <div className="text-amber-700">
-                                                        سبد بیشتر از راننده است — تیک را کم کنید یا بار اضافه را تأیید کنید.
+                                                        سبد بیشتر از راننده صف دور و نزدیک است.
                                                     </div>
                                                 )}
                                             </div>

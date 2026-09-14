@@ -642,72 +642,91 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     setCurrentPage(1);
   }, [searchTerm, statusFilter, lineTypeFilter]);
 
-  // باز کردن دیالوگ ویرایش
-  const openEditDialog = (announcement: FreightAnnouncement) => {
-    setSelectedAnnouncement(announcement);
-    
-    // تبدیل loadingDate به string
+  const applyAnnouncementToEditForm = (announcement: any) => {
     let loadingDateStr = '';
-    if (announcement.loadingDate) {
-      if (typeof announcement.loadingDate === 'string') {
-        loadingDateStr = announcement.loadingDate;
+    const loadingDateRaw = announcement.loadingDate || announcement.loading_date;
+    if (loadingDateRaw) {
+      if (typeof loadingDateRaw === 'string') {
+        loadingDateStr = loadingDateRaw.replace(/-/g, '/');
       } else {
-        loadingDateStr = formatJalali(announcement.loadingDate);
+        loadingDateStr = formatJalali(loadingDateRaw);
       }
     }
-    
+
+    const dests = (announcement.destinations || []).map((d: any) => ({
+      ...d,
+      id: d.id,
+      city: d.city || '',
+      tonnage: d.tonnage != null && d.tonnage !== '' ? Number(d.tonnage) : 0,
+      freightCost: Number(d.freightCost ?? d.freight_cost ?? 0) || 0,
+      cargoValue: Number(d.cargoValue ?? d.cargo_value ?? 0) || 0,
+    }));
+
     setFormData({
       loadingDate: loadingDateStr,
-      lineType: announcement.lineType,
-      cargoValue: Number(announcement.cargoValue) || 0,
-      vehicleType: announcement.vehicleType || '',
-      originCity: announcement.originCity || '',
+      lineType: announcement.lineType || announcement.line_type,
+      cargoValue: Number(announcement.cargoValue ?? announcement.cargo_value) || 0,
+      vehicleType: announcement.vehicleType || announcement.vehicle_type || '',
+      originCity: announcement.originCity || announcement.origin_city || '',
       brand: announcement.brand || '',
-      representativeType: announcement.representativeType,
-      representativeName: announcement.representativeName || '',
-      cartonCount: announcement.cartonCount,
+      representativeType: announcement.representativeType || announcement.representative_type,
+      representativeName: announcement.representativeName || announcement.representative_name || '',
+      cartonCount: announcement.cartonCount ?? announcement.carton_count,
       priority: announcement.priority,
       products: announcement.products || [],
-      platformArrivalTime: announcement.platformArrivalTime || '',
-      destinations: announcement.destinations ? announcement.destinations.map((d: any) => ({
-        ...d,
-        tonnage: d.tonnage ? Number(d.tonnage) : 0,
-        freightCost: d.freightCost ? Number(d.freightCost) : 0
-      })) : [],
+      platformArrivalTime: announcement.platformArrivalTime || announcement.platform_arrival_time || '',
+      destinations: dests,
       notes: announcement.notes || '',
-      // فیلدهای تخصیص
-      assignedDriverId: announcement.assignedDriverId || '',
-      assignedDriverName: announcement.assignedDriverName || (announcement as any).assignedDriverName || '',
-      assignedDriverEmployeeId: (announcement as any).assignedDriverEmployeeId || '',
-      assignedVehicleId: announcement.assignedVehicleId || '',
-      assignedVehicleModel: (announcement as any).assignedVehicleModel || '',
-      assignedVehicleBrand: (announcement as any).assignedVehicleBrand || '',
-      vehiclePlate: (announcement as any).vehiclePlate || '',
-      totalFreightCost: Number(announcement.totalFreightCost) || 0,
+      assignedDriverId: announcement.assignedDriverId || announcement.assigned_driver_id || '',
+      assignedDriverName: announcement.assignedDriverName || announcement.assigned_driver_name || '',
+      assignedDriverEmployeeId: announcement.assignedDriverEmployeeId || announcement.assigned_driver_employee_id || '',
+      assignedVehicleId: announcement.assignedVehicleId || announcement.assigned_vehicle_id || '',
+      assignedVehicleModel: announcement.assignedVehicleModel || announcement.assigned_vehicle_model || '',
+      assignedVehicleBrand: announcement.assignedVehicleBrand || announcement.assigned_vehicle_brand || '',
+      vehiclePlate: announcement.vehiclePlate || announcement.vehicle_plate || '',
+      totalFreightCost: Number(announcement.totalFreightCost ?? announcement.total_freight_cost) || 0,
       tariffFreightCost:
-        announcement.tariffFreightCost != null && Number(announcement.tariffFreightCost) > 0
-          ? Number(announcement.tariffFreightCost)
+        Number(announcement.tariffFreightCost ?? announcement.tariff_freight_cost) > 0
+          ? Number(announcement.tariffFreightCost ?? announcement.tariff_freight_cost)
           : 0,
-      billOfLadingNumber: announcement.billOfLadingNumber || '',
-      assignmentType: announcement.assignmentType || ''
+      billOfLadingNumber: announcement.billOfLadingNumber || announcement.bill_of_lading_number || '',
+      assignmentType: announcement.assignmentType || announcement.assignment_type || '',
     });
-    // مقداردهی اولیه raw values
     setRawNumericValues({
-      cargoValue: String(announcement.cargoValue || ''),
-      totalFreightCost: String(announcement.totalFreightCost || ''),
+      cargoValue: String(Number(announcement.cargoValue ?? announcement.cargo_value) || ''),
+      totalFreightCost: String(Number(announcement.totalFreightCost ?? announcement.total_freight_cost) || ''),
       tariffFreightCost:
-        announcement.tariffFreightCost != null && Number(announcement.tariffFreightCost) > 0
-          ? String(announcement.tariffFreightCost)
+        Number(announcement.tariffFreightCost ?? announcement.tariff_freight_cost) > 0
+          ? String(Number(announcement.tariffFreightCost ?? announcement.tariff_freight_cost))
           : '',
-      destinations: announcement.destinations ? announcement.destinations.reduce((acc: any, d: any, idx: number) => {
+      destinations: dests.reduce((acc: any, d: any, idx: number) => {
         acc[idx] = {
           tonnage: String(d.tonnage || ''),
-          freightCost: String(d.freightCost || '')
+          freightCost: String(d.freightCost || ''),
         };
         return acc;
-      }, {}) : {}
+      }, {}),
     });
+  };
+
+  const openEditDialog = async (announcement: FreightAnnouncement) => {
+    setSelectedAnnouncement(announcement);
+    applyAnnouncementToEditForm(announcement);
     setShowEditDialog(true);
+    try {
+      const res = await fetch(getApiUrl(`freight-announcements/${announcement.id}`), {
+        headers: getHeaders(),
+        cache: 'no-cache',
+      });
+      if (!res.ok) return;
+      const raw = await res.json();
+      applyAnnouncementToEditForm({ ...announcement, ...raw });
+      setSelectedAnnouncement((prev) =>
+        prev && prev.id === announcement.id ? { ...prev, ...raw, id: announcement.id } : prev
+      );
+    } catch {
+      /* فرم با داده لیست می‌ماند */
+    }
   };
 
   // باز کردن دیالوگ حذف
@@ -782,11 +801,34 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
               : parseNumberFromFormatted(String(formData.tariffFreightCost ?? ''));
           return n > 0 ? n : null;
         })(),
-        destinations: formData.destinations.map((d: any) => ({
-          ...d,
-          tonnage: typeof d.tonnage === 'number' ? d.tonnage : parseNumberFromFormatted(String(d.tonnage || 0)),
-          freightCost: typeof d.freightCost === 'number' ? d.freightCost : parseNumberFromFormatted(String(d.freightCost || 0))
-        })),
+        destinations: formData.destinations.map((d: any, idx: number) => {
+          const rawDest = rawNumericValues.destinations?.[idx];
+          const freightFromRaw =
+            rawDest?.freightCost != null && String(rawDest.freightCost).trim() !== ''
+              ? parseNumberFromFormatted(String(rawDest.freightCost))
+              : null;
+          const tonnageFromRaw =
+            rawDest?.tonnage != null && String(rawDest.tonnage).trim() !== ''
+              ? parseNumberFromFormatted(String(rawDest.tonnage))
+              : null;
+          return {
+            ...d,
+            id: d.id,
+            city: d.city,
+            tonnage:
+              tonnageFromRaw != null
+                ? tonnageFromRaw
+                : typeof d.tonnage === 'number'
+                  ? d.tonnage
+                  : parseNumberFromFormatted(String(d.tonnage || 0)),
+            freightCost:
+              freightFromRaw != null
+                ? freightFromRaw
+                : typeof d.freightCost === 'number'
+                  ? d.freightCost
+                  : parseNumberFromFormatted(String(d.freightCost || 0)),
+          };
+        }),
         reason: editReason
       };
 

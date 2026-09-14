@@ -297,12 +297,6 @@ function applyAnnouncementBasket(announcements, selectedAnnouncementIds, queueLe
     throw new Error('حداقل یک بار برای این جلسه انتخاب کنید.');
   }
 
-  if (requested.length > Number(queueLength || 0) && !allowExtraLoads) {
-    throw new Error(
-      `تعداد بار انتخاب‌شده (${requested.length}) از تعداد راننده صف (${queueLength}) بیشتر است. بار را کم کنید یا اعلام با بار اضافه را تأیید کنید.`
-    );
-  }
-
   const selectedSet = new Set(requested);
   return {
     announcements: list.filter(a => selectedSet.has(String(a.id))),
@@ -733,13 +727,23 @@ async function loadStagePayload(sessionStage, vehicleCategory, { userId, forceSt
   return { queue, displayQueue, announcements };
 }
 
+function categoryMatchValues(vehicleCategory) {
+  const raw = String(vehicleCategory || '').trim();
+  const label = normalizeCategoryLabel(raw);
+  const key = Object.keys(CATEGORY_KEY_TO_LABEL).find(
+    (k) => k === raw || CATEGORY_KEY_TO_LABEL[k] === label || CATEGORY_KEY_TO_LABEL[k] === raw
+  );
+  return [...new Set([raw, label, key].filter(Boolean))];
+}
+
 async function countRawQueueForCategory(vehicleCategory) {
-  const label = normalizeCategoryLabel(vehicleCategory);
+  const values = categoryMatchValues(vehicleCategory);
+  if (!values.length) return 0;
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS c FROM dispatch_queue_entries
-     WHERE queue_type IN ('far', 'near')
-       AND vehicle_category = $1`,
-    [label]
+     WHERE LOWER(TRIM(COALESCE(queue_type, ''))) IN ('far', 'near')
+       AND TRIM(COALESCE(vehicle_category, '')) = ANY($1::text[])`,
+    [values]
   );
   return rows[0]?.c || 0;
 }
@@ -1036,7 +1040,7 @@ async function previewSessionLoads({
     throw new Error('دسته خودرو مشخص نیست.');
   }
   const announcements = await loadAllCategoryAnnouncements(vehicleCategory, { userId });
-  let queueCount = await countRawQueueForCategory(vehicleCategory);
+  const queueCount = await countRawQueueForCategory(vehicleCategory);
   let effectiveStage = stage;
   let autoPromoted = false;
   let skipStage1Reason = null;
@@ -1047,12 +1051,11 @@ async function previewSessionLoads({
       userId,
       forceStage2,
     });
-    queueCount = (resolved.queue || []).length;
     effectiveStage = resolved.effectiveStage;
     autoPromoted = Boolean(resolved.autoPromoted);
     skipStage1Reason = resolved.skipStage1Reason || null;
   } catch {
-    /* لیست بار باید کامل این دسته باشد حتی اگر مرحله جاری بار نداشته باشد */
+    /* شمارش راننده = کل صف دور+نزدیک این دسته؛ لیست بار هم کامل این دسته می‌ماند */
   }
   return {
     ok: true,
@@ -1095,11 +1098,12 @@ async function startSessionForCategory({
   await ensureBasketColumn();
   const allCategoryLoads = await loadAllCategoryAnnouncements(vehicleCategory, { userId });
   const basketPool = allCategoryLoads.length > 0 ? allCategoryLoads : announcements;
+  const rawQueueCount = await countRawQueueForCategory(vehicleCategory);
   const basket = applyAnnouncementBasket(
     basketPool,
     selectedAnnouncementIds,
-    queue.length,
-    allowExtraLoads
+    rawQueueCount,
+    true
   );
 
   const { rows } = await pool.query(
