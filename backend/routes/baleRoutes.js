@@ -74,6 +74,7 @@ router.delete(
 );
 router.post('/webhook/register', authenticateToken, authorizeRole(adminRoles), baleController.setWebhookUrl);
 
+router.get('/sessions/preview-loads', authenticateToken, authorizeRole(transportRoles), baleController.previewSessionLoads);
 router.post('/sessions/start', authenticateToken, authorizeRole(transportRoles), baleController.startSession);
 router.post('/sessions/stop', authenticateToken, authorizeRole(transportRoles), baleController.stopSession);
 router.post('/sessions/skip-turn', authenticateToken, authorizeRole(transportRoles), baleController.skipTurn);

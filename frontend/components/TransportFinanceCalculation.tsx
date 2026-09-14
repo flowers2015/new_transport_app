@@ -68,6 +68,50 @@ function mergeSavedCalculationLists(fetched: any[], local: any[]): any[] {
     return Array.from(byKey.values());
 }
 
+function emptyHelperDriverIdentity() {
+    return {
+        helperDriverId: '',
+        helperDriverEmployeeId: '',
+        helperDriverName: '',
+    };
+}
+
+function resolveHelperDriverFromSource(source: any, drivers: Driver[]) {
+    const id = String(source?.helperDriverId ?? source?.helper_driver_id ?? '').trim();
+    const emp = String(source?.helperDriverEmployeeId ?? source?.helper_driver_employee_id ?? '').trim();
+    const name = String(source?.helperDriverName ?? source?.helper_driver_name ?? '').trim();
+    if (!id && !emp && !name) return emptyHelperDriverIdentity();
+    const found = drivers.find((d) =>
+        (id && d.id === id) ||
+        (emp && String(d.employeeId || '').toLowerCase() === emp.toLowerCase())
+    );
+    return {
+        helperDriverId: found?.id || id,
+        helperDriverEmployeeId: found?.employeeId || emp,
+        helperDriverName: found?.name || name,
+    };
+}
+
+/** اگر محاسبه ثبت شده باشد مقدار ذخیره‌شده مالی؛ وگرنه راننده کمکی تخصیص تور */
+function resolveHelperDriverForCalculationDialog(
+    tour: any,
+    announcement: any | undefined,
+    drivers: Driver[]
+) {
+    if (tour?.isDataRecorded === true) {
+        return resolveHelperDriverFromSource(tour, drivers);
+    }
+    const fromAnnouncement = resolveHelperDriverFromSource(announcement, drivers);
+    if (
+        fromAnnouncement.helperDriverId ||
+        fromAnnouncement.helperDriverEmployeeId ||
+        fromAnnouncement.helperDriverName
+    ) {
+        return fromAnnouncement;
+    }
+    return resolveHelperDriverFromSource(tour, drivers);
+}
+
 function buildSavedCalculationRecord(
     requestBody: Record<string, any>,
     extras: { id?: string; helperDriverCost: number }
@@ -1247,6 +1291,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 billOfLadingDate: toBillOfLadingDateString(ann.bill_of_lading_date),
                 announcementDate: ann.created_at ? new Date(ann.created_at) : undefined,
                 assignmentDate: resolveAssignmentDateFromAnnouncement(ann),
+                ...resolveHelperDriverFromSource(ann, drivers),
             };
 
             if (existing) {
@@ -2595,6 +2640,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
         
         console.log('✅ [handleEditData] راننده و تور پیدا شدند');
 
+        const dialogHelper = resolveHelperDriverForCalculationDialog(
+            tour,
+            announcements.find((a: any) => a.id === tour.announcementId),
+            drivers
+        );
+
         const resolvedRoute = await resolveTourRouteMileageForTour({
             announcementId: tour.announcementId,
             destinations: tour.destinations,
@@ -2672,9 +2723,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
-                helperDriverId: (tour as any).helperDriverId || (tour as any).helper_driver_id || '',
-                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || (tour as any).helper_driver_employee_id || '',
-                helperDriverName: (tour as any).helperDriverName || (tour as any).helper_driver_name || '',
+                helperDriverId: dialogHelper.helperDriverId,
+                helperDriverEmployeeId: dialogHelper.helperDriverEmployeeId,
+                helperDriverName: dialogHelper.helperDriverName,
                 helperDriverAllowance: (tour as any).helperDriverAllowance || (tour as any).helper_driver_allowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || (tour as any).helper_driver_food_cost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).helper_driver_excess_mission_days || (tour as any).excessMissionDays || 0,
@@ -2768,9 +2819,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 advancePayment: 0,
                 calculationDate: defaultCalculationDate,
                 notes: '',
-                helperDriverId: '',
-                helperDriverEmployeeId: '',
-                helperDriverName: '',
+                helperDriverId: dialogHelper.helperDriverId,
+                helperDriverEmployeeId: dialogHelper.helperDriverEmployeeId,
+                helperDriverName: dialogHelper.helperDriverName,
                 helperDriverAllowance: 0,
                 helperDriverFoodCost: 0,
                 helperDriverExcessMissionDays: 0,
@@ -3613,6 +3664,12 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
             console.log('ℹ️ [handleRecordData] این تور پرداخت شده است، اما قابل ویرایش است.');
         }
 
+        const dialogHelper = resolveHelperDriverForCalculationDialog(
+            tour,
+            announcements.find((a: any) => a.id === tour.announcementId),
+            drivers
+        );
+
         // دریافت اطلاعات مصوب از API بر اساس مسیر و شهر
         try {
             const token = localStorage.getItem('token');
@@ -3760,9 +3817,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
-                helperDriverId: (tour as any).helperDriverId || (tour as any).helper_driver_id || '',
-                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || (tour as any).helper_driver_employee_id || '',
-                helperDriverName: (tour as any).helperDriverName || (tour as any).helper_driver_name || '',
+                helperDriverId: dialogHelper.helperDriverId,
+                helperDriverEmployeeId: dialogHelper.helperDriverEmployeeId,
+                helperDriverName: dialogHelper.helperDriverName,
                 helperDriverAllowance: (tour as any).helperDriverAllowance || (tour as any).helper_driver_allowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || (tour as any).helper_driver_food_cost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).helper_driver_excess_mission_days || (tour as any).excessMissionDays || 0,
@@ -3853,9 +3910,9 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                 advancePayment: (tour as any).advancePayment || (tour as any).advance_payment || 0,
                 calculationDate: tour.calculationDate || defaultCalculationDate,
                 notes: tour.notes || '',
-                helperDriverId: (tour as any).helperDriverId || (tour as any).helper_driver_id || '',
-                helperDriverEmployeeId: (tour as any).helperDriverEmployeeId || (tour as any).helper_driver_employee_id || '',
-                helperDriverName: (tour as any).helperDriverName || (tour as any).helper_driver_name || '',
+                helperDriverId: dialogHelper.helperDriverId,
+                helperDriverEmployeeId: dialogHelper.helperDriverEmployeeId,
+                helperDriverName: dialogHelper.helperDriverName,
                 helperDriverAllowance: (tour as any).helperDriverAllowance || (tour as any).helper_driver_allowance || 0,
                 helperDriverFoodCost: (tour as any).helperDriverFoodCost || (tour as any).helper_driver_food_cost || 0,
                 helperDriverExcessMissionDays: (tour as any).helperDriverExcessMissionDays || (tour as any).helper_driver_excess_mission_days || (tour as any).excessMissionDays || 0,

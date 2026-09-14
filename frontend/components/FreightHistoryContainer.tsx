@@ -147,20 +147,18 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             const historyUrl = getApiUrl(`freight-announcements/history${params.toString() ? '?' + params.toString() : ''}`);
             
             console.log('🔍 [FreightHistoryContainer] Fetching:', historyUrl);
-            
-            // استفاده از cachedFetch برای بهبود عملکرد
-            // Lazy Loading: personal-drivers و personal-vehicles فقط وقتی که نیاز است لود می‌شوند
+
             const { cachedFetch } = await import('../utils/apiCache');
-            
-            // بررسی اینکه آیا personal resources نیاز است (اگر announcement با assignmentType === 'personal' وجود دارد)
-            // برای تاریخچه، همیشه لود می‌کنیم چون ممکن است در تاریخچه assignment های personal وجود داشته باشد
-            // استفاده از Pagination: فقط 100 رکورد اول
+
             const [historyResponse, vehiclesData, driversData, personalDriversResponse, personalVehiclesResponse] = await Promise.all([
-                cachedFetch(historyUrl, { headers }, 30 * 1000), // 30s cache for history
-                cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000), // 10 min cache
-                cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000), // 10 min cache
-                cachedFetch(getApiUrl('personal-drivers?page=1&limit=100'), { headers }, 10 * 60 * 1000), // 10 min cache - با Pagination
-                cachedFetch(getApiUrl('personal-vehicles?page=1&limit=100'), { headers }, 10 * 60 * 1000), // 10 min cache - با Pagination
+                fetch(historyUrl, { headers, cache: 'no-store' }).then(async (res) => {
+                    if (!res.ok) throw new Error((await res.text().catch(() => '')) || 'خطا در دریافت آرشیو');
+                    return res.json();
+                }),
+                cachedFetch(getApiUrl('vehicles'), { headers }, 10 * 60 * 1000),
+                cachedFetch(getApiUrl('drivers'), { headers }, 10 * 60 * 1000),
+                cachedFetch(getApiUrl('personal-drivers?page=1&limit=100'), { headers }, 10 * 60 * 1000),
+                cachedFetch(getApiUrl('personal-vehicles?page=1&limit=100'), { headers }, 10 * 60 * 1000),
             ]);
             
             // Handle paginated response for personal resources

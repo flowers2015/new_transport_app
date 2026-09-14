@@ -1,5 +1,18 @@
 const pool = require('../db'); // Assuming a db connection pool is exported from ../db.js
 const crypto = require('crypto');
+
+let freightHelperDriverColsReady = false;
+async function ensureFreightHelperDriverColumns(db = pool) {
+  if (freightHelperDriverColsReady) return;
+  await db.query(`
+    ALTER TABLE freight_announcements
+      ADD COLUMN IF NOT EXISTS helper_driver_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS helper_driver_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS helper_driver_employee_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS helper_driver_contact VARCHAR(255)
+  `);
+  freightHelperDriverColsReady = true;
+}
 const {
   logFreightHistory,
   compareObjects,
@@ -998,6 +1011,7 @@ async function getFreightAnnouncements(req, res) {
     // بررسی و اضافه کردن ستون‌ها فقط یک‌بار در عمر پروسس
     if (!freightListSchemaReady) {
       try {
+        await ensureFreightHelperDriverColumns(pool);
         await pool.query(`
           ALTER TABLE freight_announcements 
           ADD COLUMN IF NOT EXISTS assignment_finalized_at TIMESTAMPTZ
@@ -4333,7 +4347,9 @@ async function assignVehicleAndDriverInternal(req, res) {
     driverContact,
     vehicleType,
     vehiclePlate,
-    truckSmartId
+    truckSmartId,
+    helperDriverId: helperDriverIdRaw,
+    helper_driver_id,
   } = req.body;
   const userId = req.user?.userId || req.user?.id;
   const userRole = req.user?.role || req.user?.userRole;
@@ -4648,6 +4664,44 @@ async function assignVehicleAndDriverInternal(req, res) {
       }
       updateFields.push(`assignment_type = $${paramIndex++}`);
       updateValues.push('company');
+
+      try {
+        await ensureFreightHelperDriverColumns(client);
+        const helperDriverId = String(helperDriverIdRaw || helper_driver_id || '').trim() || null;
+        if (helperDriverId && helperDriverId === String(driverId)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'راننده کمکی نمی‌تواند همان راننده اصلی باشد.' });
+        }
+        if (helperDriverId) {
+          const helperSnap = await client.query(
+            'SELECT name, mobile, employee_id FROM drivers WHERE id = $1',
+            [helperDriverId]
+          );
+          const h = helperSnap.rows[0];
+          if (!h) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'راننده کمکی یافت نشد.' });
+          }
+          updateFields.push(`helper_driver_id = $${paramIndex++}`);
+          updateValues.push(helperDriverId);
+          updateFields.push(`helper_driver_name = $${paramIndex++}`);
+          updateValues.push(h.name || null);
+          updateFields.push(`helper_driver_employee_id = $${paramIndex++}`);
+          updateValues.push(h.employee_id || null);
+          updateFields.push(`helper_driver_contact = $${paramIndex++}`);
+          updateValues.push(h.mobile || null);
+        } else {
+          updateFields.push('helper_driver_id = NULL');
+          updateFields.push('helper_driver_name = NULL');
+          updateFields.push('helper_driver_employee_id = NULL');
+          updateFields.push('helper_driver_contact = NULL');
+        }
+      } catch (helperErr) {
+        if (helperErr.statusCode || /راننده کمکی/.test(String(helperErr.message || ''))) {
+          throw helperErr;
+        }
+        console.warn('⚠️ [assignVehicleAndDriver] helper driver columns:', helperErr.message);
+      }
     } catch (snapshotError) {
       console.warn('⚠️ [assignVehicleAndDriver] Could not save assignment snapshot fields:', snapshotError.message);
     }
@@ -5422,15 +5476,16 @@ async function getFreightHistory(req, res) {
           NULLIF(TRIM(creator_hist.user_name), '')
         ) as creator_full_name,
         u_creator.username as creator_username,
-        COALESCE(fa.assigned_driver_name, d.name, pd.name) as resolved_driver_name,
-        COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
-        COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
-        COALESCE(fa.assigned_vehicle_brand, v.brand) as assigned_vehicle_brand,
-        COALESCE(fa.vehicle_plate, 
-          CASE WHEN v.plate_part1 IS NOT NULL 
+        COALESCE(NULLIF(TRIM(d.name), ''), NULLIF(TRIM(pd.name), ''), fa.assigned_driver_name) as assigned_driver_name,
+        COALESCE(NULLIF(TRIM(d.employee_id), ''), NULLIF(TRIM(pd.driver_smart_id), ''), fa.assigned_driver_employee_id) as assigned_driver_employee_id,
+        COALESCE(NULLIF(TRIM(v.model), ''), fa.assigned_vehicle_model) as assigned_vehicle_model,
+        COALESCE(NULLIF(TRIM(v.brand), ''), fa.assigned_vehicle_brand) as assigned_vehicle_brand,
+        COALESCE(
+          CASE WHEN v.plate_part1 IS NOT NULL
             THEN CONCAT(v.plate_part1, v.plate_letter, v.plate_part2, '-', v.plate_city_code)
-            ELSE NULL 
-          END
+            ELSE NULL
+          END,
+          fa.vehicle_plate
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
         -- آخرین تخصیص موفق (شرکتی/شخصی) از تاریخچه یا ثبت نوبت
@@ -10031,6 +10086,10 @@ async function cancelAssignment(req, res) {
                assigned_vehicle_id = NULL,
                assigned_driver_name = NULL,
                assigned_driver_employee_id = NULL,
+               helper_driver_id = NULL,
+               helper_driver_name = NULL,
+               helper_driver_employee_id = NULL,
+               helper_driver_contact = NULL,
                assigned_vehicle_model = NULL,
                assigned_vehicle_brand = NULL,
                vehicle_plate = NULL,
@@ -10152,6 +10211,10 @@ async function cancelAssignment(req, res) {
              assigned_driver_name = NULL,
              carrier_name = NULL,
              assigned_driver_employee_id = NULL,
+             helper_driver_id = NULL,
+             helper_driver_name = NULL,
+             helper_driver_employee_id = NULL,
+             helper_driver_contact = NULL,
              assigned_vehicle_model = NULL,
              assigned_vehicle_brand = NULL,
              vehicle_plate = NULL,

@@ -576,6 +576,33 @@ async function setWebhookUrl(req, res) {
   }
 }
 
+async function previewSessionLoads(req, res) {
+  try {
+    const vehicleCategory = String(req.query.vehicleCategory || req.query.category || '').trim();
+    if (!vehicleCategory) {
+      return res.status(400).json({ message: 'دسته خودرو الزامی است.' });
+    }
+    const data = await sessionEngine.previewSessionLoads({
+      stage: req.query.stage || 'stage1',
+      vehicleCategory,
+      forceStage2: req.query.forceStage2 === 'true' || req.query.forceStage2 === true,
+      userId: req.user?.userId || req.user?.id,
+    });
+    res.json(data);
+  } catch (error) {
+    console.error('❌ [bale] previewSessionLoads:', error);
+    const status = String(error.message || '').includes('خالی') || String(error.message || '').includes('موجود نیست')
+      ? 400
+      : 500;
+    res.status(status).json({
+      ok: false,
+      message: error.message || 'خطا در دریافت بارهای قابل اعلام',
+      announcements: [],
+      queueCount: 0,
+    });
+  }
+}
+
 async function startSession(req, res) {
   try {
     const {
@@ -586,8 +613,12 @@ async function startSession(req, res) {
       forceRestart = false,
       vehicleCategory,
       slot,
+      announcementIds,
+      selectedAnnouncementIds,
+      allowExtraLoads = false,
     } = req.body || {};
     sessionEngine.ensureTickTimer();
+    const basketIds = selectedAnnouncementIds || announcementIds;
 
     if (vehicleCategory || slot != null) {
       const [plans, channelRows] = await Promise.all([
@@ -611,6 +642,8 @@ async function startSession(req, res) {
         forceStage2,
         vehicleCategory: plan.category,
         groupChannelSlot: plan.slot,
+        selectedAnnouncementIds: basketIds,
+        allowExtraLoads: Boolean(allowExtraLoads),
       });
       return res.json({
         sessions: [mapSession(session)],
@@ -1075,6 +1108,7 @@ module.exports = {
   updateRegionBanHandler,
   deleteRegionBanHandler,
   setWebhookUrl,
+  previewSessionLoads,
   startSession,
   stopSession,
   skipTurn,

@@ -84,6 +84,12 @@ class APICache {
     console.log(`🗑️ [APICache] Invalidated: ${key}`);
   }
 
+  invalidateContaining(fragment: string): void {
+    for (const key of Array.from(this.cache.keys())) {
+      if (key.includes(fragment)) this.cache.delete(key);
+    }
+  }
+
   /**
    * حذف همه cache
    */

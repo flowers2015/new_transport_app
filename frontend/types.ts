@@ -705,6 +705,10 @@ export interface FreightAnnouncement {
     billOfLadingNumber?: string;
     assignedDriverName?: string;
     assignedDriverContact?: string;
+    helperDriverId?: string;
+    helperDriverName?: string;
+    helperDriverContact?: string;
+    helperDriverEmployeeId?: string;
     assignedVehiclePlate?: string;
     /** نام باربری (تخصیص شخصی لبنیات/فروتلند) */
     carrierName?: string;

@@ -29,7 +29,7 @@ async function enrichAnnouncements(announcements) {
 
   const { rows: faRows } = await pool.query(
     `SELECT id, brand, origin_city, cargo_value, notes, delivery_date, line_type, loading_date,
-            representative_type, representative_name, products
+            created_at, representative_type, representative_name, products
      FROM freight_announcements WHERE id = ANY($1::varchar[])`,
     [ids]
   );
@@ -78,6 +78,8 @@ async function enrichAnnouncements(announcements) {
       originCity: combineOrigins(row || { origin_city: ann.originCity }),
       brand: combineBrands(row || { brand: ann.brand }),
       cargoValue: ann.cargoValue ?? (row?.cargo_value != null ? Number(row.cargo_value) : null),
+      loadingDate: row?.loading_date || ann.loadingDate || null,
+      createdAt: row?.created_at || ann.createdAt || null,
       notes: ann.notes ?? row?.notes ?? null,
       representativeType:
         ann.representativeType ||

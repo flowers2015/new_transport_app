@@ -260,6 +260,56 @@ function parseAnnouncements(session) {
   }
 }
 
+function parseIdList(raw) {
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  if (raw == null || raw === '') return [];
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseBasketIds(session) {
+  const fromColumn = parseIdList(session.basket_announcement_ids);
+  if (fromColumn.length) return fromColumn;
+  return parseAnnouncements(session)
+    .map(a => String(a.id || ''))
+    .filter(Boolean);
+}
+
+async function ensureBasketColumn() {
+  await pool.query(`
+    ALTER TABLE bale_sessions
+    ADD COLUMN IF NOT EXISTS basket_announcement_ids JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+}
+
+function applyAnnouncementBasket(announcements, selectedAnnouncementIds, queueLength, allowExtraLoads) {
+  const list = Array.isArray(announcements) ? announcements : [];
+  const allIds = new Set(list.map(a => String(a.id || '')).filter(Boolean));
+  const requested = Array.isArray(selectedAnnouncementIds)
+    ? selectedAnnouncementIds.map(String).filter(id => allIds.has(id))
+    : list.map(a => String(a.id)).filter(Boolean);
+
+  if (requested.length === 0) {
+    throw new Error('حداقل یک بار برای این جلسه انتخاب کنید.');
+  }
+
+  if (requested.length > Number(queueLength || 0) && !allowExtraLoads) {
+    throw new Error(
+      `تعداد بار انتخاب‌شده (${requested.length}) از تعداد راننده صف (${queueLength}) بیشتر است. بار را کم کنید یا اعلام با بار اضافه را تأیید کنید.`
+    );
+  }
+
+  const selectedSet = new Set(requested);
+  return {
+    announcements: list.filter(a => selectedSet.has(String(a.id))),
+    basketIds: requested,
+  };
+}
+
 function parseRejected(session) {
   const raw = session.rejected_rows;
   if (Array.isArray(raw)) return raw;
@@ -745,13 +795,17 @@ async function resolveInitialStage({ stage = 'stage1', vehicleCategory, userId, 
 async function refreshSessionAnnouncements(sessionId, { fallback = null } = {}) {
   const session = await loadSession(sessionId);
   if (!session) return fallback || [];
-  const { announcements } = await loadStagePayload(
-    session.stage,
-    session.vehicle_category || '',
-    stageFetchOpts(session)
-  );
-  const list =
-    announcements.length > 0 ? announcements : Array.isArray(fallback) ? fallback : announcements;
+  const allCategory = await loadAllCategoryAnnouncements(session.vehicle_category || '', {
+    userId: session.started_by_user_id,
+  });
+  const basketIds = new Set(parseBasketIds(session));
+  const inBasket = basketIds.size
+    ? allCategory.filter(a => basketIds.has(String(a.id)))
+    : allCategory;
+  const fallbackList = Array.isArray(fallback)
+    ? fallback.filter(a => !basketIds.size || basketIds.has(String(a.id)))
+    : [];
+  const list = inBasket.length > 0 ? inBasket : fallbackList;
   await updateSession(sessionId, { eligible_announcements: JSON.stringify(list) });
   return list;
 }
@@ -972,6 +1026,44 @@ async function finishQueueIfDone(sessionId) {
   return true;
 }
 
+async function previewSessionLoads({
+  stage = 'stage1',
+  vehicleCategory,
+  userId = null,
+  forceStage2 = false,
+}) {
+  if (!vehicleCategory) {
+    throw new Error('دسته خودرو مشخص نیست.');
+  }
+  const announcements = await loadAllCategoryAnnouncements(vehicleCategory, { userId });
+  let queueCount = await countRawQueueForCategory(vehicleCategory);
+  let effectiveStage = stage;
+  let autoPromoted = false;
+  let skipStage1Reason = null;
+  try {
+    const resolved = await resolveInitialStage({
+      stage,
+      vehicleCategory,
+      userId,
+      forceStage2,
+    });
+    queueCount = (resolved.queue || []).length;
+    effectiveStage = resolved.effectiveStage;
+    autoPromoted = Boolean(resolved.autoPromoted);
+    skipStage1Reason = resolved.skipStage1Reason || null;
+  } catch {
+    /* لیست بار باید کامل این دسته باشد حتی اگر مرحله جاری بار نداشته باشد */
+  }
+  return {
+    ok: true,
+    effectiveStage,
+    autoPromoted,
+    skipStage1Reason,
+    queueCount,
+    announcements,
+  };
+}
+
 async function startSessionForCategory({
   mode = 'hybrid',
   stage = 'stage1',
@@ -980,6 +1072,8 @@ async function startSessionForCategory({
   turnTimeoutSec = 180,
   userId = null,
   forceStage2 = false,
+  selectedAnnouncementIds,
+  allowExtraLoads = false,
 }) {
   if (!vehicleCategory) {
     throw new Error('دسته خودرو مشخص نیست.');
@@ -998,11 +1092,21 @@ async function startSessionForCategory({
     forceStage2,
   });
 
+  await ensureBasketColumn();
+  const allCategoryLoads = await loadAllCategoryAnnouncements(vehicleCategory, { userId });
+  const basketPool = allCategoryLoads.length > 0 ? allCategoryLoads : announcements;
+  const basket = applyAnnouncementBasket(
+    basketPool,
+    selectedAnnouncementIds,
+    queue.length,
+    allowExtraLoads
+  );
+
   const { rows } = await pool.query(
     `INSERT INTO bale_sessions
       (status, mode, stage, vehicle_category, group_channel_slot, queue_snapshot,
-       eligible_announcements, turn_timeout_sec, started_by_user_id)
-     VALUES ('running', $1, $2, $3, $4, $5, $6, $7, $8)
+       eligible_announcements, basket_announcement_ids, turn_timeout_sec, started_by_user_id)
+     VALUES ('running', $1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       mode,
@@ -1010,7 +1114,8 @@ async function startSessionForCategory({
       vehicleCategory || null,
       groupChannelSlot,
       JSON.stringify(queue),
-      JSON.stringify(announcements),
+      JSON.stringify(basket.announcements),
+      JSON.stringify(basket.basketIds),
       turnTimeoutSec,
       userId,
     ]
@@ -1021,7 +1126,7 @@ async function startSessionForCategory({
   try {
     const { queue: liveQueue, displayQueue: liveDisplayQueue } = await syncQueueFromServer(session.id);
     const liveAnnouncements = await refreshSessionAnnouncements(session.id, {
-      fallback: announcements,
+      fallback: basket.announcements,
     });
     session = await loadSession(session.id);
 
@@ -1035,9 +1140,6 @@ async function startSessionForCategory({
         if (autoPromoted) {
           await baleApi.sendMessage(groupChatId, skippedStage1ToFinal(skipStage1Reason));
         }
-        const allCategoryLoads = await loadAllCategoryAnnouncements(vehicleCategory, {
-          userId,
-        });
         await broadcastSessionStartToGroup(
           session,
           liveQueue,
@@ -1047,9 +1149,8 @@ async function startSessionForCategory({
           liveDisplayQueue,
           {
             includeIntro: !autoPromoted,
-            allCategoryImage: true,
-            imageAnnouncements:
-              allCategoryLoads.length > 0 ? allCategoryLoads : liveAnnouncements,
+            allCategoryImage: false,
+            imageAnnouncements: liveAnnouncements,
           }
         );
       } catch (groupErr) {
@@ -1063,6 +1164,7 @@ async function startSessionForCategory({
       stage: effectiveStage,
       queueSize: liveQueue.length,
       loads: liveAnnouncements.length,
+      basketSize: basket.basketIds.length,
       autoPromoted,
       queueDrivers: liveQueue.map(e => ({
         driverId: e.driverId || e.driver_id,
@@ -2342,6 +2444,7 @@ module.exports = {
   loadSession,
   startSessionForCategory,
   startAllCategorySessions,
+  previewSessionLoads,
   stopSession,
   stopAllSessions,
   skipCurrentTurn,

@@ -7,6 +7,7 @@ import { formatCargoValueShort, formatRialsPreview } from '../utils/cargoValueUt
 import CargoValueInput from './CargoValueInput';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { pickAssignmentFieldsFromApi } from '../utils/freightDisplay';
+import { apiCache } from '../utils/apiCache';
 
 interface FreightManagementProps {
   currentUser: User;
@@ -793,6 +794,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       const editedAnnouncementId = selectedAnnouncement?.id;
       
       alert('اعلام بار با موفقیت به‌روزرسانی شد');
+      apiCache.invalidateContaining('freight-announcements/history');
+      apiCache.invalidateContaining('freight-announcements');
       setShowEditDialog(false);
       setEditReason('');
       setSelectedAnnouncement(null);

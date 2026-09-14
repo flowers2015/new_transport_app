@@ -1,6 +1,5 @@
 const pool = require('../../db');
 const { vehicleMatchesCategory } = require('../dispatch/dispatchVehicleCategory');
-const { getRuntimeSettings } = require('./baleSettings');
 
 const DISPATCH_CATEGORIES = ['تریلی', 'مینی تریلی', 'ده چرخ'];
 
@@ -18,47 +17,35 @@ async function loadChannelRows() {
   return rows;
 }
 
-function buildPlansFromRows(rows, { environment } = {}) {
-  const production = environment === 'production';
+function isUsableChannel(row) {
+  return row && row.chat_id != null && row.is_active !== false;
+}
 
-  if (!production) {
-    const pilot = rows.find(
-      r => r.slot_number === 1 && r.chat_id != null && r.is_active !== false
-    );
-    if (pilot) {
-      return DISPATCH_CATEGORIES.map(category => ({
-        category,
-        slot: 1,
-        chatId: String(pilot.chat_id),
-        pilotCombined: true,
-      }));
-    }
-    return [];
-  }
+function buildPlansFromRows(rows) {
+  const fallback =
+    rows.find(r => r.vehicle_category === 'تریلی' && isUsableChannel(r)) ||
+    rows.find(r => r.slot_number === 2 && isUsableChannel(r)) ||
+    rows.find(r => isUsableChannel(r) && r.slot_number !== 1);
 
   const plans = [];
   for (const category of DISPATCH_CATEGORIES) {
-    const dedicated = rows.find(
-      r =>
-        r.vehicle_category === category &&
-        r.chat_id != null &&
-        r.is_active !== false
-    );
-    if (dedicated) {
-      plans.push({
-        category,
-        slot: dedicated.slot_number,
-        chatId: String(dedicated.chat_id),
-        pilotCombined: false,
-      });
-    }
+    const dedicated = rows.find(r => r.vehicle_category === category && isUsableChannel(r));
+    const row = dedicated || fallback;
+    if (!row) continue;
+    plans.push({
+      category,
+      slot: row.slot_number,
+      chatId: String(row.chat_id),
+      pilotCombined: false,
+      sharedChannel: !dedicated,
+    });
   }
   return plans;
 }
 
 async function getDispatchChannelPlans() {
-  const [rows, runtime] = await Promise.all([loadChannelRows(), getRuntimeSettings()]);
-  return buildPlansFromRows(rows, runtime);
+  const rows = await loadChannelRows();
+  return buildPlansFromRows(rows);
 }
 
 function describeChannelBlocker(rows, { vehicleCategory, slot } = {}) {

@@ -13,6 +13,7 @@ import {
     getAnnouncementCreatorLabel,
     getAnnouncementRepDisplayLabel,
     getAssignedDriverDisplayName,
+    getHelperDriverDisplayName,
     getAssignedDriverContact,
     getAssignedVehiclePlate,
     formatCompanyVehiclePlate,
@@ -496,9 +497,13 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const isDairyOrAmbientTab =
         activeLine === FreightLineType.Dairy || activeLine === FreightLineType.Ambient;
+    const canToggleTableColumns =
+        isDairyCompactTable ||
+        isDairyOrAmbientTab ||
+        activeLine === FreightLineType.IceCream;
 
     useEffect(() => {
-        if (!isDairyCompactTable && !isDairyOrAmbientTab) {
+        if (!canToggleTableColumns) {
             setHiddenColumnHeaders(new Set());
             setColumnPickerOpen(false);
             return;
@@ -510,17 +515,17 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
             stored.add(DAIRY_DESTINATIONS_HEADER);
         }
         // اگر کاربر هنوز چیزی ذخیره نکرده، «تاریخ اعلام بار» پیش‌فرض مخفی باشد
-        if (stored.size === 0) {
+        if (stored.size === 0 && (isDairyCompactTable || isDairyOrAmbientTab)) {
             stored.add('تاریخ اعلام بار');
         }
         setHiddenColumnHeaders(stored);
         setColumnPickerOpen(false);
-    }, [columnStorageKey, isDairyCompactTable, isDairyOrAmbientTab]);
+    }, [columnStorageKey, canToggleTableColumns, isDairyCompactTable, isDairyOrAmbientTab]);
 
     useEffect(() => {
-        if (!isDairyCompactTable && !isDairyOrAmbientTab) return;
+        if (!canToggleTableColumns) return;
         saveTransportLiveHiddenColumns(columnStorageKey, hiddenColumnHeaders);
-    }, [columnStorageKey, hiddenColumnHeaders, isDairyCompactTable, isDairyOrAmbientTab]);
+    }, [columnStorageKey, hiddenColumnHeaders, canToggleTableColumns]);
 
     useEffect(() => {
         if (!columnPickerOpen) return;
@@ -1002,6 +1007,8 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 // console.log('🔍 [Render] Driver name for', ann.id, ':', result);
                 return result;
             }},
+            { header: 'نام راننده کمکی', display: () => true, render: (ann: FreightAnnouncement) =>
+                getHelperDriverDisplayName(ann, drivers) },
             { header: 'تماس راننده', display: () => viewMode === 'full' || viewMode === 'compact', render: (ann: FreightAnnouncement) => {
                 const result = getAssignedDriverContact(ann, drivers, props.personalDrivers);
                 return <span className="font-mono">{result}</span>;
@@ -1374,6 +1381,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                 ? [{ header: 'باربری', render: (ann: FreightAnnouncement) => getCarrierName(ann, props.personalDrivers) }]
                 : []),
             { header: 'نام راننده', render: (ann: FreightAnnouncement) => getAssignedDriverDisplayName(ann, props.drivers, props.personalDrivers) },
+            { header: 'نام راننده کمکی', render: (ann: FreightAnnouncement) => getHelperDriverDisplayName(ann, props.drivers) },
             { header: 'تماس راننده', render: (ann: FreightAnnouncement) => <span className="font-mono">{getAssignedDriverContact(ann, props.drivers, props.personalDrivers)}</span> },
             ...(showVehicleCode
                 ? [{
@@ -1632,10 +1640,10 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
     const visibleColumns = useMemo(
         () =>
-            (isDairyCompactTable || isDairyOrAmbientTab)
+            canToggleTableColumns
                 ? allColumns.filter((col: any) => !hiddenColumnHeaders.has(col.header) && !col.excelOnly)
                 : allColumns.filter((col: any) => !col.excelOnly),
-        [allColumns, hiddenColumnHeaders, isDairyCompactTable, isDairyOrAmbientTab]
+        [allColumns, hiddenColumnHeaders, canToggleTableColumns]
     );
 
     const toggleColumnVisibility = useCallback((header: string) => {
@@ -2914,7 +2922,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                             </button>
                         </div>
                         <div className="relative min-w-[5.5rem] min-h-[28px]" ref={columnPickerRef}>
-                            {isDairyCompactTable && (
+                            {canToggleTableColumns && (
                                 <>
                                     <button
                                         type="button"
@@ -3853,6 +3861,11 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
     const [searchCompanyDriverResults, setSearchCompanyDriverResults] = useState<any[]>([]);
     const [showCompanyDriverDropdown, setShowCompanyDriverDropdown] = useState(false);
     const [companyDriverSearching, setCompanyDriverSearching] = useState(false);
+    const [helperEmployeeId, setHelperEmployeeId] = useState('');
+    const [foundHelperDriver, setFoundHelperDriver] = useState<Driver | null>(null);
+    const [searchHelperDriverResults, setSearchHelperDriverResults] = useState<any[]>([]);
+    const [showHelperDriverDropdown, setShowHelperDriverDropdown] = useState(false);
+    const [helperDriverSearching, setHelperDriverSearching] = useState(false);
     
     // --- Common State ---
     const [blNumber, setBlNumber] = useState(announcement.billOfLadingNumber || '');
@@ -3875,6 +3888,20 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 // استفاده از vehicleCode اگر موجود باشد، وگرنه id
                 setVehicleInternalId(vehicle.vehicleCode || vehicle.id); 
                 setFoundVehicle(vehicle); 
+            }
+            const helper =
+                drivers.find((d) => d.id === announcement.helperDriverId) ||
+                (announcement.helperDriverId
+                    ? ({
+                          id: announcement.helperDriverId,
+                          name: announcement.helperDriverName || '',
+                          employeeId: announcement.helperDriverEmployeeId || '',
+                          mobile: announcement.helperDriverContact || '',
+                      } as Driver)
+                    : null);
+            if (helper) {
+                setHelperEmployeeId(helper.employeeId || helper.name || '');
+                setFoundHelperDriver(helper);
             }
         } else if (announcement.assignmentType === 'personal') {
             if (isDairyAmbientPersonalIsolatedAssignment(announcement)) {
@@ -4183,6 +4210,51 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
         setSearchCompanyDriverResults([]);
     };
 
+    const handleHelperDriverLookup = async () => {
+        const query = helperEmployeeId.trim();
+        if (query.length < 2) {
+            alert('لطفاً حداقل 2 کاراکتر وارد کنید.');
+            return;
+        }
+        setHelperDriverSearching(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(getApiUrl(`dispatch/search/drivers?q=${encodeURIComponent(query)}`), {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            if (response.ok) {
+                const found = await response.json();
+                setSearchHelperDriverResults(found);
+                if (found.length === 0) {
+                    setFoundHelperDriver(null);
+                    setShowHelperDriverDropdown(false);
+                    alert('راننده با این کد پرسنلی یا نام یافت نشد.');
+                } else {
+                    setShowHelperDriverDropdown(true);
+                    setFoundHelperDriver(null);
+                }
+            } else {
+                setFoundHelperDriver(null);
+                setShowHelperDriverDropdown(false);
+                alert('خطا در جستجوی راننده.');
+            }
+        } catch (error) {
+            console.error('Error searching helper driver:', error);
+            setFoundHelperDriver(null);
+            setShowHelperDriverDropdown(false);
+            alert('خطا در جستجوی راننده.');
+        } finally {
+            setHelperDriverSearching(false);
+        }
+    };
+
+    const handleHelperDriverSelection = (driver: any) => {
+        setHelperEmployeeId(driver.employeeId || driver.name || '');
+        setFoundHelperDriver(driver);
+        setShowHelperDriverDropdown(false);
+        setSearchHelperDriverResults([]);
+    };
+
     const handleVehicleLookup = () => {
         // Search by vehicleCode first, then by id
         const vehicle = vehicles.find(v => 
@@ -4338,6 +4410,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 return;
             }
             const bl = blNumber.trim();
+            if (foundHelperDriver && foundHelperDriver.id === foundCompanyDriver.id) {
+                alert('راننده کمکی نمی‌تواند همان راننده اصلی باشد.');
+                return;
+            }
             const saved = await onUpdateAssignment(announcement.id, {
                 driverId: foundCompanyDriver.id, 
                 vehicleId: foundVehicle.id, 
@@ -4349,6 +4425,10 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                 assignedDriverName: foundCompanyDriver.name,
                 assignedDriverContact: foundCompanyDriver.mobile,
                 assignedVehiclePlate: formatCompanyVehiclePlate(foundVehicle),
+                helperDriverId: foundHelperDriver?.id || null,
+                helperDriverName: foundHelperDriver?.name,
+                helperDriverContact: foundHelperDriver?.mobile,
+                helperDriverEmployeeId: foundHelperDriver?.employeeId,
             });
             if (saved === false) return;
         } else if (
@@ -4676,6 +4756,76 @@ const AssignmentDialog: React.FC<Omit<TransportLiveProps, 'announcements' | 'onF
                                 </div>
                             )}
                         </div>
+                        {(isIceCreamAnnouncement ||
+                            announcement.lineType === FreightLineType.Dairy ||
+                            announcement.lineType === 'Dairy' ||
+                            announcement.lineType === 'پاستوریزه') && (
+                        <div className="p-2 border rounded-md bg-slate-50 relative">
+                            <label className="text-sm font-medium">راننده کمکی</label>
+                            <div className="flex items-end gap-2 mt-1">
+                                <input
+                                    placeholder="کد پرسنلی یا نام راننده..."
+                                    value={helperEmployeeId}
+                                    onChange={e => {
+                                        setHelperEmployeeId(e.target.value);
+                                        if (e.target.value !== helperEmployeeId) {
+                                            setFoundHelperDriver(null);
+                                            setShowHelperDriverDropdown(false);
+                                        }
+                                    }}
+                                    className="input-style flex-grow"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleHelperDriverLookup}
+                                    disabled={helperDriverSearching}
+                                    className="px-3 py-2 bg-slate-600 text-white rounded-md text-xs hover:bg-slate-700 disabled:opacity-60"
+                                >
+                                    {helperDriverSearching ? 'در حال جستجو...' : 'جستجو'}
+                                </button>
+                                {foundHelperDriver && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFoundHelperDriver(null);
+                                            setHelperEmployeeId('');
+                                            setSearchHelperDriverResults([]);
+                                            setShowHelperDriverDropdown(false);
+                                        }}
+                                        className="px-3 py-2 bg-slate-200 text-slate-700 rounded-md text-xs hover:bg-slate-300"
+                                    >
+                                        حذف
+                                    </button>
+                                )}
+                            </div>
+                            {showHelperDriverDropdown && searchHelperDriverResults.length > 0 && (
+                                <div className="mt-2 p-3 border rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto absolute z-10 w-full">
+                                    <div className="text-sm font-medium text-gray-700 mb-2">
+                                        {searchHelperDriverResults.length} راننده یافت شد. یکی را انتخاب کنید:
+                                    </div>
+                                    {searchHelperDriverResults.map((driver) => (
+                                        <div
+                                            key={driver.id}
+                                            onClick={() => handleHelperDriverSelection(driver)}
+                                            className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                        >
+                                            <div className="font-medium text-gray-900">{driver.name || 'راننده'}</div>
+                                            <div className="text-sm text-gray-600">
+                                                {driver.employeeId ? `کد پرسنلی: ${driver.employeeId}` : ''}
+                                                {driver.employeeId && driver.mobile ? ' | ' : ''}
+                                                {driver.mobile ? `تماس: ${driver.mobile}` : ''}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {foundHelperDriver && (
+                                <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded">
+                                    <strong>راننده کمکی:</strong> {foundHelperDriver.name} | <strong>تماس:</strong> {foundHelperDriver.mobile || 'ندارد'}
+                                </div>
+                            )}
+                        </div>
+                        )}
                         <div className="p-2 border rounded-md bg-slate-50">
                             <label className="text-sm font-medium">خودرو شرکتی*</label>
                             <div className="flex items-end gap-2 mt-1">

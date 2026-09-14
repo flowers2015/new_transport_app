@@ -725,6 +725,18 @@ export function getAssignedDriverDisplayName(
     return (driver?.name || '').trim() || '-';
 }
 
+export function getHelperDriverDisplayName(
+    ann: Pick<FreightAnnouncement, 'helperDriverId' | 'helperDriverName'>,
+    drivers: Array<Pick<Driver, 'id' | 'name'>> = []
+): string {
+    const fromAnn = (ann.helperDriverName || '').trim();
+    if (fromAnn) return fromAnn;
+    const id = ann.helperDriverId;
+    if (!id) return '-';
+    const driver = drivers.find((d) => d.id === id);
+    return (driver?.name || '').trim() || '-';
+}
+
 export function getAssignedDriverContact(
     ann: AssignmentAnn,
     drivers: Array<Pick<Driver, 'id' | 'mobile'>> = [],
@@ -769,6 +781,10 @@ export function clearAssignmentFromAnnouncement(
         assignedVehicleId: undefined,
         assignedDriverName: undefined,
         assignedDriverContact: undefined,
+        helperDriverId: undefined,
+        helperDriverName: undefined,
+        helperDriverContact: undefined,
+        helperDriverEmployeeId: undefined,
         assignedVehiclePlate: undefined,
         carrierName: handoffFreightLocked ? ann.carrierName : undefined,
         billOfLadingNumber: undefined,
@@ -842,6 +858,14 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
         ),
         assignedDriverName: driverName,
         assignedDriverContact: driverContact,
+        helperDriverId: readOptionalAssignmentId(a.helper_driver_id ?? a.helperDriverId),
+        helperDriverName: readOptionalAssignmentText(a.helper_driver_name ?? a.helperDriverName),
+        helperDriverContact: readOptionalAssignmentText(
+            a.helper_driver_contact ?? a.helperDriverContact
+        ),
+        helperDriverEmployeeId: readOptionalAssignmentText(
+            a.helper_driver_employee_id ?? a.helperDriverEmployeeId
+        ),
         assignedVehiclePlate,
         carrierName: readOptionalAssignmentText(a.carrier_name ?? a.carrierName),
         handoffStatus: (a.handoff_status ?? a.handoffStatus) as
@@ -929,6 +953,16 @@ export function mergeAssignmentDisplayFields(
             assignedDriverContact: pickNonEmptyText(
                 previous.assignedDriverContact,
                 incoming.assignedDriverContact
+            ),
+            helperDriverId: previous.helperDriverId || incoming.helperDriverId,
+            helperDriverName: pickNonEmptyText(previous.helperDriverName, incoming.helperDriverName),
+            helperDriverContact: pickNonEmptyText(
+                previous.helperDriverContact,
+                incoming.helperDriverContact
+            ),
+            helperDriverEmployeeId: pickNonEmptyText(
+                previous.helperDriverEmployeeId,
+                incoming.helperDriverEmployeeId
             ),
             assignedVehiclePlate: pickNonEmptyText(
                 previous.assignedVehiclePlate,

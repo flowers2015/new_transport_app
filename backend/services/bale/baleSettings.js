@@ -3,22 +3,15 @@ const pool = require('../../db');
 const RUNTIME_KEY = 'runtime';
 
 const DEFAULT_RUNTIME = {
-  environment: 'test',
+  environment: 'production',
 };
 
 async function getRuntimeSettings() {
-  const { rows } = await pool.query(
-    `SELECT value FROM bale_settings WHERE key = $1`,
-    [RUNTIME_KEY]
-  );
-  const raw = rows[0]?.value || {};
-  return {
-    environment: raw.environment === 'production' ? 'production' : 'test',
-  };
+  return { environment: 'production' };
 }
 
-async function setRuntimeSettings({ environment }) {
-  const env = environment === 'production' ? 'production' : 'test';
+async function setRuntimeSettings({ environment } = {}) {
+  const env = 'production';
   await pool.query(
     `INSERT INTO bale_settings (key, value, updated_at)
      VALUES ($1, $2::jsonb, NOW())
