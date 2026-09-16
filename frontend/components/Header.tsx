@@ -111,7 +111,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.GpsResourceManagement, label: 'منابع GPS', roles: [UserRole.Inspection] },
       { view: View.CarrierManagement, label: 'تعریف باربری', roles: [UserRole.Transportation_Personal_Vehicle_User] },
       { view: View.AmbientBaleNotifySettings, label: 'اعلان بله فروتلند', roles: [UserRole.Transportation_Personal_Vehicle_User, UserRole.Admin] },
-      { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance, UserRole.BranchFinanceManager, UserRole.Auditor] },
+      { view: View.FreightHistory, label: 'آرشیو اعلام بار', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager, UserRole.TransportationUser, UserRole.Transportation_Personal_Vehicle_User, UserRole.BranchFinance, UserRole.HQFinance, UserRole.CentralFinance, UserRole.TransportationFinance, UserRole.BranchFinanceManager, UserRole.Auditor, UserRole.Inspection] },
       // داشبورد برای PlanningEmployee (بعد از تاریخچه اعلام بار)
       { view: View.Dashboard, label: 'داشبورد', roles: [UserRole.PlanningEmployee, UserRole.SalesExpert, UserRole.PlanningManager] },
       { type: 'divider', roles: [UserRole.TransportationFinance] },

@@ -9,6 +9,8 @@ import {
 } from './BalePrefInsightDialogs';
 import BaleSessionLoadPickerDialog, {
     BalePreviewLoad,
+    isReannouncement,
+    notesText,
 } from './BaleSessionLoadPickerDialog';
 
 type BaleChannel = {
@@ -38,6 +40,11 @@ type SessionAnnouncement = {
     destination?: { id?: string; city?: string };
     destinationId?: string;
     brand?: string;
+    notes?: string | null;
+    isReannouncement?: boolean | null;
+    is_reannouncement?: boolean | null;
+    vehicleType?: string | null;
+    cargoValue?: number | null;
 };
 
 type BaleSession = {
@@ -153,6 +160,7 @@ const EXTEND_MINUTE_OPTIONS = [2, 4, 6] as const;
 
 const DRIVERS_TABLE_HIDDEN_KEY = 'bale-dispatch-drivers-hidden';
 const CATEGORY_SETTINGS_KEY = 'bale-dispatch-category-settings';
+const SESSION_BASKETS_KEY = 'bale-dispatch-session-baskets';
 
 type CategorySessionSettings = {
     mode: string;
@@ -206,6 +214,42 @@ function readCategorySettings(): Record<string, CategorySessionSettings> {
     return base;
 }
 
+function sessionBasketsStorageKey(userId?: string) {
+    return userId ? `${SESSION_BASKETS_KEY}:${userId}` : SESSION_BASKETS_KEY;
+}
+
+function readSessionBaskets(userId?: string): Record<string, SessionLoadBasket> {
+    try {
+        const raw = localStorage.getItem(sessionBasketsStorageKey(userId));
+        if (!raw) return {};
+        const parsed = JSON.parse(raw) as Record<string, Partial<SessionLoadBasket>>;
+        const next: Record<string, SessionLoadBasket> = {};
+        CATEGORY_SLOTS.forEach(({ category }) => {
+            const row = parsed[category];
+            if (!row || !Array.isArray(row.selectedIds) || row.selectedIds.length === 0) return;
+            next[category] = {
+                selectedIds: row.selectedIds.map(String).filter(Boolean),
+                allowExtra: Boolean(row.allowExtra),
+                confirmed: Boolean(row.confirmed),
+                queueCount: Number(row.queueCount) || 0,
+                loadCount: Number(row.loadCount) || row.selectedIds.length,
+                stage: String(row.stage || DEFAULT_CATEGORY_SETTINGS.stage),
+            };
+        });
+        return next;
+    } catch {
+        return {};
+    }
+}
+
+function writeSessionBaskets(userId: string | undefined, baskets: Record<string, SessionLoadBasket>) {
+    try {
+        localStorage.setItem(sessionBasketsStorageKey(userId), JSON.stringify(baskets));
+    } catch {
+        /* ignore */
+    }
+}
+
 function readDriversTableHidden(): boolean {
     try {
         return localStorage.getItem(DRIVERS_TABLE_HIDDEN_KEY) === '1';
@@ -246,7 +290,9 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         category: string;
         label: string;
     } | null>(null);
-    const [sessionBaskets, setSessionBaskets] = useState<Record<string, SessionLoadBasket>>({});
+    const [sessionBaskets, setSessionBaskets] = useState<Record<string, SessionLoadBasket>>(() =>
+        readSessionBaskets(currentUser?.id)
+    );
     const [loadPicker, setLoadPicker] = useState<{
         category: string;
         label: string;
@@ -456,6 +502,36 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
 
     const settingsFor = (vehicleCategory: string): CategorySessionSettings =>
         categorySettings[vehicleCategory] || { ...DEFAULT_CATEGORY_SETTINGS };
+
+    useEffect(() => {
+        writeSessionBaskets(currentUser?.id, sessionBaskets);
+    }, [currentUser?.id, sessionBaskets]);
+
+    const saveCategoryBasket = (
+        vehicleCategory: string,
+        patch: Partial<SessionLoadBasket> & { selectedIds: string[] }
+    ) => {
+        const settings = settingsFor(vehicleCategory);
+        setSessionBaskets(prev => {
+            const previous = prev[vehicleCategory];
+            const selectedIds = patch.selectedIds.map(String).filter(Boolean);
+            const sameAsConfirmed =
+                Boolean(previous?.confirmed) &&
+                previous.selectedIds.length === selectedIds.length &&
+                previous.selectedIds.every(id => selectedIds.includes(id));
+            return {
+                ...prev,
+                [vehicleCategory]: {
+                    selectedIds,
+                    allowExtra: Boolean(patch.allowExtra ?? previous?.allowExtra),
+                    confirmed: patch.confirmed ?? sameAsConfirmed,
+                    queueCount: Number(patch.queueCount ?? previous?.queueCount ?? pickerQueueCount) || 0,
+                    loadCount: Number(patch.loadCount ?? previous?.loadCount ?? selectedIds.length) || selectedIds.length,
+                    stage: patch.stage || previous?.stage || settings.stage,
+                },
+            };
+        });
+    };
 
     const patchCategorySettings = (vehicleCategory: string, patch: Partial<CategorySessionSettings>) => {
         setCategorySettings(prev => {
@@ -1289,13 +1365,52 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                                                 {loads.length === 0 ? (
                                                     <div className="text-amber-700">لیست بار خالی است</div>
                                                 ) : (
-                                                    <ul className="mt-1 max-h-64 overflow-y-auto space-y-0.5 text-slate-700">
-                                                        {loads.map((ann, i) => (
-                                                            <li key={String(ann.id || i)}>
-                                                                {announcementLine(ann, i)}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
+                                                    <div className="mt-1 max-h-64 overflow-auto border border-slate-200 rounded-md">
+                                                        <table className="min-w-full text-[11px] border-collapse">
+                                                            <thead className="bg-slate-50 sticky top-0">
+                                                                <tr>
+                                                                    <th className="p-1.5 border border-slate-200 whitespace-nowrap">ردیف</th>
+                                                                    <th className="p-1.5 border border-slate-200 whitespace-nowrap">مبدا</th>
+                                                                    <th className="p-1.5 border border-slate-200">مقاصد</th>
+                                                                    <th className="p-1.5 border border-slate-200 whitespace-nowrap">لاین</th>
+                                                                    <th className="p-1.5 border border-slate-200 whitespace-nowrap">اعلام مجدد</th>
+                                                                    <th className="p-1.5 border border-slate-200 min-w-[8rem]">توضیحات</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {loads.map((ann, i) => (
+                                                                    <tr key={String(ann.id || i)}>
+                                                                        <td className="p-1.5 border border-slate-200 text-center">
+                                                                            {(i + 1).toLocaleString('fa-IR')}
+                                                                        </td>
+                                                                        <td className="p-1.5 border border-slate-200 text-center">
+                                                                            {ann.originCity || ann.origin_city || '—'}
+                                                                        </td>
+                                                                        <td className="p-1.5 border border-slate-200">
+                                                                            {ann.destinationCities ||
+                                                                                ann.destination?.city ||
+                                                                                '—'}
+                                                                        </td>
+                                                                        <td className="p-1.5 border border-slate-200 text-center">
+                                                                            {ann.lineType || '—'}
+                                                                        </td>
+                                                                        <td className="p-1.5 border border-slate-200 text-center">
+                                                                            {isReannouncement(ann) ? (
+                                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-200 text-orange-900">
+                                                                                    اعلام مجدد
+                                                                                </span>
+                                                                            ) : (
+                                                                                '—'
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="p-1.5 border border-slate-200 text-right whitespace-pre-wrap">
+                                                                            {notesText(ann)}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -1488,20 +1603,26 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                         }
                         locked={loadPicker.locked}
                         error={pickerError}
-                        onClose={() => setLoadPicker(null)}
-                        onConfirm={(selectedIds, allowExtra) => {
-                            const settings = settingsFor(loadPicker.category);
-                            setSessionBaskets(prev => ({
-                                ...prev,
-                                [loadPicker.category]: {
-                                    selectedIds,
-                                    allowExtra,
-                                    confirmed: true,
+                        onClose={draft => {
+                            if (!loadPicker.locked && draft?.selectedIds?.length) {
+                                saveCategoryBasket(loadPicker.category, {
+                                    selectedIds: draft.selectedIds,
+                                    allowExtra: draft.allowExtra,
                                     queueCount: pickerQueueCount,
                                     loadCount: pickerLoads.length,
-                                    stage: settings.stage,
-                                },
-                            }));
+                                });
+                            }
+                            setLoadPicker(null);
+                        }}
+                        onConfirm={(selectedIds, allowExtra) => {
+                            saveCategoryBasket(loadPicker.category, {
+                                selectedIds,
+                                allowExtra,
+                                confirmed: true,
+                                queueCount: pickerQueueCount,
+                                loadCount: pickerLoads.length,
+                                stage: settingsFor(loadPicker.category).stage,
+                            });
                             setLoadPicker(null);
                         }}
                     />

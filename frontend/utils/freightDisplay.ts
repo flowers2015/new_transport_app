@@ -550,11 +550,15 @@ export function insertDairyCompactFreightExcelColumn(headers: string[]): string[
 export const WAREHOUSE_LOADING_START_EXCEL_HEADER = 'زمان شروع بارگیری';
 export const WAREHOUSE_LOADING_END_EXCEL_HEADER = 'زمان پایان بارگیری';
 export const WAREHOUSE_LOADING_DURATION_EXCEL_HEADER = 'مدت زمان بارگیری با انباردار';
+export const WAREHOUSE_DOCK_EXCEL_HEADER = 'شماره سکو';
+export const WAREHOUSE_RECEIVER_EXCEL_HEADER = 'حواله گیر';
 
 export const WAREHOUSE_LOADING_EXCEL_HEADERS = [
     WAREHOUSE_LOADING_START_EXCEL_HEADER,
     WAREHOUSE_LOADING_END_EXCEL_HEADER,
     WAREHOUSE_LOADING_DURATION_EXCEL_HEADER,
+    WAREHOUSE_DOCK_EXCEL_HEADER,
+    WAREHOUSE_RECEIVER_EXCEL_HEADER,
 ] as const;
 
 export function isWarehouseLoadingExcelHeader(header: string): boolean {
@@ -584,14 +588,23 @@ export function formatWarehouseLoadingDuration(
 }
 
 export function warehouseLoadingExcelValues(
-    ann: Pick<FreightAnnouncement, 'loadingStartedAt' | 'loadingEndedAt'> | null | undefined
-): [string, string, string] {
+    ann: Pick<
+        FreightAnnouncement,
+        'loadingStartedAt' | 'loadingEndedAt' | 'dockNumber' | 'remittanceReceiverName'
+    > | null | undefined
+): [string, string, string, string, string] {
     const startRaw = formatJalaliDateTime(ann?.loadingStartedAt);
     const endRaw = formatJalaliDateTime(ann?.loadingEndedAt);
+    const dock =
+        ann?.dockNumber != null && String(ann.dockNumber).trim() !== ''
+            ? String(ann.dockNumber)
+            : '';
     return [
         !startRaw || startRaw === '-' ? '' : startRaw,
         !endRaw || endRaw === '-' ? '' : endRaw,
         formatWarehouseLoadingDuration(ann?.loadingStartedAt, ann?.loadingEndedAt),
+        dock,
+        (ann?.remittanceReceiverName || '').trim(),
     ];
 }
 

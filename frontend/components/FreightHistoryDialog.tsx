@@ -255,6 +255,10 @@ const FieldChangesDetails: React.FC<{ fieldChanges: any; driverMap?: { [key: str
         loadingStartedAt: 'زمان شروع بارگیری',
         loading_ended_at: 'زمان اتمام بارگیری',
         loadingEndedAt: 'زمان اتمام بارگیری',
+        'حواله گیر': 'حواله گیر',
+        'شماره سکو': 'شماره سکو',
+        dock_number: 'شماره سکو',
+        remittance_receiver_name: 'حواله گیر',
         freight_cost_locked_at: 'زمان قفل کرایه',
       };
       

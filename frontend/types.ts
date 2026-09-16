@@ -84,7 +84,7 @@ export enum UserRole {
     CentralFinance = 'مالی مرکزی',
     TransportationFinance = 'مالی ترابری',
     Viewer = 'بیننده',
-    /** پرسنل بازرسی — مشاهده پیگیری زنده + مدیریت منابع GPS */
+    /** پرسنل بازرسی — پیگیری زنده، آرشیو اعلام بار، منابع GPS */
     Inspection = 'بازرسی',
     WarehouseKeeper = 'انباردار',
     BranchFinanceManager = 'مدیر مالی شعب',
@@ -749,6 +749,11 @@ export interface FreightAnnouncement {
     loadingEndedAt?: string | null;
     cartonCountWarehouse?: number | null;
     weightKg?: number | null;
+    /** شماره سکو — ثبت LIS انباردار پاستوریزه */
+    dockNumber?: number | null;
+    remittanceReceiverId?: string | null;
+    remittanceReceiverName?: string | null;
+    remittanceReferredToPicker?: boolean | null;
 }
 
 export interface FreightTransaction {

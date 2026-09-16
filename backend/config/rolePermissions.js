@@ -217,9 +217,10 @@ const rolePermissions = {
     menus: [
       'inspection_workbench',
       'freight_tracking',
+      'freight_archive',
       'gps_resources'
     ],
-    description: 'بازرسی — کارتابل اعمال محدودیت، مشاهده پیگیری اعلام بار و مدیریت منابع GPS'
+    description: 'بازرسی — کارتابل، پیگیری زنده، آرشیو اعلام بار و منابع GPS'
   },
 
   warehouse_keeper: {

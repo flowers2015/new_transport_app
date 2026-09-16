@@ -16,6 +16,7 @@ interface GpsResource {
   assetKind: AssetKind;
   assetKindLabel: string;
   imei: string;
+  simCardNumber: string;
   gpsModelId: string | null;
   gpsModelName: string | null;
   notes: string;
@@ -34,6 +35,7 @@ const emptyForm = {
   plateNumber: '',
   assetKind: 'tractor' as AssetKind,
   imei: '',
+  simCardNumber: '',
   gpsModelId: '',
   notes: '',
 };
@@ -59,8 +61,13 @@ const GpsResourceManagement: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   const [modelOpen, setModelOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [newModelName, setNewModelName] = useState('');
   const [modelSaving, setModelSaving] = useState(false);
+  const [sortKey, setSortKey] = useState<
+    'vehicleCode' | 'plateNumber' | 'assetKindLabel' | 'imei' | 'simCardNumber' | 'gpsModelName' | 'isActive'
+  >('vehicleCode');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -116,10 +123,51 @@ const GpsResourceManagement: React.FC = () => {
         r.vehicleCode.toLowerCase().includes(q) ||
         (r.plateNumber || '').toLowerCase().includes(q) ||
         r.imei.includes(q) ||
+        (r.simCardNumber || '').includes(q) ||
         (r.gpsModelName || '').toLowerCase().includes(q)
       );
     });
   }, [resources, search, showInactive]);
+
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      if (sortKey === 'isActive') {
+        return (Number(a.isActive) - Number(b.isActive)) * dir;
+      }
+      const va = String(a[sortKey] || '');
+      const vb = String(b[sortKey] || '');
+      return va.localeCompare(vb, 'fa', { numeric: true }) * dir;
+    });
+    return copy;
+  }, [filtered, sortKey, sortDir]);
+
+  const modelStats = useMemo(() => {
+    const map = new Map<string, { name: string; active: number; total: number }>();
+    for (const r of resources) {
+      const name = (r.gpsModelName || '').trim() || 'بدون مدل';
+      const row = map.get(name) || { name, active: 0, total: 0 };
+      row.total += 1;
+      if (r.isActive) row.active += 1;
+      map.set(name, row);
+    }
+    return [...map.values()].sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, 'fa'));
+  }, [resources]);
+
+  const toggleSort = (
+    key: 'vehicleCode' | 'plateNumber' | 'assetKindLabel' | 'imei' | 'simCardNumber' | 'gpsModelName' | 'isActive'
+  ) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir('asc');
+  };
+
+  const sortMark = (key: typeof sortKey) =>
+    sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   const activeModels = useMemo(() => models.filter((m) => m.isActive), [models]);
 
@@ -136,6 +184,7 @@ const GpsResourceManagement: React.FC = () => {
       plateNumber: r.plateNumber || '',
       assetKind: r.assetKind,
       imei: r.imei,
+      simCardNumber: r.simCardNumber || '',
       gpsModelId: r.gpsModelId || '',
       notes: r.notes || '',
     });
@@ -162,6 +211,15 @@ const GpsResourceManagement: React.FC = () => {
       alert('IMEI فقط باید عدد باشد');
       return;
     }
+    const simDigits = form.simCardNumber.replace(/\D/g, '');
+    if (!simDigits) {
+      alert('شماره سیم‌کارت الزامی است');
+      return;
+    }
+    if (simDigits.length < 10 || simDigits.length > 15) {
+      alert('شماره سیم‌کارت باید بین ۱۰ تا ۱۵ رقم باشد');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -169,6 +227,7 @@ const GpsResourceManagement: React.FC = () => {
         plateNumber: form.plateNumber.trim(),
         assetKind: form.assetKind,
         imei: imeiDigits,
+        simCardNumber: simDigits,
         gpsModelId: form.gpsModelId || null,
         notes: form.notes.trim(),
       };
@@ -301,6 +360,13 @@ const GpsResourceManagement: React.FC = () => {
             >
               + ثبت IMEI
             </button>
+            <button
+              type="button"
+              onClick={() => setStatsOpen(true)}
+              className="px-3 py-2 text-sm rounded-md border border-slate-300 hover:bg-slate-50"
+            >
+              آمار
+            </button>
           </div>
         </div>
 
@@ -308,7 +374,7 @@ const GpsResourceManagement: React.FC = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="جستجو: کد، پلاک، IMEI، مدل..."
+            placeholder="جستجو: کد، پلاک، IMEI، سیم‌کارت، مدل..."
             className="flex-1 min-w-[200px] border border-slate-300 rounded-md px-3 py-2 text-sm"
           />
           <label className="text-sm text-slate-600 flex items-center gap-2">
@@ -332,29 +398,59 @@ const GpsResourceManagement: React.FC = () => {
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
-                  <th className="p-2 text-right font-semibold">کد خودرو</th>
-                  <th className="p-2 text-right font-semibold">پلاک</th>
-                  <th className="p-2 text-right font-semibold">نوع</th>
-                  <th className="p-2 text-right font-semibold">IMEI</th>
-                  <th className="p-2 text-right font-semibold">مدل GPS</th>
-                  <th className="p-2 text-right font-semibold">وضعیت</th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('vehicleCode')}>
+                      کد خودرو{sortMark('vehicleCode')}
+                    </button>
+                  </th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('plateNumber')}>
+                      پلاک{sortMark('plateNumber')}
+                    </button>
+                  </th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('assetKindLabel')}>
+                      نوع{sortMark('assetKindLabel')}
+                    </button>
+                  </th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('imei')}>
+                      IMEI{sortMark('imei')}
+                    </button>
+                  </th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('simCardNumber')}>
+                      سیم‌کارت{sortMark('simCardNumber')}
+                    </button>
+                  </th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('gpsModelName')}>
+                      مدل GPS{sortMark('gpsModelName')}
+                    </button>
+                  </th>
+                  <th className="p-2 text-right font-semibold">
+                    <button type="button" className="hover:text-sky-700" onClick={() => toggleSort('isActive')}>
+                      وضعیت{sortMark('isActive')}
+                    </button>
+                  </th>
                   <th className="p-2 text-center font-semibold">عملیات</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-center text-slate-500">
+                    <td colSpan={8} className="p-4 text-center text-slate-500">
                       موردی ثبت نشده است.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((r) => (
+                  sorted.map((r) => (
                     <tr key={r.id} className={`border-t ${r.isActive ? '' : 'bg-slate-50 text-slate-400'}`}>
                       <td className="p-2 font-medium">{r.vehicleCode}</td>
                       <td className="p-2 font-mono text-xs">{r.plateNumber || '—'}</td>
                       <td className="p-2">{r.assetKindLabel}</td>
                       <td className="p-2 font-mono text-xs">{r.imei}</td>
+                      <td className="p-2 font-mono text-xs">{r.simCardNumber || '—'}</td>
                       <td className="p-2">{r.gpsModelName || '—'}</td>
                       <td className="p-2">{r.isActive ? 'فعال' : 'غیرفعال'}</td>
                       <td className="p-2 text-center whitespace-nowrap">
@@ -452,6 +548,19 @@ const GpsResourceManagement: React.FC = () => {
                 />
               </div>
               <div>
+                <label className="text-xs font-medium text-slate-600">شماره سیم‌کارت *</label>
+                <input
+                  value={form.simCardNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, simCardNumber: e.target.value.replace(/\D/g, '') }))}
+                  inputMode="numeric"
+                  className="mt-1 w-full border rounded-md px-3 py-2 text-sm font-mono"
+                  required
+                  minLength={10}
+                  maxLength={15}
+                  placeholder="مثلاً 09121234567"
+                />
+              </div>
+              <div>
                 <label className="text-xs font-medium text-slate-600">مدل GPS</label>
                 <select
                   value={form.gpsModelId}
@@ -527,6 +636,48 @@ const GpsResourceManagement: React.FC = () => {
             </ul>
             <div className="text-left">
               <button type="button" onClick={() => setModelOpen(false)} className="px-4 py-2 border rounded-md text-sm">
+                بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {statsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setStatsOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold">آمار مدل‌های GPS</h3>
+            <p className="text-xs text-slate-500">تعداد دستگاه ثبت‌شده از هر نوع</p>
+            <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="p-2 text-right">مدل</th>
+                    <th className="p-2 text-center">فعال</th>
+                    <th className="p-2 text-center">کل</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelStats.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-3 text-center text-slate-500">
+                        موردی ثبت نشده است.
+                      </td>
+                    </tr>
+                  ) : (
+                    modelStats.map((row) => (
+                      <tr key={row.name} className="border-t">
+                        <td className="p-2">{row.name}</td>
+                        <td className="p-2 text-center font-medium">{row.active.toLocaleString('fa-IR')}</td>
+                        <td className="p-2 text-center">{row.total.toLocaleString('fa-IR')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-left">
+              <button type="button" onClick={() => setStatsOpen(false)} className="px-4 py-2 border rounded-md text-sm">
                 بستن
               </button>
             </div>

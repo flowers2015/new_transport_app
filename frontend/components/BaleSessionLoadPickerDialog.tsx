@@ -16,6 +16,9 @@ export type BalePreviewLoad = {
     createdAt?: string | Date | null;
     created_at?: string | Date | null;
     cargoValue?: number | null;
+    notes?: string | null;
+    isReannouncement?: boolean | null;
+    is_reannouncement?: boolean | null;
 };
 
 type SortKey =
@@ -26,7 +29,9 @@ type SortKey =
     | 'vehicleType'
     | 'lineType'
     | 'dest'
-    | 'cargo';
+    | 'cargo'
+    | 'reannounce'
+    | 'notes';
 
 type Props = {
     categoryLabel: string;
@@ -37,7 +42,7 @@ type Props = {
     locked: boolean;
     busy?: boolean;
     error?: string | null;
-    onClose: () => void;
+    onClose: (draft?: { selectedIds: string[]; allowExtra: boolean }) => void;
     onConfirm: (selectedIds: string[], allowExtra: boolean) => void;
 };
 
@@ -87,7 +92,21 @@ function sortValue(ann: BalePreviewLoad, key: SortKey): string | number {
     if (key === 'vehicleType') return String(ann.vehicleType || '');
     if (key === 'lineType') return String(ann.lineType || '');
     if (key === 'dest') return destText(ann);
-    return Number(ann.cargoValue) || 0;
+    if (key === 'cargo') return Number(ann.cargoValue) || 0;
+    if (key === 'reannounce') return isReannouncement(ann) ? 1 : 0;
+    return notesText(ann);
+}
+
+export function isReannouncement(ann: {
+    isReannouncement?: boolean | null;
+    is_reannouncement?: boolean | null;
+}): boolean {
+    return !!(ann.isReannouncement ?? ann.is_reannouncement);
+}
+
+export function notesText(ann: { notes?: string | null }): string {
+    const notes = String(ann.notes || '').trim();
+    return notes || '—';
 }
 
 const BaleSessionLoadPickerDialog: React.FC<Props> = ({
@@ -176,6 +195,9 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
         else setSelected(new Set(loads.map(l => l.id)));
     };
 
+    const dismiss = () =>
+        onClose({ selectedIds: Array.from(selected), allowExtra: extraNeeded || allowExtra });
+
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
             setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -216,7 +238,7 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
                     </div>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={dismiss}
                         className="px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded-md"
                     >
                         بستن
@@ -295,12 +317,18 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
                                     <th className="p-2 border border-slate-200 whitespace-nowrap">
                                         {renderSortableHeader('cargo', 'ارزش بار')}
                                     </th>
+                                    <th className="p-2 border border-slate-200 whitespace-nowrap">
+                                        {renderSortableHeader('reannounce', 'اعلام مجدد')}
+                                    </th>
+                                    <th className="p-2 border border-slate-200 min-w-[10rem]">
+                                        {renderSortableHeader('notes', 'توضیحات')}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {sortedLoads.length === 0 ? (
                                     <tr>
-                                        <td colSpan={10} className="p-6 text-center text-slate-500">
+                                        <td colSpan={12} className="p-6 text-center text-slate-500">
                                             باری برای انتخاب نیست
                                         </td>
                                     </tr>
@@ -347,6 +375,18 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
                                                 <td className="p-2 border border-slate-200 text-center">
                                                     {formatCargo(ann.cargoValue)}
                                                 </td>
+                                                <td className="p-2 border border-slate-200 text-center">
+                                                    {isReannouncement(ann) ? (
+                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-200 text-orange-900">
+                                                            اعلام مجدد
+                                                        </span>
+                                                    ) : (
+                                                        '—'
+                                                    )}
+                                                </td>
+                                                <td className="p-2 border border-slate-200 text-right whitespace-pre-wrap max-w-xs">
+                                                    {notesText(ann)}
+                                                </td>
                                             </tr>
                                         );
                                     })
@@ -369,7 +409,7 @@ const BaleSessionLoadPickerDialog: React.FC<Props> = ({
                     <div className="flex gap-2">
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={dismiss}
                             className="px-3 py-1.5 rounded-md border border-slate-300 text-sm"
                         >
                             انصراف

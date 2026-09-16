@@ -8,6 +8,7 @@ const {
   canReopen,
   canReset,
   isWarehouseKeeperRole,
+  linesMatch,
 } = require('../utils/warehouseLoading');
 
 let usersColCache = null;
@@ -91,6 +92,64 @@ async function getKeeperActor(userId) {
 
 function deny(res, status, message) {
   return res.status(status).json({ message });
+}
+
+function isDairyWarehouseLine(lineType) {
+  const v = String(lineType || '').trim();
+  return (
+    v === 'Pasturized' ||
+    v === 'پاستوریزه' ||
+    v === 'Dairy' ||
+    linesMatch(v, 'پاستوریزه') ||
+    linesMatch(v, 'Pasturized')
+  );
+}
+
+function loadingMetaSuffix(ann) {
+  if (!ann) return '';
+  const bits = [];
+  const name = String(ann.remittance_receiver_name || '').trim();
+  const dock = ann.dock_number != null && String(ann.dock_number).trim() !== ''
+    ? String(ann.dock_number)
+    : '';
+  if (name) bits.push(`حواله‌گیر ${name}`);
+  if (dock) bits.push(`سکو ${dock}`);
+  return bits.length ? ` — ${bits.join(' — ')}` : '';
+}
+
+function loadingMetaFieldChanges(ann) {
+  const name = String(ann?.remittance_receiver_name || '').trim() || '-';
+  const dock =
+    ann?.dock_number != null && String(ann.dock_number).trim() !== ''
+      ? String(ann.dock_number)
+      : '-';
+  return {
+    'حواله گیر': { old: '-', new: name },
+    'شماره سکو': { old: '-', new: dock },
+  };
+}
+
+function mapReceiver(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    fullName: row.full_name,
+    isActive: row.is_active !== false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function assertDairyKeeper(req) {
+  if (!isWarehouseKeeperRole(req.user && req.user.role)) {
+    return { error: { status: 403, message: 'فقط انباردار لاین پاستوریزه مجاز است' } };
+  }
+  const userId = req.user.userId || req.user.id;
+  const warehouses = await loadMyActiveWarehouses(userId);
+  if (!warehouses.some((w) => isDairyWarehouseLine(w.line_type))) {
+    return { error: { status: 403, message: 'فقط انباردار لاین پاستوریزه مجاز است' } };
+  }
+  return { userId };
 }
 
 async function loadAnnouncement(id) {
@@ -322,10 +381,11 @@ async function startLoading(req, res) {
       req,
       announcement,
       'LOADING_STARTED',
-      `شروع بارگیری توسط ${actor.historyName} — شروع ${startLabel}`,
+      `شروع بارگیری توسط ${actor.historyName} — شروع ${startLabel}${loadingMetaSuffix(announcement)}`,
       {
         'وضعیت بارگیری': { old: loadingStatusFa(announcement.loading_status), new: 'در حال بارگیری' },
         'زمان شروع بارگیری': { old: '-', new: startLabel },
+        ...loadingMetaFieldChanges(announcement),
       }
     );
     res.json({ message: 'loading started' });
@@ -359,11 +419,12 @@ async function endLoading(req, res) {
       req,
       announcement,
       'LOADING_ENDED',
-      `پایان بارگیری توسط ${actor.historyName} — اتمام ${endLabel}${extra}`,
+      `پایان بارگیری توسط ${actor.historyName} — اتمام ${endLabel}${extra}${loadingMetaSuffix(announcement)}`,
       {
         'وضعیت بارگیری': { old: 'در حال بارگیری', new: 'تمام‌شده' },
         'زمان شروع بارگیری': { old: '-', new: startLabel || '-' },
         'زمان اتمام بارگیری': { old: '-', new: endLabel },
+        ...loadingMetaFieldChanges(announcement),
       }
     );
     res.json({ message: 'loading ended' });
@@ -513,6 +574,99 @@ async function getWarehouseAnnouncements(req, res) {
   }
 }
 
+async function listLisReceivers(req, res) {
+  try {
+    const access = await assertDairyKeeper(req);
+    if (access.error) return deny(res, access.error.status, access.error.message);
+    const result = await pool.query(
+      `SELECT * FROM lis_remittance_receivers
+       WHERE is_active = TRUE
+       ORDER BY full_name ASC, employee_id ASC`
+    );
+    res.json(result.rows.map(mapReceiver));
+  } catch (error) {
+    console.error('[listLisReceivers]', error.message);
+    res.status(500).json({ message: 'خطا در دریافت حواله‌گیرها' });
+  }
+}
+
+async function createLisReceiver(req, res) {
+  try {
+    const access = await assertDairyKeeper(req);
+    if (access.error) return deny(res, access.error.status, access.error.message);
+    const employeeId = String(req.body?.employeeId || req.body?.employee_id || '').trim();
+    const fullName = String(req.body?.fullName || req.body?.full_name || '').trim();
+    if (!employeeId) return deny(res, 400, 'کد پرسنلی الزامی است');
+    if (!fullName) return deny(res, 400, 'نام و نام خانوادگی الزامی است');
+    const dup = await pool.query(
+      `SELECT id FROM lis_remittance_receivers WHERE employee_id = $1 AND is_active = TRUE`,
+      [employeeId]
+    );
+    if (dup.rowCount > 0) return deny(res, 409, 'این کد پرسنلی قبلاً ثبت شده است');
+    const id = 'LR-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    await pool.query(
+      `INSERT INTO lis_remittance_receivers (id, employee_id, full_name, created_by)
+       VALUES ($1, $2, $3, $4)`,
+      [id, employeeId, fullName, access.userId]
+    );
+    const created = await pool.query(`SELECT * FROM lis_remittance_receivers WHERE id = $1`, [id]);
+    res.status(201).json(mapReceiver(created.rows[0]));
+  } catch (error) {
+    console.error('[createLisReceiver]', error.message);
+    res.status(500).json({ message: 'خطا در ثبت حواله‌گیر' });
+  }
+}
+
+async function updateLisReceiver(req, res) {
+  try {
+    const access = await assertDairyKeeper(req);
+    if (access.error) return deny(res, access.error.status, access.error.message);
+    const { id } = req.params;
+    const employeeId = String(req.body?.employeeId || req.body?.employee_id || '').trim();
+    const fullName = String(req.body?.fullName || req.body?.full_name || '').trim();
+    if (!employeeId) return deny(res, 400, 'کد پرسنلی الزامی است');
+    if (!fullName) return deny(res, 400, 'نام و نام خانوادگی الزامی است');
+    const dup = await pool.query(
+      `SELECT id FROM lis_remittance_receivers
+       WHERE employee_id = $1 AND is_active = TRUE AND id <> $2`,
+      [employeeId, id]
+    );
+    if (dup.rowCount > 0) return deny(res, 409, 'این کد پرسنلی قبلاً ثبت شده است');
+    const result = await pool.query(
+      `UPDATE lis_remittance_receivers
+       SET employee_id = $2, full_name = $3, updated_at = NOW()
+       WHERE id = $1 AND is_active = TRUE
+       RETURNING *`,
+      [id, employeeId, fullName]
+    );
+    if (!result.rowCount) return deny(res, 404, 'حواله‌گیر یافت نشد');
+    res.json(mapReceiver(result.rows[0]));
+  } catch (error) {
+    console.error('[updateLisReceiver]', error.message);
+    res.status(500).json({ message: 'خطا در ویرایش حواله‌گیر' });
+  }
+}
+
+async function deleteLisReceiver(req, res) {
+  try {
+    const access = await assertDairyKeeper(req);
+    if (access.error) return deny(res, access.error.status, access.error.message);
+    const { id } = req.params;
+    const result = await pool.query(
+      `UPDATE lis_remittance_receivers
+       SET is_active = FALSE, updated_at = NOW()
+       WHERE id = $1 AND is_active = TRUE
+       RETURNING id`,
+      [id]
+    );
+    if (!result.rowCount) return deny(res, 404, 'حواله‌گیر یافت نشد');
+    res.json({ message: 'deleted' });
+  } catch (error) {
+    console.error('[deleteLisReceiver]', error.message);
+    res.status(500).json({ message: 'خطا در حذف حواله‌گیر' });
+  }
+}
+
 module.exports = {
   getWarehouses,
   getAllWarehouses,
@@ -531,4 +685,8 @@ module.exports = {
   resetLoading,
   getWarehouseAnnouncements,
   getKeeperActor,
+  listLisReceivers,
+  createLisReceiver,
+  updateLisReceiver,
+  deleteLisReceiver,
 };

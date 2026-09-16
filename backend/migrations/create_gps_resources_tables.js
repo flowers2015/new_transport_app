@@ -39,6 +39,7 @@ async function createGpsResourcesTables() {
         plate_number VARCHAR(100),
         asset_kind VARCHAR(50) NOT NULL DEFAULT 'tractor',
         imei VARCHAR(32) NOT NULL,
+        sim_card_number VARCHAR(20),
         gps_model_id VARCHAR(255) REFERENCES gps_device_models(id) ON DELETE SET NULL,
         notes TEXT,
         is_active BOOLEAN NOT NULL DEFAULT TRUE,

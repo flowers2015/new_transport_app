@@ -18,12 +18,20 @@ const {
   reopenLoading,
   resetLoading,
   getWarehouseAnnouncements,
+  listLisReceivers,
+  createLisReceiver,
+  updateLisReceiver,
+  deleteLisReceiver,
 } = require('../controllers/warehouseController');
 
 router.get('/', authenticateToken, authorizeRole(['admin']), getWarehouses);
 router.get('/all', authenticateToken, authorizeRole(['admin']), getAllWarehouses);
 router.get('/origin-cities', authenticateToken, authorizeRole(['admin']), getOriginCities);
 router.get('/my', authenticateToken, getMyWarehouses);
+router.get('/lis-receivers', authenticateToken, listLisReceivers);
+router.post('/lis-receivers', authenticateToken, createLisReceiver);
+router.put('/lis-receivers/:id', authenticateToken, updateLisReceiver);
+router.delete('/lis-receivers/:id', authenticateToken, deleteLisReceiver);
 router.post('/', authenticateToken, authorizeRole(['admin']), createWarehouse);
 
 router.get('/assignments', authenticateToken, authorizeRole(['admin']), getAssignments);

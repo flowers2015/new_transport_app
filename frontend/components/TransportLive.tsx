@@ -124,6 +124,7 @@ const BaleReportDialog = React.lazy(() => import('./BaleReportDialog'));
 const DairyRouteArrangementDialog = React.lazy(() => import('./DairyRouteArrangementDialog'));
 const TransportLiveSummaryDialog = React.lazy(() => import('./TransportLiveSummaryDialog'));
 const WarehouseLisCodeDialog = React.lazy(() => import('./WarehouseLisCodeDialog'));
+const RemittanceReceiverManageDialog = React.lazy(() => import('./RemittanceReceiverManageDialog'));
 
 const ReannounceBadge: React.FC = () => (
     <span
@@ -758,6 +759,7 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
     }, [isWarehouseKeeper, canLoadAnnouncement]);
 
     const [lisDialogAnn, setLisDialogAnn] = useState<FreightAnnouncement | null>(null);
+    const [receiverManageOpen, setReceiverManageOpen] = useState(false);
 
     const handleStartLoading = useCallback(async (ann: FreightAnnouncement) => {
         if (!window.confirm('بارگیری این اعلام بار شروع شود؟')) return;
@@ -2996,6 +2998,24 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
 
                     {/* ردیف ۵ — اکشن‌های مختص تب / انتخاب‌ها */}
                     <div className="flex flex-wrap items-center gap-2 min-h-[36px]">
+                        {isWarehouseKeeper &&
+                            activeLine === FreightLineType.Dairy &&
+                            !isPendingBillOfLadingTab(activeLine) &&
+                            myWarehouses.some(
+                                (w) =>
+                                    w.line_type === 'Pasturized' ||
+                                    w.line_type === 'پاستوریزه' ||
+                                    w.line_type === 'Dairy'
+                            ) && (
+                            <button
+                                type="button"
+                                onClick={() => setReceiverManageOpen(true)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-md text-xs hover:bg-teal-700 transition-colors shrink-0"
+                                title="تعریف حواله‌گیر برای ثبت LIS"
+                            >
+                                تعریف حواله‌گیر
+                            </button>
+                        )}
                         {canPerformActions && !isCarrierUser && activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(activeLine) && (
                             <button
                                 type="button"
@@ -3562,6 +3582,11 @@ const TransportLive: React.FC<TransportLiveProps> = (props) => {
                         onRefresh && onRefresh();
                     }}
                 />
+             </React.Suspense>
+             )}
+             {receiverManageOpen && (
+             <React.Suspense fallback={null}>
+                <RemittanceReceiverManageDialog onClose={() => setReceiverManageOpen(false)} />
              </React.Suspense>
              )}
              {referDialogAnns && referDialogAnns.length > 0 && onReferToCarrier && (

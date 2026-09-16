@@ -29,7 +29,7 @@ async function enrichAnnouncements(announcements) {
 
   const { rows: faRows } = await pool.query(
     `SELECT id, brand, origin_city, cargo_value, notes, delivery_date, line_type, loading_date,
-            created_at, representative_type, representative_name, products
+            created_at, representative_type, representative_name, products, is_reannouncement
      FROM freight_announcements WHERE id = ANY($1::varchar[])`,
     [ids]
   );
@@ -81,6 +81,7 @@ async function enrichAnnouncements(announcements) {
       loadingDate: row?.loading_date || ann.loadingDate || null,
       createdAt: row?.created_at || ann.createdAt || null,
       notes: ann.notes ?? row?.notes ?? null,
+      isReannouncement: !!(ann.isReannouncement ?? ann.is_reannouncement ?? row?.is_reannouncement),
       representativeType:
         ann.representativeType ||
         row?.representative_type ||

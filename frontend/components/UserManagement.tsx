@@ -100,7 +100,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser, restricted
     { value: 'accident', label: 'کارشناس تصادفات' },
     { value: 'allocation', label: 'کارشناس تغییر و تحول' },
     { value: 'insurance', label: 'کارشناس بیمه' },
-    { value: 'inspector', label: 'بازرسی (مشاهده اعلام بار + منابع GPS)' },
+    { value: 'inspector', label: 'بازرسی (پیگیری زنده + آرشیو اعلام بار + منابع GPS)' },
     { value: 'warehouse_keeper', label: 'انباردار (بارگیری + ثبت کد LIS)' },
     { value: 'branch_finance_manager', label: 'مدیر مالی شعب' },
     { value: 'auditor', label: 'حسابرس' },

@@ -1907,10 +1907,57 @@ async function updateFreightAnnouncement(req, res) {
           );
         }
 
-        await client.query(
-          `UPDATE freight_announcements SET updated_at = NOW() WHERE id = $1`,
-          [id]
-        );
+        if (isKeeper) {
+          const dockRaw = req.body?.dockNumber ?? req.body?.dock_number;
+          const dockDigits = String(dockRaw == null ? '' : dockRaw).replace(/\D/g, '');
+          if (!dockDigits) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'شماره سکو الزامی است.' });
+          }
+          const dockNumber = Number(dockDigits);
+          if (!Number.isInteger(dockNumber) || dockNumber < 1) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'شماره سکو باید عدد باشد.' });
+          }
+          const receiverId = String(
+            req.body?.remittanceReceiverId || req.body?.remittance_receiver_id || ''
+          ).trim();
+          if (!receiverId) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              message: 'حواله‌گیر را از فهرست تعریف‌شده انتخاب کنید.',
+            });
+          }
+          const receiverRes = await client.query(
+            `SELECT id, full_name FROM lis_remittance_receivers
+             WHERE id = $1 AND is_active = TRUE`,
+            [receiverId]
+          );
+          if (!receiverRes.rowCount) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              message: 'حواله‌گیر نامعتبر است. فقط از فهرست تعریف‌شده انتخاب کنید.',
+            });
+          }
+          const referredRaw =
+            req.body?.remittanceReferredToPicker ?? req.body?.remittance_referred_to_picker;
+          const referred = referredRaw === true || referredRaw === 'true' || referredRaw === 1;
+          await client.query(
+            `UPDATE freight_announcements
+             SET dock_number = $2,
+                 remittance_receiver_id = $3,
+                 remittance_receiver_name = $4,
+                 remittance_referred_to_picker = $5,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [id, dockNumber, receiverId, receiverRes.rows[0].full_name, referred]
+          );
+        } else {
+          await client.query(
+            `UPDATE freight_announcements SET updated_at = NOW() WHERE id = $1`,
+            [id]
+          );
+        }
 
         try {
           let lisUserName =
@@ -1925,6 +1972,20 @@ async function updateFreightAnnouncement(req, res) {
               const actor = await getKeeperActor(userId);
               lisUserName = actor.historyName || lisUserName;
               lisDescription = `ثبت کد LIS توسط ${lisUserName} (ویرایش محدود پس از ارجاع به ترابری)`;
+              const dockRaw = req.body?.dockNumber ?? req.body?.dock_number;
+              const dockDigits = String(dockRaw == null ? '' : dockRaw).replace(/\D/g, '');
+              const receiverName =
+                req.body?.remittanceReceiverName ||
+                req.body?.remittance_receiver_name ||
+                '';
+              if (receiverName) lisDescription += ` — حواله‌گیر ${receiverName}`;
+              if (dockDigits) lisDescription += ` — سکو ${dockDigits}`;
+              if (
+                req.body?.remittanceReferredToPicker === true ||
+                req.body?.remittance_referred_to_picker === true
+              ) {
+                lisDescription += ' — حواله به بارچین ارجاع شده';
+              }
             } catch (actorErr) {
               lisDescription = 'ثبت کد LIS توسط انباردار (ویرایش محدود پس از ارجاع به ترابری)';
               console.warn('⚠️ [updateFreightAnnouncement] keeper actor lookup skipped:', actorErr?.message);

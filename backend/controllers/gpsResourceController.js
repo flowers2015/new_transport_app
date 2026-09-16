@@ -38,6 +38,7 @@ function mapResource(row) {
     assetKind: row.asset_kind,
     assetKindLabel: row.asset_kind === 'semi_trailer' ? 'نیمه یدک' : 'کشنده',
     imei: row.imei,
+    simCardNumber: row.sim_card_number || '',
     gpsModelId: row.gps_model_id || null,
     gpsModelName: row.gps_model_name || null,
     notes: row.notes || '',
@@ -47,9 +48,26 @@ function mapResource(row) {
   };
 }
 
+function sanitizeDigits(raw) {
+  return String(raw || '').replace(/\D/g, '');
+}
+
 function sanitizeImei(raw) {
-  const digits = String(raw || '').replace(/\D/g, '');
-  return digits;
+  return sanitizeDigits(raw);
+}
+
+function sanitizeSim(raw) {
+  return sanitizeDigits(raw);
+}
+
+let simCardColumnReady = false;
+async function ensureSimCardColumn() {
+  if (simCardColumnReady) return;
+  await pool.query(`
+    ALTER TABLE gps_resources
+      ADD COLUMN IF NOT EXISTS sim_card_number VARCHAR(20)
+  `);
+  simCardColumnReady = true;
 }
 
 function normalizeAssetKind(raw) {
@@ -142,6 +160,7 @@ async function updateModel(req, res) {
 
 async function listResources(req, res) {
   try {
+    await ensureSimCardColumn();
     const q = String(req.query.q || '').trim();
     const params = [];
     let where = 'WHERE 1=1';
@@ -149,6 +168,7 @@ async function listResources(req, res) {
       params.push(`%${q}%`);
       where += ` AND (
         r.vehicle_code ILIKE $1 OR r.plate_number ILIKE $1 OR r.imei ILIKE $1
+        OR COALESCE(r.sim_card_number, '') ILIKE $1
         OR COALESCE(m.name, '') ILIKE $1
       )`;
     }
@@ -248,6 +268,7 @@ async function createResource(req, res) {
     const plateNumber = String(req.body?.plateNumber || '').trim();
     const assetKind = normalizeAssetKind(req.body?.assetKind);
     const imei = sanitizeImei(req.body?.imei);
+    const simCardNumber = sanitizeSim(req.body?.simCardNumber ?? req.body?.sim_card_number);
     const gpsModelId = req.body?.gpsModelId ? String(req.body.gpsModelId).trim() : null;
     const notes = String(req.body?.notes || '').trim();
 
@@ -256,16 +277,23 @@ async function createResource(req, res) {
     if (imei.length < 8 || imei.length > 20) {
       return res.status(400).json({ message: 'طول IMEI باید بین ۸ تا ۲۰ رقم باشد.' });
     }
+    if (!simCardNumber) {
+      return res.status(400).json({ message: 'شماره سیم‌کارت الزامی است.' });
+    }
+    if (simCardNumber.length < 10 || simCardNumber.length > 15) {
+      return res.status(400).json({ message: 'شماره سیم‌کارت باید بین ۱۰ تا ۱۵ رقم باشد.' });
+    }
 
+    await ensureSimCardColumn();
     const id = newId();
     const { rows } = await pool.query(
       `
       INSERT INTO gps_resources (
-        id, vehicle_code, plate_number, asset_kind, imei, gps_model_id, notes, is_active
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
+        id, vehicle_code, plate_number, asset_kind, imei, sim_card_number, gps_model_id, notes, is_active
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE)
       RETURNING *
       `,
-      [id, vehicleCode, plateNumber || null, assetKind, imei, gpsModelId || null, notes || null]
+      [id, vehicleCode, plateNumber || null, assetKind, imei, simCardNumber, gpsModelId || null, notes || null]
     );
 
     let modelName = null;
@@ -288,6 +316,7 @@ async function createResource(req, res) {
 
 async function updateResource(req, res) {
   try {
+    await ensureSimCardColumn();
     const { id } = req.params;
     const body = req.body || {};
     const fields = [];
@@ -316,6 +345,17 @@ async function updateResource(req, res) {
       }
       fields.push(`imei = $${i++}`);
       values.push(imei);
+    }
+    if (body.simCardNumber != null || body.sim_card_number != null) {
+      const simCardNumber = sanitizeSim(body.simCardNumber ?? body.sim_card_number);
+      if (!simCardNumber) {
+        return res.status(400).json({ message: 'شماره سیم‌کارت الزامی است.' });
+      }
+      if (simCardNumber.length < 10 || simCardNumber.length > 15) {
+        return res.status(400).json({ message: 'شماره سیم‌کارت باید بین ۱۰ تا ۱۵ رقم باشد.' });
+      }
+      fields.push(`sim_card_number = $${i++}`);
+      values.push(simCardNumber);
     }
     if (body.gpsModelId !== undefined) {
       fields.push(`gps_model_id = $${i++}`);

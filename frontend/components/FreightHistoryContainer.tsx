@@ -100,6 +100,17 @@ export const normalizeHistoryAnnouncement = (a: any): FreightAnnouncement => {
         loadingStatus: a.loading_status || a.loadingStatus || null,
         loadingStartedAt: a.loading_started_at || a.loadingStartedAt || null,
         loadingEndedAt: a.loading_ended_at || a.loadingEndedAt || null,
+        dockNumber:
+            a.dock_number != null
+                ? Number(a.dock_number)
+                : a.dockNumber != null
+                  ? Number(a.dockNumber)
+                  : null,
+        remittanceReceiverId: a.remittance_receiver_id || a.remittanceReceiverId || null,
+        remittanceReceiverName: a.remittance_receiver_name || a.remittanceReceiverName || null,
+        remittanceReferredToPicker: !!(
+            a.remittance_referred_to_picker ?? a.remittanceReferredToPicker
+        ),
     } as FreightAnnouncement;
 };
 
