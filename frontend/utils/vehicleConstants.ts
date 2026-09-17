@@ -19,6 +19,13 @@ export const holdingCompanies = [
 export const mihanCompanies = ['پخش سراسری میهن', 'شهرنوشیدنی', 'پاندا', 'کارخانه میهن'];
 
 // نوع وسیله نقلیه (دسته‌بندی اصلی)
+export const vehicleTypes = [
+  { value: 'خودرو سنگین', label: 'خودرو سنگین' },
+  { value: 'خودرو نیمه سنگین', label: 'خودرو نیمه سنگین' },
+  { value: 'سواری', label: 'سواری' },
+  { value: 'وانت', label: 'وانت' },
+];
+
 export const extraTrailerVehicleTypes = [
   'نیمه یدک دو محور (تریلر)',
   'نیمه یدک سه محور (تریلر)',
