@@ -7,6 +7,7 @@ const {
 const {
   filterEligibleForDriver,
   canSemiAutoAssign,
+  classifyCategoryQueueVeryFar,
 } = require('./baleDecision');
 const {
   buildPreferenceBrief,
@@ -457,6 +458,8 @@ function apiStageFromSession(sessionStage) {
       return { stage: 'stage2', subPhase: 'near_vf', forceStage2: true };
     case 'stage2_near_all':
       return { stage: 'stage2', subPhase: 'near_all', forceStage2: true };
+    case 'stage2_all':
+      return { stage: 'stage2', subPhase: '', forceStage2: true };
     case 'stage2':
       return { stage: 'stage2', subPhase: '', forceStage2: true };
     default:
@@ -469,9 +472,14 @@ function assignStageFromSession(sessionStage) {
 }
 
 function isDispatchPhaseStage(sessionStage) {
-  return ['stage1', 'stage2_far', 'stage2_near_vf', 'stage2_near_all', 'stage2'].includes(
-    sessionStage
-  );
+  return [
+    'stage1',
+    'stage2_far',
+    'stage2_near_vf',
+    'stage2_near_all',
+    'stage2_all',
+    'stage2',
+  ].includes(sessionStage);
 }
 
 async function sendToDriver(driverId, text, options = {}) {
@@ -773,7 +781,28 @@ async function resolveInitialStage({ stage = 'stage1', vehicleCategory, userId, 
     throw new Error('بار مرحله دوم برای این دسته موجود نیست.');
   }
 
-  const s1 = await loadStagePayload('stage1', vehicleCategory, { userId, forceStage2 });
+  const boardPayload = await loadStagePayload('stage1', vehicleCategory, { userId, forceStage2 });
+  const boardQueue =
+    boardPayload.displayQueue && boardPayload.displayQueue.length
+      ? boardPayload.displayQueue
+      : boardPayload.queue;
+  const vfUniformity = classifyCategoryQueueVeryFar(boardQueue);
+  if (vfUniformity === 'none_went' || vfUniformity === 'all_went') {
+    const allPass = await loadStagePayload('stage2_all', vehicleCategory, {
+      userId,
+      forceStage2: true,
+    });
+    if (allPass.announcements.length > 0 && allPass.queue.length > 0) {
+      return {
+        effectiveStage: 'stage2_all',
+        ...allPass,
+        autoPromoted: true,
+        skipStage1Reason: vfUniformity === 'none_went' ? 'none_very_far' : 'all_went_very_far',
+      };
+    }
+  }
+
+  const s1 = boardPayload;
   if (s1.announcements.length > 0 && s1.queue.length > 0) {
     return { effectiveStage: 'stage1', ...s1, autoPromoted: false, skipStage1Reason: null };
   }

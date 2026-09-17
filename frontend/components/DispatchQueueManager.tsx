@@ -60,7 +60,7 @@ type PositionEditState = {
     saving: boolean;
 };
 
-type DispatchPhase = 'stage1' | 'stage2_far' | 'stage2_near_vf' | 'stage2_near_all';
+type DispatchPhase = 'stage1' | 'stage2_far' | 'stage2_near_vf' | 'stage2_near_all' | 'stage2_all';
 type AssignMode = 'rules' | 'free';
 
 type QueueRowStatus = 'ready' | 'very_far_history' | 'deferred' | 'inactive';

@@ -4,6 +4,7 @@ const STAGE_PUBLIC_NAME = {
   stage2_far: 'اعلام بار نهایی',
   stage2_near_vf: 'اعلام بار نهایی',
   stage2_near_all: 'اعلام بار نهایی',
+  stage2_all: 'اعلام بار نهایی',
 };
 
 function publicStageName(stage) {
@@ -113,6 +114,18 @@ function formatAnnouncementOrderNames(queue) {
 }
 
 function skippedStage1ToFinal(reason) {
+  if (reason === 'none_very_far') {
+    return (
+      'در دوره جاری هیچ‌کس از این دسته مسیر خیلی‌دور نرفته است.\n' +
+      'همه بارها از نفر اول تا انتهای نوبت در یک مرحله اعلام می‌شود.'
+    );
+  }
+  if (reason === 'all_went_very_far') {
+    return (
+      'همه نفرات این دسته در دوره جاری مسیر خیلی‌دور رفته‌اند.\n' +
+      'همه بارها از نفر اول تا انتهای نوبت در یک مرحله اعلام می‌شود.'
+    );
+  }
   if (reason === 'no_far_queue') {
     return 'نوبت «دور» خالی است — جلسه از اعلام بار نهایی ادامه می‌یابد.';
   }

@@ -1,5 +1,5 @@
 const pool = require('../../db');
-const { filterEligibleForDriver } = require('../bale/baleDecision');
+const { filterEligibleForDriver, classifyCategoryQueueVeryFar } = require('../bale/baleDecision');
 const { isVeryFarAnnouncement } = require('./dispatchRouteRules');
 const { computeJalaliCycleRange } = require('./dispatchCycle');
 
@@ -18,6 +18,7 @@ const PHASE_LABELS = {
   stage2_far: 'مرحله دوم — نوبت دور',
   stage2_near_vf: 'مرحله دوم — خیلی‌دور برای نوبت نزدیک',
   stage2_near_all: 'مرحله دوم — نوبت نزدیک (بارهای باقی‌مانده)',
+  stage2_all: 'اعلام یک‌مرحله‌ای — همه بارها طبق نوبت',
 };
 
 const LOCK_REASONS = {
@@ -62,6 +63,8 @@ function phaseToQuery(phase) {
       return { stage: 'stage2', subPhase: 'near_vf', forceStage2: 'true' };
     case 'stage2_near_all':
       return { stage: 'stage2', subPhase: 'near_all', forceStage2: 'true' };
+    case 'stage2_all':
+      return { stage: 'stage2', subPhase: '', forceStage2: 'true' };
     default:
       return { stage: 'stage1', subPhase: '', forceStage2: 'false' };
   }
@@ -261,7 +264,7 @@ function resolveNearEntryPhase(entry, globalPhase, deferrals, payloads) {
 
 async function loadPhasePayloads(vehicleCategory, userId = null) {
   const label = normalizeCategoryLabel(vehicleCategory);
-  const phases = ['stage1', 'stage2_far', 'stage2_near_vf', 'stage2_near_all'];
+  const phases = ['stage1', 'stage2_far', 'stage2_near_vf', 'stage2_near_all', 'stage2_all'];
   const payloads = {};
   for (const phase of phases) {
     payloads[phase] = await fetchPhasePayload(label, phase, userId);
@@ -302,6 +305,19 @@ function resolveEffectivePhaseFromPayloads(payloads, deferrals) {
     return null;
   };
 
+  const boardQueue =
+    payloads.stage1?.displayQueue ||
+    payloads.stage2_all?.displayQueue ||
+    payloads.stage2_all?.queue ||
+    [];
+  const vfUniformity = classifyCategoryQueueVeryFar(boardQueue);
+  if (vfUniformity === 'none_went' || vfUniformity === 'all_went') {
+    const unified = tryPhases(['stage2_all']);
+    if (unified) {
+      return { ...unified, autoPromoted: true };
+    }
+  }
+
   const s1 = payloads.stage1 || {};
   const activeS1 = activeQueueForPhase('stage1', s1, deferrals);
   if ((s1.announcements || []).length > 0 && activeS1.length > 0) {
@@ -311,7 +327,7 @@ function resolveEffectivePhaseFromPayloads(payloads, deferrals) {
   const promoted = tryPhases(['stage2_far', 'stage2_near_vf', 'stage2_near_all']);
   if (promoted) return promoted;
 
-  const fallback = tryPhases(['stage2_near_all', 'stage2_near_vf', 'stage2_far']);
+  const fallback = tryPhases(['stage2_all', 'stage2_near_all', 'stage2_near_vf', 'stage2_far']);
   if (fallback) return fallback;
 
   return { phase: null, data: s1, autoPromoted: false };
@@ -338,6 +354,17 @@ function resolveEntryAssignPhase(entry, globalPhase, deferrals, payloads) {
   const queueType = entry.queueType || entry.queue_type;
   const driverId = entry.driverId || entry.driver_id;
   const entryId = entry.id;
+
+  if (globalPhase === 'stage2_all') {
+    const data = payloads.stage2_all || {};
+    return {
+      phase: 'stage2_all',
+      data,
+      isDeferredThisPhase: false,
+      assignStage: 'stage2',
+      inactive: (data.announcements || []).length === 0,
+    };
+  }
 
   if (queueType === 'far') {
     if (globalPhase === 'stage1') {

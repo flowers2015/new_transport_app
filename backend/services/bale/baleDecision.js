@@ -13,6 +13,36 @@ function driverHasVeryFarHistory(driverEntry) {
   return (driverEntry?.longRouteHistory || []).length > 0;
 }
 
+/** سابقه خیلی‌دور دوره جاری — بدون blockedStage1 تا نوبت نزدیک در مرحله ۱ غلط علامت نخورد */
+function driverWentVeryFarThisCycle(driverEntry) {
+  if (driverEntry?.hasVeryFarHistory) return true;
+  return (Array.isArray(driverEntry?.longRouteHistory) && driverEntry.longRouteHistory.length > 0);
+}
+
+/**
+ * none_went: هیچ‌کس خیلی‌دور نرفته | all_went: همه رفته‌اند | mixed | empty
+ * در دو حالت یکنواخت اعلام بار دو مرحله‌ای نباید اجرا شود.
+ */
+function classifyCategoryQueueVeryFar(queue) {
+  const drivers = (queue || []).filter(q => {
+    const qt = q.queueType || q.queue_type;
+    return qt === 'far' || qt === 'near';
+  });
+  if (drivers.length === 0) return 'empty';
+  let went = 0;
+  for (const d of drivers) {
+    if (driverWentVeryFarThisCycle(d)) went += 1;
+  }
+  if (went === 0) return 'none_went';
+  if (went === drivers.length) return 'all_went';
+  return 'mixed';
+}
+
+function shouldSkipTwoStageAnnouncement(queue) {
+  const kind = classifyCategoryQueueVeryFar(queue);
+  return kind === 'none_went' || kind === 'all_went';
+}
+
 function filterEligibleForDriver(announcements, driverEntry, stage, rejectedAnnouncementIds = []) {
   const rejected = new Set(rejectedAnnouncementIds || []);
   const category = driverEntry?.vehicleCategory || driverEntry?.vehicle_category;
@@ -48,6 +78,10 @@ function filterEligibleForDriver(announcements, driverEntry, stage, rejectedAnno
       return true;
     }
 
+    if (stage === 'stage2_all') {
+      return queueType === 'far' || queueType === 'near';
+    }
+
     return true;
   });
 }
@@ -77,4 +111,8 @@ module.exports = {
   pickAutoAnnouncement,
   pickMaxRemainingKm,
   canSemiAutoAssign,
+  driverHasVeryFarHistory,
+  driverWentVeryFarThisCycle,
+  classifyCategoryQueueVeryFar,
+  shouldSkipTwoStageAnnouncement,
 };
