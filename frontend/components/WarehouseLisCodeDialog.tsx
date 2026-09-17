@@ -90,11 +90,6 @@ const WarehouseLisCodeDialog: React.FC<Props> = ({ announcement, onClose, onSave
     setErr('');
     try {
       const dockDigits = dockNumber.replace(/\D/g, '');
-      if (!dockDigits) {
-        setErr('شماره سکو الزامی است');
-        setBusy(false);
-        return;
-      }
       if (!selectedReceiver) {
         setErr('حواله‌گیر را از فهرست انتخاب کنید. ورود دستی مجاز نیست.');
         setBusy(false);
@@ -108,7 +103,7 @@ const WarehouseLisCodeDialog: React.FC<Props> = ({ announcement, onClose, onSave
           lineType: announcement.lineType,
           destinations: rows.map((d) => ({ id: d.id, lisCode: d.lisCode })),
           lisCodeOnly: true,
-          dockNumber: Number(dockDigits),
+          dockNumber: dockDigits ? Number(dockDigits) : null,
           remittanceReceiverId: selectedReceiver.id,
           remittanceReceiverName: selectedReceiver.fullName,
           remittanceReferredToPicker: referred,
@@ -165,7 +160,7 @@ const WarehouseLisCodeDialog: React.FC<Props> = ({ announcement, onClose, onSave
 
         <div className="space-y-3 mb-4 border-t border-slate-100 pt-3">
           <label className="block text-xs">
-            <span className="font-medium text-slate-700">شماره سکو *</span>
+            <span className="font-medium text-slate-700">شماره سکو</span>
             <input
               value={dockNumber}
               onChange={(e) => setDockNumber(e.target.value.replace(/\D/g, ''))}

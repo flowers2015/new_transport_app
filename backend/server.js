@@ -231,6 +231,7 @@ async function runStartupMigrations() {
     { name: 'warehouse_loading_columns', fn: require('./migrations/add_warehouse_loading_columns') },
     { name: 'warehouse_keeper_role', fn: require('./migrations/add_warehouse_keeper_role') },
     { name: 'lis_remittance_receivers', fn: require('./migrations/create_lis_remittance_receivers') },
+    { name: 'bale_category_load_baskets', fn: require('./migrations/create_bale_category_load_baskets') },
     { name: 'branch_finance_manager_auditor_roles', fn: require('./migrations/add_branch_finance_manager_and_auditor_roles') },
   ];
 

@@ -118,7 +118,7 @@ const renderPlanningDairyDeliveryDatesCell = (ann: FreightAnnouncement) => {
 const sortByCanonicalLineOrder = (types: FreightLineType[]) =>
     ALL_FREIGHT_LINE_TYPES.filter((lt) => types.includes(lt));
 
-const createInitialDairyDestination = (): Partial<Destination> => ({
+const createInitialDairyDestination = (ownerUserId?: string): Partial<Destination> => ({
     id: generateUUID(),
     city: '',
     representativeName: '',
@@ -129,6 +129,7 @@ const createInitialDairyDestination = (): Partial<Destination> => ({
     lisCode: '',
     products: [],
     cargoValue: 0,
+    originalCreatedByUserId: ownerUserId || undefined,
 });
 
 const createInitialAmbientDestination = (): Partial<Destination> => ({
@@ -2846,41 +2847,15 @@ const AnnouncementPanel: React.FC<{
             (data as any)?.created_by_user_id ||
             ''
     );
-    const isOwnerOfEditedAnnouncement =
-        !announcementOwnerId ||
-        announcementOwnerId === currentUserId ||
+    const isPrivilegedEditor =
         currentUser?.role === UserRole.PlanningManager ||
         currentUser?.role === UserRole.Admin;
-    const statusStrForEdit = String(data?.status || '');
-    // بعد از درخواست تغییر (و برگشت/رد/مانده) همه فیلدهای مشترک باید باز باشند
-    const isDairyFullSharedEditStatus =
-        new Set([
-            FreightAnnouncementStatus.Rejected,
-            FreightAnnouncementStatus.ReturnedToCreator,
-            FreightAnnouncementStatus.Leftover,
-            FreightAnnouncementStatus.ChangeRequested,
-            'Rejected',
-            'ReturnedToCreator',
-            'Leftover',
-            'ChangeRequested',
-            'رد شده',
-            'برگشت به اعلام‌کننده',
-            'بار مانده',
-            'درخواست تغییر',
-        ]).has(data?.status as any) ||
-        [
-            'Rejected',
-            'ReturnedToCreator',
-            'Leftover',
-            'ChangeRequested',
-            'رد شده',
-            'برگشت به اعلام‌کننده',
-            'بار مانده',
-            'درخواست تغییر',
-        ].includes(statusStrForEdit);
-    // قفل فیلدهای مشترک فقط برای «افزودن مقصد همکار» — در درخواست تغییر و برای مالک، همه فیلدها بازند
-    const allowFullSharedFieldEdit =
-        isDairyFullSharedEditStatus || isOwnerOfEditedAnnouncement;
+    const isOwnerOfEditedAnnouncement =
+        isPrivilegedEditor ||
+        !announcementOwnerId ||
+        announcementOwnerId === currentUserId;
+    // فیلدهای مشترک اعلام‌بار فقط برای مالک/مدیر باز است؛ همکار فقط LIS روی مقصد دیگران + افزودن مقصد خودش
+    const allowFullSharedFieldEdit = isOwnerOfEditedAnnouncement;
     const isDairyNextDestEdit =
         isEditMode &&
         data?.lineType === FreightLineType.Dairy &&
@@ -2891,7 +2866,9 @@ const AnnouncementPanel: React.FC<{
     const isDestinationLocked = (id?: string) => {
         if (!id) return false;
         if (isDairyLisCodeOnlyEdit) return true;
-        return Boolean(isDairyNextDestEdit && lockedDestinationIds.has(id));
+        if (isPrivilegedEditor) return false;
+        if (!isDairyCollaboratorEditor || data?.lineType !== FreightLineType.Dairy) return false;
+        return lockedDestinationIds.has(id);
     };
     const lockedFieldClass = 'bg-slate-100 text-slate-600 cursor-not-allowed';
     const resolveDestinationOwnerId = (dest: Partial<Destination>, announcement?: FreightAnnouncement | null) => {
@@ -3140,6 +3117,11 @@ const AnnouncementPanel: React.FC<{
                                   lisCode: d.lisCode || '',
                                   products: d.products || [],
                                   cargoValue: Number(d.cargoValue) || 0,
+                                  originalCreatedByUserId:
+                                      (d as any).originalCreatedByUserId ||
+                                      (d as any).original_created_by_user_id ||
+                                      (d as any).original_creator_user_id ||
+                                      undefined,
                               }))
                             : data.lineType === FreightLineType.Dairy
                               ? [createInitialDairyDestination()]
@@ -3160,46 +3142,18 @@ const AnnouncementPanel: React.FC<{
                     });
                     setDestCityValid(cityValidity);
                     if (data.lineType === FreightLineType.Dairy && (isDairyCollaboratorEditor || lisCodeOnlyMode)) {
-                        const statusStr = String(data.status || '');
-                        const fullUnlockStatuses = new Set([
-                            FreightAnnouncementStatus.Rejected,
-                            FreightAnnouncementStatus.ReturnedToCreator,
-                            FreightAnnouncementStatus.Leftover,
-                            FreightAnnouncementStatus.ChangeRequested,
-                            'Rejected',
-                            'ReturnedToCreator',
-                            'Leftover',
-                            'ChangeRequested',
-                            'رد شده',
-                            'برگشت به اعلام‌کننده',
-                            'بار مانده',
-                            'درخواست تغییر',
-                        ]);
-                        const isFullUnlockStatus =
-                            fullUnlockStatuses.has(data.status as any) || fullUnlockStatuses.has(statusStr as any);
-                        const ownerId = String(
-                            (data as any)?.creator_user_id ||
-                                (data as any)?.createdByUserId ||
-                                (data as any)?.created_by_user_id ||
-                                ''
-                        );
-                        const isOwnerEditor =
-                            !ownerId ||
-                            ownerId === currentUserId ||
-                            currentUser?.role === UserRole.PlanningManager ||
-                            currentUser?.role === UserRole.Admin;
-                        const unlockAll = isFullUnlockStatus || (!lisCodeOnlyMode && isOwnerEditor);
-
-                        if (lisCodeOnlyMode && !isFullUnlockStatus) {
+                        if (lisCodeOnlyMode) {
                             const locked = new Set<string>();
                             finalDests.forEach((d) => {
                                 if (d.id) locked.add(d.id);
                             });
                             setLockedDestinationIds(locked);
-                        } else if (unlockAll) {
+                        } else if (
+                            currentUser?.role === UserRole.PlanningManager ||
+                            currentUser?.role === UserRole.Admin
+                        ) {
                             setLockedDestinationIds(new Set());
                         } else {
-                            // فقط مقصدهایی که مال کاربر دیگری است قفل می‌شوند
                             const locked = new Set<string>();
                             finalDests.forEach((d) => {
                                 if (!d.id) return;
@@ -3297,7 +3251,7 @@ const AnnouncementPanel: React.FC<{
         if (destinations.length < 4) {
             const newDest =
                 lineType === FreightLineType.Dairy
-                    ? createInitialDairyDestination()
+                    ? createInitialDairyDestination(currentUserId)
                     : lineType === FreightLineType.Ambient
                       ? createInitialAmbientDestination()
                       : { id: generateUUID(), city: '', representativeName: '', representativeType: 'agent' as 'agent' | 'distributor' };
@@ -3312,7 +3266,7 @@ const AnnouncementPanel: React.FC<{
     };
     const moveDestination = (id: string, direction: -1 | 1) => {
         // در ویرایش مشارکتی پاستوریزه فقط مقصد خود کاربر جابه‌جا می‌شود
-        if (isDairyNextDestEdit && isDestinationLocked(id)) return;
+        if (isDestinationLocked(id)) return;
         setDestinations((prev) => {
             const idx = prev.findIndex((d) => d.id === id);
             const newIdx = idx + direction;

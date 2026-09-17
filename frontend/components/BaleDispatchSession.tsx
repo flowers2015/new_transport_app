@@ -183,6 +183,22 @@ type SessionLoadBasket = {
     stage: string;
 };
 
+type SharedLoadBasket = SessionLoadBasket & {
+    vehicleCategory: string;
+};
+
+function toSessionBasket(row: Partial<SharedLoadBasket> & { selectedIds?: string[] }): SessionLoadBasket {
+    const selectedIds = (row.selectedIds || []).map(String).filter(Boolean);
+    return {
+        selectedIds,
+        allowExtra: Boolean(row.allowExtra),
+        confirmed: Boolean(row.confirmed),
+        queueCount: Number(row.queueCount) || 0,
+        loadCount: Number(row.loadCount) || selectedIds.length,
+        stage: String(row.stage || DEFAULT_CATEGORY_SETTINGS.stage),
+    };
+}
+
 function defaultAllCategorySettings(): Record<string, CategorySessionSettings> {
     return Object.fromEntries(
         CATEGORY_SLOTS.map(({ category }) => [category, { ...DEFAULT_CATEGORY_SETTINGS }])
@@ -409,6 +425,12 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                 if (!res.ok) throw new Error(await readApiError(res));
                 applyStatus((await res.json()) as BaleStatus);
                 if (withDrivers) await loadDrivers();
+                try {
+                    const shared = await fetchSharedBaskets();
+                    applySharedBaskets(shared);
+                } catch {
+                    /* سبد مشترک اختیاری است */
+                }
             } catch (e) {
                 if (!silent) setError(e instanceof Error ? e.message : 'خطا در بارگذاری');
             } finally {
@@ -533,6 +555,48 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         });
     };
 
+    const persistSharedBasket = async (
+        vehicleCategory: string,
+        basket: SessionLoadBasket
+    ) => {
+        const res = await apiFetch(getApiUrl('bale/sessions/load-baskets'), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                vehicleCategory,
+                selectedIds: basket.selectedIds,
+                allowExtra: basket.allowExtra,
+                confirmed: basket.confirmed,
+                queueCount: basket.queueCount,
+                loadCount: basket.loadCount,
+                stage: basket.stage,
+            }),
+        });
+        if (!res.ok) throw new Error(await readApiError(res));
+    };
+
+    const fetchSharedBaskets = async (vehicleCategory?: string): Promise<SharedLoadBasket[]> => {
+        const qs = vehicleCategory
+            ? `?vehicleCategory=${encodeURIComponent(vehicleCategory)}`
+            : '';
+        const res = await apiFetch(getApiUrl(`bale/sessions/load-baskets${qs}`));
+        if (!res.ok) throw new Error(await readApiError(res));
+        const data = (await res.json()) as { baskets?: SharedLoadBasket[] };
+        return data.baskets || [];
+    };
+
+    const applySharedBaskets = (rows: SharedLoadBasket[], skipCategory?: string) => {
+        setSessionBaskets(prev => {
+            const next = { ...prev };
+            rows.forEach(row => {
+                if (!row?.vehicleCategory || row.vehicleCategory === skipCategory) return;
+                if (!row.selectedIds?.length) return;
+                next[row.vehicleCategory] = toSessionBasket(row);
+            });
+            return next;
+        });
+    };
+
     const patchCategorySettings = (vehicleCategory: string, patch: Partial<CategorySessionSettings>) => {
         setCategorySettings(prev => {
             const next = {
@@ -593,6 +657,12 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
         try {
             const preview = await fetchPreviewLoads(vehicleCategory);
             const previewCount = preview.queueCount || 0;
+            try {
+                const shared = await fetchSharedBaskets(vehicleCategory);
+                applySharedBaskets(shared);
+            } catch {
+                /* ignore */
+            }
             if (locked) {
                 const catSession = sessionForCategory(vehicleCategory);
                 const loads = parseJsonArray<BalePreviewLoad>(catSession?.eligibleAnnouncements);
@@ -1615,15 +1685,40 @@ const BaleDispatchSession: React.FC<Props> = ({ currentUser }) => {
                             setLoadPicker(null);
                         }}
                         onConfirm={(selectedIds, allowExtra) => {
-                            saveCategoryBasket(loadPicker.category, {
+                            const basket: SessionLoadBasket = {
                                 selectedIds,
                                 allowExtra,
                                 confirmed: true,
                                 queueCount: pickerQueueCount,
                                 loadCount: pickerLoads.length,
                                 stage: settingsFor(loadPicker.category).stage,
+                            };
+                            saveCategoryBasket(loadPicker.category, basket);
+                            void persistSharedBasket(loadPicker.category, basket).catch(e => {
+                                setPickerError(e instanceof Error ? e.message : 'سبد محلی ذخیره شد؛ همگام‌سازی سرور ناموفق بود');
                             });
                             setLoadPicker(null);
+                        }}
+                        onRefreshBasket={async () => {
+                            if (!loadPicker) return;
+                            const preview = await fetchPreviewLoads(loadPicker.category);
+                            const previewCount = preview.queueCount || 0;
+                            setPickerLoads(preview.announcements || []);
+                            setPickerQueueCount(previewCount);
+                            const shared = await fetchSharedBaskets(loadPicker.category);
+                            applySharedBaskets(shared);
+                            const row = shared[0];
+                            if (row?.selectedIds?.length) {
+                                saveCategoryBasket(loadPicker.category, {
+                                    ...toSessionBasket(row),
+                                    selectedIds: row.selectedIds,
+                                });
+                                return {
+                                    selectedIds: row.selectedIds,
+                                    allowExtra: Boolean(row.allowExtra),
+                                };
+                            }
+                            return undefined;
                         }}
                     />
                 )

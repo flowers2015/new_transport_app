@@ -19,19 +19,26 @@ export const holdingCompanies = [
 export const mihanCompanies = ['پخش سراسری میهن', 'شهرنوشیدنی', 'پاندا', 'کارخانه میهن'];
 
 // نوع وسیله نقلیه (دسته‌بندی اصلی)
-export const vehicleTypes = [
-  { value: 'خودرو سنگین', label: 'خودرو سنگین' },
-  { value: 'خودرو نیمه سنگین', label: 'خودرو نیمه سنگین' },
-  { value: 'سواری', label: 'سواری' },
-  { value: 'نیمه یدک (تریلر)', label: 'نیمه یدک (تریلر)' },
-  { value: 'نیمه یدک (کفی و چادری)', label: 'نیمه یدک (کفی و چادری)' },
-  { value: 'نیمه یدک (تانکر)', label: 'نیمه یدک (تانکر)' },
-  { value: 'وانت', label: 'وانت' },
-  { value: 'ادوات کشاورزی', label: 'ادوات کشاورزی' },
-  { value: 'ادوات راه سازی و پروژه ای', label: 'ادوات راه سازی و پروژه ای' },
-  { value: 'موتور سیکلت', label: 'موتور سیکلت' },
-  { value: 'لیفتراک', label: 'لیفتراک' }
+export const extraTrailerVehicleTypes = [
+  'نیمه یدک دو محور (تریلر)',
+  'نیمه یدک سه محور (تریلر)',
 ];
+
+export function isSemiTrailerSelection(category?: string, vehicleType?: string): boolean {
+  const c = String(category || '');
+  const t = String(vehicleType || '');
+  if (c.includes('نیمه یدک')) return true;
+  return extraTrailerVehicleTypes.includes(t);
+}
+
+/** کد نیمه یدک با پیشوند T تا از کد کشنده (مثلاً 180) متمایز باشد: T180 */
+export function formatSemiTrailerVehicleCode(raw: string): string {
+  const rest = String(raw || '')
+    .trim()
+    .replace(/^[Tt]+/, '')
+    .replace(/\s+/g, '');
+  return `T${rest}`;
+}
 
 // انواع سوخت
 export const fuelTypes = ['بنزینی', 'گازوییلی', 'برقی', 'هیبریدی', 'گازی', 'دوگانه‌سوز'];

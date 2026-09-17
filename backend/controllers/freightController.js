@@ -748,7 +748,7 @@ function buildDestinationInsertParams(
 
   if (includeOriginalCreator) {
     base.push(
-      originalCreatedByUserId || d.originalCreatedByUserId || d.original_created_by_user_id || null
+      d.originalCreatedByUserId || d.original_created_by_user_id || originalCreatedByUserId || null
     );
   }
   if (sortOrder !== null && sortOrder !== undefined) {
@@ -804,7 +804,7 @@ async function insertFreightDestinations(clientOrPool, announcementId, destinati
         safeId,
         originalCreatedByUserId,
         includeOriginalCreator,
-        hasSortOrder ? index : null
+        hasSortOrder ? (d.sort_order ?? d.sortOrder ?? index) : null
       )
     );
   }
@@ -864,19 +864,151 @@ async function collectReferencedDestinationIds(client, announcementId) {
   return referenced;
 }
 
+function destinationProductsJson(d) {
+  const products = d?.products;
+  if (Array.isArray(products)) return JSON.stringify(products);
+  if (typeof products === 'string' && products.trim()) {
+    try {
+      return JSON.stringify(JSON.parse(products));
+    } catch {
+      return '[]';
+    }
+  }
+  return '[]';
+}
+
+function normalizeLisCodeValue(d) {
+  const lisRaw = d?.lisCode != null ? d.lisCode : d?.lis_code;
+  if (lisRaw == null || String(lisRaw).trim() === '') return null;
+  return String(lisRaw).trim();
+}
+
+function cargoValueFromDest(d) {
+  const cargoRaw = d?.cargoValue ?? d?.cargo_value;
+  if (cargoRaw === undefined || cargoRaw === null || cargoRaw === '') return null;
+  const cargoValue = Number(cargoRaw);
+  return Number.isFinite(cargoValue) && cargoValue > 0 ? cargoValue : null;
+}
+
 /**
- * ویرایش ادمین: مقصدهای موجود را درجا آپدیت کن (DELETE+INSERT با FK تخصیص/مالی کل تراکنش را برمی‌گرداند).
+ * ویرایش: مقصدهای موجود را درجا آپدیت کن (DELETE+INSERT با FK تخصیص/مالی کل تراکنش را برمی‌گرداند).
+ * در مشارکتی پاستوریزه، مقصد دیگران حذف/بازنویسی نمی‌شود؛ فقط کد LIS روی آن‌ها قابل ثبت است.
  */
-async function upsertFreightDestinations(client, announcementId, destinations, originalCreatedByUserId = null) {
+async function upsertFreightDestinations(client, announcementId, destinations, originalCreatedByUserIdOrOptions = null) {
+  const options =
+    originalCreatedByUserIdOrOptions &&
+    typeof originalCreatedByUserIdOrOptions === 'object' &&
+    !Array.isArray(originalCreatedByUserIdOrOptions)
+      ? originalCreatedByUserIdOrOptions
+      : { announcementCreatorUserId: originalCreatedByUserIdOrOptions };
+
+  const editorUserId = options.editorUserId ? String(options.editorUserId) : '';
+  const announcementCreatorUserId = options.announcementCreatorUserId
+    ? String(options.announcementCreatorUserId)
+    : '';
+  const protectOthers = !!options.protectOthersDestinations;
+  const newDestOwnerUserId = editorUserId || announcementCreatorUserId || null;
+
+  const includeOriginalCreator = await hasDestinationOriginalCreatorColumn(client);
+  const hasSortOrder = await ensureDestinationSortOrderColumn();
+  const existingSelect = [
+    'id',
+    includeOriginalCreator ? 'original_created_by_user_id' : null,
+    hasSortOrder ? 'sort_order' : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
   const existing = await client.query(
-    `SELECT id FROM freight_destinations WHERE freight_announcement_id = $1`,
+    `SELECT ${existingSelect} FROM freight_destinations WHERE freight_announcement_id = $1`,
     [announcementId]
   );
-  const existingIds = new Set(existing.rows.map((r) => String(r.id)));
+  const existingById = new Map(existing.rows.map((r) => [String(r.id), r]));
+  const existingIds = new Set(existingById.keys());
   const referenced = await collectReferencedDestinationIds(client, announcementId);
-  const hasSortOrder = await ensureDestinationSortOrderColumn();
+  const hasLoading = await ensureDestinationLoadingDateColumn();
+  const hasPlatform = await ensureDestinationPlatformArrivalColumn();
   const keepIds = new Set();
   const toInsert = [];
+
+  const ownerOfExisting = (row) =>
+    String(row?.original_created_by_user_id || announcementCreatorUserId || '');
+  const isOthersDest = (row) => {
+    if (!protectOthers || !editorUserId || !row) return false;
+    const owner = ownerOfExisting(row);
+    return !!owner && owner !== editorUserId;
+  };
+
+  if (protectOthers) {
+    for (const [destId, row] of existingById.entries()) {
+      if (isOthersDest(row)) keepIds.add(destId);
+    }
+  }
+
+  let maxSort = -1;
+  for (const row of existing.rows) {
+    const n = Number(row.sort_order);
+    if (Number.isFinite(n) && n > maxSort) maxSort = n;
+  }
+  let nextAppendSort = maxSort + 1;
+
+  const updateOwnDestination = async (idStr, d, sortOrder) => {
+    const city = d.city != null ? String(d.city).trim() : null;
+    const sets = [
+      'city = COALESCE($1, city)',
+      'representative_name = $2',
+      'tonnage = COALESCE($3, tonnage)',
+      'freight_cost = $4',
+      'cargo_value = COALESCE($5, cargo_value)',
+      'unload_time = $6',
+      'delivery_date = $7',
+      'representative_type = COALESCE($8, representative_type)',
+      'lis_code = $9',
+      'brand_type = $10',
+      'brand = $11',
+      'brand2 = $12',
+      'products = $13',
+    ];
+    const values = [
+      city || null,
+      d.representativeName || d.representative_name || null,
+      normalizeTonnageKg(d.tonnage),
+      d.freightCost ?? d.freight_cost ?? null,
+      cargoValueFromDest(d),
+      d.unloadTime || d.unload_time || null,
+      d.deliveryDate || d.delivery_date || null,
+      d.representativeType || d.representative_type || 'agent',
+      normalizeLisCodeValue(d),
+      d.brandType || d.brand_type || null,
+      d.brand || null,
+      d.brand2 || null,
+      destinationProductsJson(d),
+    ];
+    if (hasSortOrder) {
+      sets.push(`sort_order = $${values.length + 1}`);
+      values.push(sortOrder);
+    }
+    if (hasLoading) {
+      const loading = String(d.loadingDate || d.loading_date || '').trim() || null;
+      if (loading) {
+        sets.push(`loading_date = COALESCE($${values.length + 1}, loading_date)`);
+        values.push(loading);
+      }
+    }
+    if (hasPlatform) {
+      const platform = String(d.platformArrivalTime || d.platform_arrival_time || '').trim() || null;
+      if (platform) {
+        sets.push(`platform_arrival_time = COALESCE($${values.length + 1}, platform_arrival_time)`);
+        values.push(platform);
+      }
+    }
+    values.push(idStr, announcementId);
+    await client.query(
+      `UPDATE freight_destinations
+       SET ${sets.join(', ')}
+       WHERE id = $${values.length - 1} AND freight_announcement_id = $${values.length}`,
+      values
+    );
+  };
 
   for (let index = 0; index < destinations.length; index++) {
     const d = destinations[index];
@@ -884,62 +1016,41 @@ async function upsertFreightDestinations(client, announcementId, destinations, o
     const idStr = rawId != null ? String(rawId).trim() : '';
     if (idStr && existingIds.has(idStr)) {
       keepIds.add(idStr);
-      const city = d.city != null ? String(d.city).trim() : null;
-      const tonnage = normalizeTonnageKg(d.tonnage);
-      const freightCost = d.freightCost ?? d.freight_cost ?? null;
-      const cargoRaw = d.cargoValue ?? d.cargo_value;
-      const cargoValue =
-        cargoRaw === undefined || cargoRaw === null || cargoRaw === ''
-          ? null
-          : Number(cargoRaw);
-      if (hasSortOrder) {
+      const row = existingById.get(idStr);
+      if (isOthersDest(row)) {
         await client.query(
           `UPDATE freight_destinations
-           SET city = COALESCE($1, city),
-               tonnage = COALESCE($2, tonnage),
-               freight_cost = $3,
-               cargo_value = COALESCE($4, cargo_value),
-               sort_order = $5
-           WHERE id = $6 AND freight_announcement_id = $7`,
-          [
-            city || null,
-            tonnage,
-            freightCost,
-            Number.isFinite(cargoValue) && cargoValue > 0 ? cargoValue : null,
-            index,
-            idStr,
-            announcementId,
-          ]
+           SET lis_code = $1
+           WHERE id = $2 AND freight_announcement_id = $3`,
+          [normalizeLisCodeValue(d), idStr, announcementId]
         );
       } else {
-        await client.query(
-          `UPDATE freight_destinations
-           SET city = COALESCE($1, city),
-               tonnage = COALESCE($2, tonnage),
-               freight_cost = $3,
-               cargo_value = COALESCE($4, cargo_value)
-           WHERE id = $5 AND freight_announcement_id = $6`,
-          [
-            city || null,
-            tonnage,
-            freightCost,
-            Number.isFinite(cargoValue) && cargoValue > 0 ? cargoValue : null,
-            idStr,
-            announcementId,
-          ]
-        );
+        await updateOwnDestination(idStr, d, index);
       }
     } else {
+      const safeId =
+        idStr && /^[0-9a-f-]{36}$/i.test(idStr) ? idStr : crypto.randomUUID();
+      const sortOrder = protectOthers ? nextAppendSort++ : index;
       toInsert.push({
         ...d,
-        id: crypto.randomUUID(),
+        id: safeId,
+        sort_order: sortOrder,
+        originalCreatedByUserId:
+          d.originalCreatedByUserId ||
+          d.original_created_by_user_id ||
+          newDestOwnerUserId,
       });
     }
   }
 
   const toDelete = [...existingIds].filter((destId) => !keepIds.has(destId));
-  const deletable = toDelete.filter((destId) => !referenced.has(destId));
-  const blocked = toDelete.filter((destId) => referenced.has(destId));
+  const deletable = toDelete.filter((destId) => {
+    if (referenced.has(destId)) return false;
+    const row = existingById.get(destId);
+    if (isOthersDest(row)) return false;
+    return true;
+  });
+  const blocked = toDelete.filter((destId) => !deletable.includes(destId));
   if (deletable.length > 0) {
     await client.query(
       `DELETE FROM freight_destinations
@@ -948,16 +1059,17 @@ async function upsertFreightDestinations(client, announcementId, destinations, o
     );
   }
   if (toInsert.length > 0) {
-    await insertFreightDestinations(client, announcementId, toInsert, originalCreatedByUserId);
+    await insertFreightDestinations(client, announcementId, toInsert, newDestOwnerUserId);
   } else {
     try {
+      await applyDestinationBlockFieldsFromPayload(client, destinations);
       await materializeDestinationBlockFieldsFromAnnouncement(client, announcementId);
     } catch (e) {
       console.warn('⚠️ [upsertFreightDestinations] materialize:', e.message);
     }
   }
   if (blocked.length > 0) {
-    console.warn('⚠️ [upsertFreightDestinations] kept referenced destinations:', {
+    console.warn('⚠️ [upsertFreightDestinations] kept referenced/foreign destinations:', {
       announcementId,
       blocked,
     });
@@ -1910,14 +2022,13 @@ async function updateFreightAnnouncement(req, res) {
         if (isKeeper) {
           const dockRaw = req.body?.dockNumber ?? req.body?.dock_number;
           const dockDigits = String(dockRaw == null ? '' : dockRaw).replace(/\D/g, '');
-          if (!dockDigits) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'شماره سکو الزامی است.' });
-          }
-          const dockNumber = Number(dockDigits);
-          if (!Number.isInteger(dockNumber) || dockNumber < 1) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'شماره سکو باید عدد باشد.' });
+          let dockNumber = null;
+          if (dockDigits) {
+            dockNumber = Number(dockDigits);
+            if (!Number.isInteger(dockNumber) || dockNumber < 1) {
+              await client.query('ROLLBACK');
+              return res.status(400).json({ message: 'شماره سکو باید عدد باشد.' });
+            }
           }
           const receiverId = String(
             req.body?.remittanceReceiverId || req.body?.remittance_receiver_id || ''
@@ -2356,7 +2467,15 @@ async function updateFreightAnnouncement(req, res) {
       // 3. آپدیت مقاصد — درجا (نه DELETE همه) تا FK تخصیص/مالی ویرایش را برنگرداند
       let newDestinations = oldDestinations;
       if (Array.isArray(destinations)) {
-        await upsertFreightDestinations(client, id, destinations, oldRecord.created_by_user_id);
+        const isPrivilegedEditor =
+          role === 'admin' || role === 'ادمین' || isPlanningManagerRole(role);
+        const protectOthersDestinations =
+          isDairyAnnouncement && isPlannerOrSales && !isPrivilegedEditor;
+        await upsertFreightDestinations(client, id, destinations, {
+          editorUserId: userId,
+          announcementCreatorUserId: oldRecord.created_by_user_id,
+          protectOthersDestinations,
+        });
 
         if (totalFreightCost === undefined) {
           const newTotalFreight = calculateTotalFreightCost(destinations);
@@ -5630,7 +5749,7 @@ function sqlJalaliLoadingDate(alias) {
 async function getFreightHistory(req, res) {
   try {
     await ensureFreightHelperDriverColumns(pool);
-    const { date, loadingDate, destination, billOfLading, driverName, creatorName, lineType, page = 1, limit = 50 } = req.query;
+    const { date, loadingDate, destination, billOfLading, driverName, creatorName, vehicleCode, lineType, page = 1, limit = 50 } = req.query;
     
     // Pagination parameters
     const pageNum = parseInt(page, 10) || 1;
@@ -5878,6 +5997,16 @@ async function getFreightHistory(req, res) {
         OR u_creator.username ILIKE $${paramIndex}
       )`;
       params.push(creatorPattern);
+      paramIndex += 1;
+    }
+
+    const vehicleCodeRaw = String(vehicleCode || req.query.vehicle_code || '').trim();
+    if (vehicleCodeRaw) {
+      query += ` AND (
+        COALESCE(v.vehicle_code, '') ILIKE $${paramIndex}
+        OR COALESCE(v.serial_number, '') ILIKE $${paramIndex}
+      )`;
+      params.push(`%${vehicleCodeRaw}%`);
       paramIndex += 1;
     }
     

@@ -8,6 +8,7 @@ import { Vehicle, Branch, PlateNumber, VehicleStatus, VehicleCategory } from '..
 import { getApiUrl } from '../utils/apiConfig';
 import VehicleSpecsDialog from './VehicleSpecsDialog';
 import IranianPlateInput, { DEFAULT_PLATE_LETTER } from './IranianPlateInput';
+import { extraTrailerVehicleTypes, formatSemiTrailerVehicleCode, isSemiTrailerSelection } from '../utils/vehicleConstants';
 
 interface VehicleFormDialogProps {
   isOpen: boolean;
@@ -167,7 +168,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
       'خودرو نیمه سنگین': VehicleCategory.Medium,
       'سواری': VehicleCategory.Car,
       'وانت': VehicleCategory.Pickup,
-      'نیمه یدک (تریلر)': VehicleCategory.SemiTrailer,
+      'نیمه یدک (تریلر)': VehicleCategory.Trailer,
     };
     
     const mappedCategory = categoryMap[spec.vehicleCategory] || spec.vehicleCategory;
@@ -202,6 +203,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
           [VehicleCategory.Car]: 'سواری',
           [VehicleCategory.Pickup]: 'وانت',
           [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+          [VehicleCategory.Flatbed]: 'نیمه یدک (کفی و چادری)',
+          [VehicleCategory.Tanker]: 'نیمه یدک (تانکر)',
         };
         const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
         const res = await fetch(getApiUrl(`vehicle-specs/vehicle-types?category=${encodeURIComponent(categoryName)}`), {
@@ -233,6 +236,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
           [VehicleCategory.Car]: 'سواری',
           [VehicleCategory.Pickup]: 'وانت',
           [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+          [VehicleCategory.Flatbed]: 'نیمه یدک (کفی و چادری)',
+          [VehicleCategory.Tanker]: 'نیمه یدک (تانکر)',
         };
         const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
         let url = `vehicle-specs/brands?category=${encodeURIComponent(categoryName)}`;
@@ -268,6 +273,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
           [VehicleCategory.Car]: 'سواری',
           [VehicleCategory.Pickup]: 'وانت',
           [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+          [VehicleCategory.Flatbed]: 'نیمه یدک (کفی و چادری)',
+          [VehicleCategory.Tanker]: 'نیمه یدک (تانکر)',
         };
         const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
         let url = `vehicle-specs/models?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}`;
@@ -303,6 +310,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
           [VehicleCategory.Car]: 'سواری',
           [VehicleCategory.Pickup]: 'وانت',
           [VehicleCategory.Trailer]: 'نیمه یدک (تریلر)',
+          [VehicleCategory.Flatbed]: 'نیمه یدک (کفی و چادری)',
+          [VehicleCategory.Tanker]: 'نیمه یدک (تانکر)',
         };
         const categoryName = categoryMap[formState.vehicleCategory] || formState.vehicleCategory;
         let url = `vehicle-specs/tips?category=${encodeURIComponent(categoryName)}&brand=${encodeURIComponent(formState.brand)}&model=${encodeURIComponent(formState.model)}`;
@@ -355,6 +364,15 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
       model: '', // Reset model
       vehicleTip: '', // Reset tip
     }));
+    setVehicleCode(prevCode => {
+      if (isSemiTrailerSelection(value, '')) {
+        return formatSemiTrailerVehicleCode(prevCode);
+      }
+      if (isSemiTrailerSelection(formState.vehicleCategory, formState.vehicleType) && value === VehicleCategory.Heavy) {
+        return String(prevCode || '').replace(/^[Tt]+/, '');
+      }
+      return prevCode;
+    });
   };
 
   const handleVehicleTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,6 +382,12 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
       vehicleType: value,
       vehicleTip: '', // Only reset tip
     }));
+    setVehicleCode(prevCode => {
+      if (isSemiTrailerSelection(formState.vehicleCategory, value)) {
+        return formatSemiTrailerVehicleCode(prevCode);
+      }
+      return prevCode;
+    });
   };
 
   const handleBrandChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -404,6 +428,12 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
     return apiTips.map(t => t.tip).filter(Boolean);
   }, [apiTips]);
 
+  const isTrailerCode = isSemiTrailerSelection(formState.vehicleCategory, formState.vehicleType);
+  const vehicleTypeOptions = useMemo(
+    () => [...new Set([...apiVehicleTypes, ...extraTrailerVehicleTypes])],
+    [apiVehicleTypes]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -438,7 +468,12 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
         cylinderCount: cylinderCount ? parseInt(String(cylinderCount)) : undefined,
         plateNumber: isPlate ? plate : undefined,
         serialNumber: !isPlate ? serialNumber : undefined,
-        vehicleCode: vehicleCode || undefined,
+        vehicleCode: isSemiTrailerSelection(vehicleCategory, formState.vehicleType)
+          ? (() => {
+              const coded = formatSemiTrailerVehicleCode(vehicleCode);
+              return coded === 'T' ? undefined : coded;
+            })()
+          : vehicleCode || undefined,
         ownerName: holdingCompany === 'mihan' ? (formState.mihanCompany || '') : (formState.ownerName || '')
       };
       
@@ -517,7 +552,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
                     <label className="block text-sm font-medium text-slate-700">نوع خودرو</label>
                     <input list="vehicle-type-list" name="vehicleType" value={formState.vehicleType} onChange={handleVehicleTypeChange} className="mt-1 input-style" placeholder="انتخاب یا تایپ کنید..." />
                     <datalist id="vehicle-type-list">
-                      {apiVehicleTypes.map(vt => <option key={vt} value={vt} />)}
+                      {vehicleTypeOptions.map(vt => <option key={vt} value={vt} />)}
                     </datalist>
                   </div>
                   <div>
@@ -557,17 +592,38 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = ({
                   )}
                 </div>
                 
-                {(formState.vehicleCategory === VehicleCategory.Heavy || formState.vehicleCategory === VehicleCategory.SemiTrailer) && (
+                {(formState.vehicleCategory === VehicleCategory.Heavy || isTrailerCode) && (
                   <div className="mt-4">
-                    <label className="block text-sm font-medium text-slate-700">کد خودرو (سنگین/نیمه یدک)</label>
-                    <input 
-                      name="vehicleCode" 
-                      value={vehicleCode} 
-                      onChange={e => setVehicleCode(e.target.value)} 
-                      placeholder="مثال: TRK-001, SEMI-002" 
-                      className="input-style w-full mt-1" 
-                    />
-                    <div className="text-xs text-slate-500 mt-1">کد منحصر به فرد برای جستجو و تخصیص خودرو</div>
+                    <label className="block text-sm font-medium text-slate-700">
+                      {isTrailerCode ? 'کد نیمه یدک' : 'کد خودرو (سنگین)'}
+                    </label>
+                    {isTrailerCode ? (
+                      <div className="flex mt-1" dir="ltr">
+                        <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-slate-300 bg-slate-100 font-mono font-bold text-slate-700">
+                          T
+                        </span>
+                        <input
+                          name="vehicleCode"
+                          value={String(vehicleCode || '').replace(/^[Tt]+/, '')}
+                          onChange={e => setVehicleCode(formatSemiTrailerVehicleCode(e.target.value))}
+                          placeholder="180"
+                          className="input-style w-full rounded-l-none"
+                        />
+                      </div>
+                    ) : (
+                      <input
+                        name="vehicleCode"
+                        value={vehicleCode}
+                        onChange={e => setVehicleCode(e.target.value)}
+                        placeholder="مثال: 180"
+                        className="input-style w-full mt-1"
+                      />
+                    )}
+                    <div className="text-xs text-slate-500 mt-1">
+                      {isTrailerCode
+                        ? 'پیشوند T ثابت است تا از کد کشنده متمایز شود؛ مثلاً کشنده 180 و تریلر T180.'
+                        : 'کد منحصر به فرد برای جستجو و تخصیص خودرو'}
+                    </div>
                   </div>
                 )}
               </fieldset>

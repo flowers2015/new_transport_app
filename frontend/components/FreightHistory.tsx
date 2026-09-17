@@ -187,6 +187,8 @@ interface FreightHistoryProps {
     setFilterDriverName: (driverName: string) => void;
     filterCreatorName: string;
     setFilterCreatorName: (creatorName: string) => void;
+    filterVehicleCode?: string;
+    setFilterVehicleCode?: (vehicleCode: string) => void;
     onSearch: () => void;
     onClearFilters: () => void;
     onOpenHistory?: (announcementId: string, announcementCode: string) => void;
@@ -246,7 +248,7 @@ const statusStyles: { [key in FreightAnnouncementStatus]: string } = {
 
 
 const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
-    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterLoadingDate = '', setFilterLoadingDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange, onFetchForExcelExport, variant = 'archive', lineHitCounts, onExportPdf, pdfExporting } = props;
+    const { announcements, vehicles, drivers, personalDrivers, personalVehicles, currentUser, activeLine, setActiveLine, filterDate, setFilterDate, filterLoadingDate = '', setFilterLoadingDate, filterDestination, setFilterDestination, filterBillOfLading, setFilterBillOfLading, filterDriverName, setFilterDriverName, filterCreatorName, setFilterCreatorName, filterVehicleCode = '', setFilterVehicleCode, onSearch, onClearFilters, onOpenHistory, currentPage = 1, itemsPerPage = 50, totalCount = 0, totalPages = 1, onPageChange, onItemsPerPageChange, onFetchForExcelExport, variant = 'archive', lineHitCounts, onExportPdf, pdfExporting } = props;
     const isFinanceSearch = variant === 'financeSearch';
     
     // Debug logging for re-renders
@@ -1586,6 +1588,24 @@ const FreightHistory: React.FC<FreightHistoryProps> = (props) => {
                                 placeholder="جستجوی راننده..." 
                                 value={filterDriverName}
                                 onChange={e => setFilterDriverName(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (onSearch) onSearch();
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs rounded border w-28"
+                                autoComplete="off"
+          />
+        </div>
+                        {/* فیلتر کد خودرو */}
+                        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+                            <label className="text-xs whitespace-nowrap">کد خودرو:</label>
+          <input
+                                type="text"
+                                placeholder="مثلاً 180 یا T180"
+                                value={filterVehicleCode}
+                                onChange={e => setFilterVehicleCode?.(e.target.value)}
                                 onKeyDown={e => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();

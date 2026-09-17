@@ -22,7 +22,7 @@ const {
   getAmbientNotifySettings,
   setAmbientNotifySettings,
 } = require('../services/bale/baleAmbientNotifySettings');
-const { sendTestAmbientMessage } = require('../services/bale/baleAmbientAssignmentNotify');
+const { listCategoryLoadBaskets, getCategoryLoadBasket, upsertCategoryLoadBasket } = require('../services/bale/baleCategoryLoadBaskets');
 const {
   listRegionBans,
   listRegionBanTemplates,
@@ -603,6 +603,45 @@ async function previewSessionLoads(req, res) {
   }
 }
 
+async function listLoadBaskets(req, res) {
+  try {
+    const vehicleCategory = String(req.query.vehicleCategory || req.query.category || '').trim();
+    if (vehicleCategory) {
+      const basket = await getCategoryLoadBasket(vehicleCategory);
+      return res.json({ baskets: basket ? [basket] : [] });
+    }
+    const baskets = await listCategoryLoadBaskets();
+    res.json({ baskets });
+  } catch (error) {
+    console.error('❌ [bale] listLoadBaskets:', error);
+    res.status(500).json({ message: error.message || 'خطا در دریافت سبد بار' });
+  }
+}
+
+async function saveLoadBasket(req, res) {
+  try {
+    const body = req.body || {};
+    const vehicleCategory = String(body.vehicleCategory || body.category || '').trim();
+    if (!vehicleCategory) {
+      return res.status(400).json({ message: 'دسته خودرو الزامی است.' });
+    }
+    const basket = await upsertCategoryLoadBasket({
+      vehicleCategory,
+      selectedIds: body.selectedIds || body.selected_ids || [],
+      allowExtra: body.allowExtra ?? body.allow_extra,
+      confirmed: body.confirmed !== false,
+      queueCount: body.queueCount ?? body.queue_count,
+      loadCount: body.loadCount ?? body.load_count,
+      stage: body.stage || null,
+      updatedBy: req.user?.userId || req.user?.id || null,
+    });
+    res.json({ ok: true, basket });
+  } catch (error) {
+    console.error('❌ [bale] saveLoadBasket:', error);
+    res.status(400).json({ message: error.message || 'خطا در ذخیره سبد بار' });
+  }
+}
+
 async function startSession(req, res) {
   try {
     const {
@@ -1109,6 +1148,8 @@ module.exports = {
   deleteRegionBanHandler,
   setWebhookUrl,
   previewSessionLoads,
+  listLoadBaskets,
+  saveLoadBasket,
   startSession,
   stopSession,
   skipTurn,
