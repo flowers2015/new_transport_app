@@ -1867,10 +1867,13 @@ async function getDriverPreferences(req, res) {
           ORDER BY ddo.taken_at DESC
           LIMIT 1
         ) dqe ON TRUE
-        WHERE da.driver_id = $1
+          WHERE da.driver_id = $1
           AND (
-            da.created_at BETWEEN $2 AND $3
-            OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $2 AND $3
+            COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $2 AND $3
+            OR (
+              COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NULL
+              AND da.created_at BETWEEN $2 AND $3
+            )
           )
           AND (
             da.is_cancelled = TRUE
@@ -2034,14 +2037,8 @@ async function getDriverPreferences(req, res) {
             ORDER BY da_prev.created_at DESC
             LIMIT 1
           ) prev ON TRUE
-          WHERE (
-              da.created_at BETWEEN $1 AND $2
-              OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $1 AND $2
-            )
-            AND (
-              COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-              OR fa.status IN ('Finalized', 'InTransit')
-            )
+          WHERE COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $1 AND $2
+            AND COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
             AND fa.status IN ('Assigned', 'InTransit', 'Finalized')
             AND NULLIF(TRIM(d.name), '') IS NOT NULL
           ORDER BY da.created_at ASC, COALESCE(fd.created_at, fd_fallback.created_at) ASC
@@ -2259,10 +2256,13 @@ async function getDriverBehaviorAnalysis(req, res) {
         ) fd_fallback ON TRUE
         LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
         LEFT JOIN vehicles v ON v.id = da.vehicle_id
-        WHERE da.driver_id = $1
+          WHERE da.driver_id = $1
           AND (
-            da.created_at BETWEEN $2 AND $3
-            OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $2 AND $3
+            COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) BETWEEN $2 AND $3
+            OR (
+              COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NULL
+              AND da.created_at BETWEEN $2 AND $3
+            )
           )
           AND (
             da.is_cancelled = TRUE

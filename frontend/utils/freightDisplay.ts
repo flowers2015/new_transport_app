@@ -902,6 +902,10 @@ export function pickAssignmentFieldsFromApi(a: Record<string, unknown>) {
             a.awaiting_bill_of_lading_at === null || a.awaitingBillOfLadingAt === null
                 ? undefined
                 : ((a.awaiting_bill_of_lading_at ?? a.awaitingBillOfLadingAt) as string | Date | undefined),
+        assignmentFinalizedAt:
+            a.assignment_finalized_at === null || a.assignmentFinalizedAt === null
+                ? undefined
+                : ((a.assignment_finalized_at ?? a.assignmentFinalizedAt) as string | Date | undefined),
         assignedAt:
             a.assigned_at === null || a.assignedAt === null
                 ? undefined
@@ -1335,6 +1339,15 @@ export function lineTypeToBackend(line: FreightLineType | string): string {
     if (line === FreightLineType.Dairy || line === 'پاستوریزه' || line === 'Dairy') return 'Dairy';
     if (line === FreightLineType.Ambient || line === 'لبنیات-فروتلند' || line === 'Ambient') return 'Ambient';
     return String(line);
+}
+
+export function formatFreightLineTypeLabel(line: unknown): string {
+    const v = String(line || '').trim();
+    if (!v) return '-';
+    if (v === FreightLineType.IceCream || v === 'IceCream' || v === 'بستنی') return 'بستنی';
+    if (v === FreightLineType.Dairy || v === 'Dairy' || v === 'پاستوریزه') return 'پاستوریزه';
+    if (v === FreightLineType.Ambient || v === 'Ambient' || v === 'لبنیات-فروتلند') return 'لبنیات-فروتلند';
+    return v;
 }
 
 export function lineTypeFromAnnouncement(ann: FreightAnnouncement): string {

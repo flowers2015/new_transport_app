@@ -6,7 +6,9 @@ import { formatNumberWhileTyping, parseNumberFromFormatted, formatNumberWithSepa
 import { formatCargoValueShort, formatRialsPreview } from '../utils/cargoValueUtils';
 import CargoValueInput from './CargoValueInput';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
-import { pickAssignmentFieldsFromApi } from '../utils/freightDisplay';
+import { pickAssignmentFieldsFromApi, lineTypeToBackend, isPersonalAssignmentType } from '../utils/freightDisplay';
+import CityAutocomplete from './CityAutocomplete';
+import JalaliDateInput from './JalaliDateInput';
 import { apiCache } from '../utils/apiCache';
 
 interface FreightManagementProps {
@@ -80,7 +82,9 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           ann.destinations?.some(d => d.city?.toLowerCase().includes(searchTerm.toLowerCase()));
         
         const matchesStatus = !statusFilter || ann.status === statusFilter;
-        const matchesLineType = !lineTypeFilter || ann.lineType === lineTypeFilter;
+        const matchesLineType =
+          !lineTypeFilter ||
+          lineTypeToBackend(ann.lineType) === lineTypeToBackend(lineTypeFilter);
         
         return matchesSearch && matchesStatus && matchesLineType;
       });
@@ -175,6 +179,103 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     tariffFreightCost?: string;
     destinations?: { [index: number]: { tonnage?: string; freightCost?: string } };
   }>({});
+  const [driverQuery, setDriverQuery] = useState('');
+  const [driverResults, setDriverResults] = useState<
+    Array<{ id: string; name?: string; employeeId?: string; mobile?: string }>
+  >([]);
+  const [driverSearching, setDriverSearching] = useState(false);
+  const driverSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [helperQuery, setHelperQuery] = useState('');
+  const [helperResults, setHelperResults] = useState<
+    Array<{ id: string; name?: string; employeeId?: string; mobile?: string }>
+  >([]);
+  const [helperSearching, setHelperSearching] = useState(false);
+  const helperSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isPersonalEdit = isPersonalAssignmentType(formData.assignmentType);
+
+  const runCompanyDriverSearch = (
+    query: string,
+    setQuery: (v: string) => void,
+    setResults: (rows: Array<{ id: string; name?: string; employeeId?: string; mobile?: string }>) => void,
+    setSearching: (v: boolean) => void,
+    timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
+  ) => {
+    const q = query.trim();
+    setQuery(query);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (q.length < 2) {
+      setResults([]);
+      return;
+    }
+    timerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(getApiUrl(`dispatch/search/drivers?q=${encodeURIComponent(q)}`), {
+          headers: getHeaders(),
+        });
+        const data = res.ok ? await res.json() : [];
+        setResults(Array.isArray(data) ? data : []);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 280);
+  };
+
+  const searchDrivers = (query: string) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      assignedDriverName: query,
+      assignedDriverId: '',
+      assignedDriverEmployeeId: '',
+    }));
+    runCompanyDriverSearch(query, setDriverQuery, setDriverResults, setDriverSearching, driverSearchTimer);
+  };
+
+  const searchHelpers = (query: string) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      helperDriverName: query,
+      helperDriverId: '',
+      helperDriverEmployeeId: '',
+    }));
+    runCompanyDriverSearch(query, setHelperQuery, setHelperResults, setHelperSearching, helperSearchTimer);
+  };
+
+  const pickDriver = (driver: { id: string; name?: string; employeeId?: string }) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      assignedDriverId: driver.id,
+      assignedDriverName: driver.name || '',
+      assignedDriverEmployeeId: driver.employeeId || '',
+      helperDriverId: prev.helperDriverId === driver.id ? '' : prev.helperDriverId,
+      helperDriverName: prev.helperDriverId === driver.id ? '' : prev.helperDriverName,
+      helperDriverEmployeeId: prev.helperDriverId === driver.id ? '' : prev.helperDriverEmployeeId,
+    }));
+    setDriverQuery([driver.name, driver.employeeId].filter(Boolean).join(' — '));
+    setDriverResults([]);
+    if (formData.helperDriverId === driver.id) {
+      setHelperQuery('');
+      setHelperResults([]);
+    }
+  };
+
+  const pickHelper = (driver: { id: string; name?: string; employeeId?: string }) => {
+    if (formData.assignedDriverId && driver.id === formData.assignedDriverId) {
+      alert('راننده کمکی نمی‌تواند همان راننده اصلی باشد.');
+      return;
+    }
+    setFormData((prev: any) => ({
+      ...prev,
+      helperDriverId: driver.id,
+      helperDriverName: driver.name || '',
+      helperDriverEmployeeId: driver.employeeId || '',
+    }));
+    setHelperQuery([driver.name, driver.employeeId].filter(Boolean).join(' — '));
+    setHelperResults([]);
+  };
 
   const getHeaders = () => ({
     'Content-Type': 'application/json',
@@ -252,6 +353,9 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           assignedVehicleBrand: a.assigned_vehicle_brand || a.assignedVehicleBrand,
           vehiclePlate: assignment.assignedVehiclePlate || a.vehicle_plate || '',
           assignmentType: assignment.assignmentType,
+          assignmentFinalizedAt: assignment.assignmentFinalizedAt,
+          helperDriverName: assignment.helperDriverName,
+          helperDriverId: assignment.helperDriverId,
           originCity: a.origin_city,
           brand: a.brand,
           representativeType: a.representative_type,
@@ -556,7 +660,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
         ann.destinations?.some(d => d.city?.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesStatus = !statusFilter || ann.status === statusFilter;
-      const matchesLineType = !lineTypeFilter || ann.lineType === lineTypeFilter;
+      const matchesLineType =
+        !lineTypeFilter || lineTypeToBackend(ann.lineType) === lineTypeToBackend(lineTypeFilter);
       
       return matchesSearch && matchesStatus && matchesLineType;
     });
@@ -664,7 +769,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
 
     setFormData({
       loadingDate: loadingDateStr,
-      lineType: announcement.lineType || announcement.line_type,
+      lineType: lineTypeToBackend(announcement.lineType || announcement.line_type),
       cargoValue: Number(announcement.cargoValue ?? announcement.cargo_value) || 0,
       vehicleType: announcement.vehicleType || announcement.vehicle_type || '',
       originCity: announcement.originCity || announcement.origin_city || '',
@@ -680,6 +785,9 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       assignedDriverId: announcement.assignedDriverId || announcement.assigned_driver_id || '',
       assignedDriverName: announcement.assignedDriverName || announcement.assigned_driver_name || '',
       assignedDriverEmployeeId: announcement.assignedDriverEmployeeId || announcement.assigned_driver_employee_id || '',
+      helperDriverId: announcement.helperDriverId || announcement.helper_driver_id || '',
+      helperDriverName: announcement.helperDriverName || announcement.helper_driver_name || '',
+      helperDriverEmployeeId: announcement.helperDriverEmployeeId || announcement.helper_driver_employee_id || '',
       assignedVehicleId: announcement.assignedVehicleId || announcement.assigned_vehicle_id || '',
       assignedVehicleModel: announcement.assignedVehicleModel || announcement.assigned_vehicle_model || '',
       assignedVehicleBrand: announcement.assignedVehicleBrand || announcement.assigned_vehicle_brand || '',
@@ -691,7 +799,25 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           : 0,
       billOfLadingNumber: announcement.billOfLadingNumber || announcement.bill_of_lading_number || '',
       assignmentType: announcement.assignmentType || announcement.assignment_type || '',
+      assignmentFinalizedAt:
+        announcement.assignmentFinalizedAt || announcement.assignment_finalized_at || '',
     });
+    const personal = isPersonalAssignmentType(
+      announcement.assignmentType || announcement.assignment_type
+    );
+    const driverName = announcement.assignedDriverName || announcement.assigned_driver_name || '';
+    const driverEmp = announcement.assignedDriverEmployeeId || announcement.assigned_driver_employee_id || '';
+    setDriverQuery(personal ? driverName : [driverName, driverEmp].filter(Boolean).join(' — '));
+    setHelperQuery(
+      [
+        announcement.helperDriverName || announcement.helper_driver_name,
+        announcement.helperDriverEmployeeId || announcement.helper_driver_employee_id,
+      ]
+        .filter(Boolean)
+        .join(' — ')
+    );
+    setDriverResults([]);
+    setHelperResults([]);
     setRawNumericValues({
       cargoValue: String(Number(announcement.cargoValue ?? announcement.cargo_value) || ''),
       totalFreightCost: String(Number(announcement.totalFreightCost ?? announcement.total_freight_cost) || ''),
@@ -788,10 +914,20 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       if (!selectedAnnouncement) return;
 
       // اطمینان از اینکه اعداد بدون جداکننده ارسال شوند
+      const personal = isPersonalAssignmentType(formData.assignmentType);
       const updateData = {
         ...formData,
-        assignedDriverId: formData.assignedDriverId || undefined,
+        lineType: lineTypeToBackend(formData.lineType),
+        assignedDriverId: personal ? null : formData.assignedDriverId || null,
+        assignedDriverEmployeeId: personal ? null : formData.assignedDriverEmployeeId || null,
+        assignedDriverName: personal
+          ? String(formData.assignedDriverName || driverQuery || '').trim() || null
+          : formData.assignedDriverName || null,
         assignedVehicleId: formData.assignedVehicleId || undefined,
+        helperDriverId: personal ? null : formData.helperDriverId || null,
+        helperDriverName: personal ? null : formData.helperDriverName || null,
+        helperDriverEmployeeId: personal ? null : formData.helperDriverEmployeeId || null,
+        assignmentFinalizedAt: formData.assignmentFinalizedAt || null,
         cargoValue: typeof formData.cargoValue === 'number' ? formData.cargoValue : parseNumberFromFormatted(String(formData.cargoValue)),
         totalFreightCost: typeof formData.totalFreightCost === 'number' ? formData.totalFreightCost : parseNumberFromFormatted(String(formData.totalFreightCost)),
         tariffFreightCost: (() => {
@@ -883,6 +1019,16 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     savedRaw.assigned_driver_name ??
                     savedRaw.assignedDriverName ??
                     ann.assignedDriverName,
+                  helperDriverName:
+                    savedRaw.helper_driver_name ?? savedRaw.helperDriverName ?? ann.helperDriverName,
+                  helperDriverId:
+                    savedRaw.helper_driver_id ?? savedRaw.helperDriverId ?? ann.helperDriverId,
+                  assignmentFinalizedAt:
+                    savedRaw.assignment_finalized_at ??
+                    savedRaw.assignmentFinalizedAt ??
+                    ann.assignmentFinalizedAt,
+                  assignmentType:
+                    savedRaw.assignment_type ?? savedRaw.assignmentType ?? ann.assignmentType,
                   vehiclePlate: savedRaw.vehicle_plate ?? savedRaw.vehiclePlate ?? ann.vehiclePlate,
                   destinations: savedDests.length ? savedDests : ann.destinations,
                 }
@@ -894,6 +1040,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       alert('اعلام بار با موفقیت به‌روزرسانی شد');
       apiCache.invalidateContaining('freight-announcements/history');
       apiCache.invalidateContaining('freight-announcements');
+      apiCache.invalidateContaining('driver-calculations');
+      apiCache.invalidateContaining('dispatch');
       setShowEditDialog(false);
       setEditReason('');
       setSelectedAnnouncement(null);
@@ -1014,9 +1162,12 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
   };
 
   const lineTypeLabels: Record<string, string> = {
-    'IceCream': 'بستنی',
-    'Dairy': 'لبنیات-فروتلند',
-    'Ambient': 'پاستوریزه'
+    IceCream: 'بستنی',
+    Dairy: 'پاستوریزه',
+    Ambient: 'لبنیات-فروتلند',
+    بستنی: 'بستنی',
+    پاستوریزه: 'پاستوریزه',
+    'لبنیات-فروتلند': 'لبنیات-فروتلند',
   };
 
   if (loading) {
@@ -1144,7 +1295,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                 </td>
                 {/* خط */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {lineTypeLabels[ann.lineType] || ann.lineType || '-'}
+                  {lineTypeLabels[lineTypeToBackend(ann.lineType)] || lineTypeLabels[ann.lineType] || ann.lineType || '-'}
                 </td>
                 {/* وضعیت */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs">
@@ -1350,8 +1501,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     className="w-full px-3 py-2 border rounded"
                   >
                     <option value="IceCream">بستنی</option>
-                    <option value="Dairy">لبنیات-فروتلند</option>
-                    <option value="Ambient">پاستوریزه</option>
+                    <option value="Dairy">پاستوریزه</option>
+                    <option value="Ambient">لبنیات-فروتلند</option>
                   </select>
                 </div>
                 <div>
@@ -1373,7 +1524,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     className="w-full px-3 py-2 border rounded"
                   />
                 </div>
-                {formData.lineType === 'IceCream' && (
+                {lineTypeToBackend(formData.lineType) === 'IceCream' && (
                   <>
                     <div>
                       <label className="block text-sm font-medium mb-1">مبدا بارگیری</label>
@@ -1400,7 +1551,25 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   <label className="block text-sm font-medium mb-1">نوع تخصیص</label>
                   <select
                     value={formData.assignmentType || ''}
-                    onChange={(e) => setFormData({ ...formData, assignmentType: e.target.value })}
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      const personal = isPersonalAssignmentType(nextType);
+                      setFormData({
+                        ...formData,
+                        assignmentType: nextType,
+                        assignedDriverId: personal ? '' : formData.assignedDriverId,
+                        assignedDriverEmployeeId: personal ? '' : formData.assignedDriverEmployeeId,
+                        helperDriverId: personal ? '' : formData.helperDriverId,
+                        helperDriverName: personal ? '' : formData.helperDriverName,
+                        helperDriverEmployeeId: personal ? '' : formData.helperDriverEmployeeId,
+                      });
+                      if (personal) {
+                        setDriverQuery(formData.assignedDriverName || '');
+                        setDriverResults([]);
+                        setHelperQuery('');
+                        setHelperResults([]);
+                      }
+                    }}
                     className="w-full px-3 py-2 border rounded"
                   >
                     <option value="">انتخاب کنید</option>
@@ -1409,22 +1578,111 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">راننده</label>
-                  <input
-                    type="text"
-                    value={formData.assignedDriverName || ''}
-                    onChange={(e) => setFormData({ ...formData, assignedDriverName: e.target.value })}
+                  <label className="block text-sm font-medium mb-1">تاریخ اتمام تخصیص</label>
+                  <JalaliDateInput
+                    value={formData.assignmentFinalizedAt ? String(formData.assignmentFinalizedAt) : ''}
+                    onChange={(value) => setFormData({ ...formData, assignmentFinalizedAt: value })}
+                    placeholder="مثال: 1404/06/27"
                     className="w-full px-3 py-2 border rounded"
-                    placeholder="نام راننده"
-                  />
-                  {formData.assignedDriverEmployeeId && (
-                    <div className="text-xs text-gray-500 mt-1">کد پرسنلی: {formData.assignedDriverEmployeeId}</div>
-                  )}
-                  <input
-                    type="hidden"
-                    value={formData.assignedDriverId || ''}
                   />
                 </div>
+                <div className="relative">
+                  <label className="block text-sm font-medium mb-1">راننده</label>
+                  {isPersonalEdit ? (
+                    <input
+                      type="text"
+                      value={formData.assignedDriverName || ''}
+                      onChange={(e) => {
+                        setFormData({
+                          ...formData,
+                          assignedDriverName: e.target.value,
+                          assignedDriverId: '',
+                          assignedDriverEmployeeId: '',
+                        });
+                        setDriverQuery(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="نام راننده را تایپ کنید"
+                      autoComplete="off"
+                    />
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={driverQuery}
+                        onChange={(e) => searchDrivers(e.target.value)}
+                        className="w-full px-3 py-2 border rounded"
+                        placeholder="نام یا کد پرسنلی را تایپ کنید"
+                        autoComplete="off"
+                      />
+                      {formData.assignedDriverEmployeeId && (
+                        <div className="text-xs text-gray-500 mt-1">کد پرسنلی: {formData.assignedDriverEmployeeId}</div>
+                      )}
+                      {(driverSearching || driverResults.length > 0) && (
+                        <div className="absolute z-50 mt-1 w-full max-h-48 overflow-auto bg-white border rounded shadow text-sm">
+                          {driverSearching && (
+                            <div className="px-3 py-2 text-gray-500">در حال جستجو...</div>
+                          )}
+                          {driverResults.map((d) => (
+                            <button
+                              type="button"
+                              key={d.id}
+                              className="w-full text-right px-3 py-2 hover:bg-sky-50"
+                              onClick={() => pickDriver(d)}
+                            >
+                              <div className="font-medium">{d.name || '—'}</div>
+                              <div className="text-xs text-gray-500">
+                                {[d.employeeId, d.mobile].filter(Boolean).join(' · ')}
+                              </div>
+                            </button>
+                          ))}
+                          {!driverSearching && driverResults.length === 0 && driverQuery.trim().length >= 2 && (
+                            <div className="px-3 py-2 text-gray-500">راننده‌ای یافت نشد</div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                {!isPersonalEdit && (
+                <div className="relative">
+                  <label className="block text-sm font-medium mb-1">راننده کمکی</label>
+                  <input
+                    type="text"
+                    value={helperQuery}
+                    onChange={(e) => searchHelpers(e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                    placeholder="نام یا کد پرسنلی را تایپ کنید"
+                    autoComplete="off"
+                  />
+                  {formData.helperDriverEmployeeId && (
+                    <div className="text-xs text-gray-500 mt-1">کد پرسنلی: {formData.helperDriverEmployeeId}</div>
+                  )}
+                  {(helperSearching || helperResults.length > 0) && (
+                    <div className="absolute z-50 mt-1 w-full max-h-48 overflow-auto bg-white border rounded shadow text-sm">
+                      {helperSearching && (
+                        <div className="px-3 py-2 text-gray-500">در حال جستجو...</div>
+                      )}
+                      {helperResults.map((d) => (
+                        <button
+                          type="button"
+                          key={d.id}
+                          className="w-full text-right px-3 py-2 hover:bg-sky-50"
+                          onClick={() => pickHelper(d)}
+                        >
+                          <div className="font-medium">{d.name || '—'}</div>
+                          <div className="text-xs text-gray-500">
+                            {[d.employeeId, d.mobile].filter(Boolean).join(' · ')}
+                          </div>
+                        </button>
+                      ))}
+                      {!helperSearching && helperResults.length === 0 && helperQuery.trim().length >= 2 && (
+                        <div className="px-3 py-2 text-gray-500">راننده‌ای یافت نشد</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium mb-1">خودرو</label>
                   <input
@@ -1514,16 +1772,18 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   {formData.destinations && formData.destinations.length > 0 ? (
                     formData.destinations.map((dest: any, index: number) => (
                       <div key={dest.id || index} className="grid grid-cols-4 gap-2 p-2 bg-gray-50 rounded">
-                        <input
-                          type="text"
+                        <CityAutocomplete
                           value={dest.city || ''}
-                          onChange={(e) => {
+                          onChange={(city) => {
                             const newDests = [...formData.destinations];
-                            newDests[index] = { ...newDests[index], city: e.target.value };
+                            newDests[index] = { ...newDests[index], city };
                             setFormData({ ...formData, destinations: newDests });
                           }}
-                          className="px-2 py-1 border rounded text-sm"
                           placeholder="شهر"
+                          className="px-2 py-1 border rounded text-sm w-full"
+                          inModal
+                          cityOnlyLabels
+                          requireSelection
                         />
                         <input
                           type="text"

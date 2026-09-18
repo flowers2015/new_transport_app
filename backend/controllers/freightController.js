@@ -229,6 +229,15 @@ function normalizeFreightLineTypeKey(lineType) {
   return lineType;
 }
 
+function lineTypeSqlAliases(lineType) {
+  const key = normalizeFreightLineTypeKey(lineType);
+  if (key === 'IceCream') return ['IceCream', 'بستنی'];
+  if (key === 'Dairy') return ['Dairy', 'پاستوریزه'];
+  if (key === 'Ambient') return ['Ambient', 'لبنیات-فروتلند'];
+  const raw = String(lineType || '').trim();
+  return raw ? [raw] : [];
+}
+
 /** همان منطق تایید مدیر: بستنی→شرکتی، پاستوریزه/محیطی→شخصی */
 function resolveAssignmentQueueFromLineType(lineType) {
   const iceCreamMatches = ['IceCream', 'بستنی'];
@@ -956,7 +965,7 @@ async function upsertFreightDestinations(client, announcementId, destinations, o
     const sets = [
       'city = COALESCE($1, city)',
       'representative_name = $2',
-      'tonnage = COALESCE($3, tonnage)',
+      'tonnage = $3',
       'freight_cost = $4',
       'cargo_value = COALESCE($5, cargo_value)',
       'unload_time = $6',
@@ -1825,65 +1834,180 @@ function isLockedDriverCalculation(row) {
   );
 }
 
+function parseAssignmentFinalizedAtInput(value) {
+  if (value === undefined) return { provided: false, date: undefined };
+  if (value === null || String(value).trim() === '') return { provided: true, date: null };
+  const s = String(value).trim();
+  const year = Number(s.slice(0, 4));
+  if (/^\d{4}-\d{2}-\d{2}/.test(s) && year >= 1700) {
+    const [gy, gm, gd] = s.slice(0, 10).split('-').map(Number);
+    if (!gy || !gm || !gd) return { provided: true, date: null };
+    return { provided: true, date: new Date(gy, gm - 1, gd, 12, 0, 0) };
+  }
+  const jalali = s.replace(/-/g, '/');
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(jalali)) {
+    const d = parseJalaliDateString(jalali.split(/[ T]/)[0]);
+    if (d) d.setHours(12, 0, 0, 0);
+    return { provided: true, date: d || null };
+  }
+  const d = new Date(s);
+  return { provided: true, date: Number.isNaN(d.getTime()) ? null : d };
+}
+
 /** وقتی ادمین راننده/خودرو را در مدیریت اعلام بار عوض می‌کند، مالی و تخصیص نوبت هم باید همان را ببینند. */
 async function syncLinkedAssignmentAfterAdminEdit(client, {
   announcementId,
   oldDriverId,
   newDriverId,
   newVehicleId,
+  helperDriverId,
+  helperDriverName,
+  helperDriverEmployeeId,
+  assignmentFinalizedAt,
+  vehicleType,
 }) {
   const nextDriver = newDriverId ? String(newDriverId).trim() : '';
   const prevDriver = oldDriverId ? String(oldDriverId).trim() : '';
   const nextVehicle = newVehicleId ? String(newVehicleId).trim() : '';
-  if (!nextDriver) return;
-  const driverChanged = Boolean(prevDriver && prevDriver !== nextDriver);
+  const driverChanged = Boolean(prevDriver && nextDriver && prevDriver !== nextDriver);
+  const finalizedAt =
+    assignmentFinalizedAt === undefined ? undefined : assignmentFinalizedAt;
+
+  const ensureCompanyDriver = async (driverId) => {
+    if (!driverId) return false;
+    const check = await client.query(
+      `SELECT id FROM drivers WHERE id = $1 AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1`,
+      [driverId]
+    );
+    return check.rowCount > 0;
+  };
+
+  const resolveVehicleId = async (vehicleId) => {
+    if (!vehicleId) return null;
+    const check = await client.query('SELECT id FROM vehicles WHERE id = $1 LIMIT 1', [vehicleId]);
+    return check.rowCount ? String(check.rows[0].id) : null;
+  };
 
   try {
-    await client.query(
-      `UPDATE dispatch_assignments
-       SET driver_id = $2,
-           vehicle_id = COALESCE($3, vehicle_id)
+    const existing = await client.query(
+      `SELECT id FROM dispatch_assignments
        WHERE freight_announcement_id = $1
-         AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
-      [announcementId, nextDriver, nextVehicle || null]
+         AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+       LIMIT 1`,
+      [announcementId]
     );
+
+    if (existing.rowCount > 0) {
+      if (nextDriver) {
+        await client.query(
+          `UPDATE dispatch_assignments
+           SET driver_id = $2,
+               vehicle_id = COALESCE($3, vehicle_id)
+           WHERE freight_announcement_id = $1
+             AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
+          [announcementId, nextDriver, nextVehicle || null]
+        );
+      }
+      if (finalizedAt !== undefined) {
+        await client.query(
+          `UPDATE dispatch_assignments
+           SET assignment_finalized_at = $2
+           WHERE freight_announcement_id = $1
+             AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
+          [announcementId, finalizedAt]
+        );
+      }
+    } else if (nextDriver && (await ensureCompanyDriver(nextDriver))) {
+      const vehicleId = await resolveVehicleId(nextVehicle);
+      const categoryLabel = vehicleType ? String(vehicleType).trim() || null : null;
+      const destRoute = await client.query(
+        `SELECT dr2.id, dr2.round_trip_km
+         FROM freight_destinations fd
+         INNER JOIN dispatch_routes dr2
+           ON dr2.is_active = TRUE
+          AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr2.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+            = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+         WHERE fd.freight_announcement_id = $1
+         ORDER BY COALESCE(dr2.round_trip_km, 0) DESC NULLS LAST
+         LIMIT 1`,
+        [announcementId]
+      );
+      const routeRow = destRoute.rows[0] || null;
+      await client.query(
+        `INSERT INTO dispatch_assignments
+           (id, freight_announcement_id, vehicle_id, driver_id, stage, assignment_finalized_at,
+            created_at, vehicle_category, queue_type, is_cancelled, route_id, distance_km)
+         VALUES ($1, $2, $3, $4, $5, $6, COALESCE($6, NOW()), $7, $8, FALSE, $9, $10)`,
+        [
+          crypto.randomUUID(),
+          announcementId,
+          vehicleId,
+          nextDriver,
+          'stage2',
+          finalizedAt === undefined ? null : finalizedAt,
+          categoryLabel,
+          'far',
+          routeRow ? routeRow.id : null,
+          routeRow && routeRow.round_trip_km != null ? Number(routeRow.round_trip_km) : null,
+        ]
+      );
+    }
   } catch (err) {
     console.warn('⚠️ [updateFreightAnnouncement] sync dispatch_assignments:', err.message);
   }
-
-  if (!driverChanged) return;
 
   try {
     const tableCheck = await client.query(
       `SELECT 1 FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = 'driver_calculations'`
     );
-    if (!tableCheck.rowCount) return;
-
-    const oldCalcs = await client.query(
-      `SELECT id, is_paid, period_id, commission_status
-       FROM driver_calculations
-       WHERE announcement_id = $1 AND driver_id = $2`,
-      [announcementId, prevDriver]
-    );
-    const newCalcs = await client.query(
-      `SELECT id, is_paid, period_id, commission_status
-       FROM driver_calculations
-       WHERE announcement_id = $1 AND driver_id = $2`,
-      [announcementId, nextDriver]
-    );
-    const newHasOpen = newCalcs.rows.some((r) => !isLockedDriverCalculation(r));
-    const newHasAny = newCalcs.rowCount > 0;
-
-    for (const row of oldCalcs.rows) {
-      if (isLockedDriverCalculation(row)) continue;
-      if (newHasOpen || newHasAny) {
-        await client.query(`DELETE FROM driver_calculations WHERE id = $1`, [row.id]);
-      } else {
+    if (tableCheck.rowCount) {
+      if (helperDriverId !== undefined || helperDriverName !== undefined) {
         await client.query(
-          `UPDATE driver_calculations SET driver_id = $1 WHERE id = $2`,
-          [nextDriver, row.id]
+          `UPDATE driver_calculations
+           SET helper_driver_id = $2,
+               helper_driver_name = $3,
+               helper_driver_employee_id = $4
+           WHERE announcement_id = $1
+             AND COALESCE(is_paid, FALSE) = FALSE
+             AND period_id IS NULL
+             AND LOWER(COALESCE(commission_status, '')) NOT IN ('commission_calculated', 'paid')`,
+          [
+            announcementId,
+            helperDriverId ? String(helperDriverId) : null,
+            helperDriverName ? String(helperDriverName).trim() || null : null,
+            helperDriverEmployeeId ? String(helperDriverEmployeeId).trim() || null : null,
+          ]
         );
+      }
+
+      if (driverChanged) {
+        const oldCalcs = await client.query(
+          `SELECT id, is_paid, period_id, commission_status
+           FROM driver_calculations
+           WHERE announcement_id = $1 AND driver_id = $2`,
+          [announcementId, prevDriver]
+        );
+        const newCalcs = await client.query(
+          `SELECT id, is_paid, period_id, commission_status
+           FROM driver_calculations
+           WHERE announcement_id = $1 AND driver_id = $2`,
+          [announcementId, nextDriver]
+        );
+        const newHasOpen = newCalcs.rows.some((r) => !isLockedDriverCalculation(r));
+        const newHasAny = newCalcs.rowCount > 0;
+
+        for (const row of oldCalcs.rows) {
+          if (isLockedDriverCalculation(row)) continue;
+          if (newHasOpen || newHasAny) {
+            await client.query(`DELETE FROM driver_calculations WHERE id = $1`, [row.id]);
+          } else {
+            await client.query(
+              `UPDATE driver_calculations SET driver_id = $1 WHERE id = $2`,
+              [nextDriver, row.id]
+            );
+          }
+        }
       }
     }
   } catch (err) {
@@ -1901,6 +2025,7 @@ async function updateFreightAnnouncement(req, res) {
   const userId = req.user?.id || req.user?.userId; // استخراج userId در ابتدای تابع
   try {
     await ensureJalaliDateColumns();
+    await ensureFreightHelperDriverColumns();
 
     let {
       loadingDate,
@@ -1934,7 +2059,22 @@ async function updateFreightAnnouncement(req, res) {
       assignedVehicleBrand,
       vehiclePlate,
       assignmentType,
+      helperDriverId,
+      helperDriverName,
+      helperDriverEmployeeId,
+      helperDriverContact,
+      assignmentFinalizedAt,
     } = req.body || {};
+    const helperDriverIdRaw = helperDriverId ?? req.body?.helper_driver_id;
+    const helperDriverNameRaw = helperDriverName ?? req.body?.helper_driver_name;
+    const helperDriverEmployeeIdRaw =
+      helperDriverEmployeeId ?? req.body?.helper_driver_employee_id;
+    const helperDriverContactRaw = helperDriverContact ?? req.body?.helper_driver_contact;
+    const assignmentFinalizedParsed = parseAssignmentFinalizedAtInput(
+      assignmentFinalizedAt !== undefined
+        ? assignmentFinalizedAt
+        : req.body?.assignment_finalized_at
+    );
 
     const weekDayInput =
       announcementWeekDay !== undefined && announcementWeekDay !== null && announcementWeekDay !== ''
@@ -2241,7 +2381,10 @@ async function updateFreightAnnouncement(req, res) {
         fields.push(`loading_date = $${idx++}`); 
         values.push(normalizedDate); 
       }
-      if (lineType) { fields.push(`line_type = $${idx++}`); values.push(lineType); }
+      if (lineType) {
+        fields.push(`line_type = $${idx++}`);
+        values.push(normalizeFreightLineTypeKey(lineType) || lineType);
+      }
       if (cargoValue !== undefined) { fields.push(`cargo_value = $${idx++}`); values.push(cargoValue); }
       if (vehicleType) { fields.push(`vehicle_type = $${idx++}`); values.push(vehicleType); }
       
@@ -2303,7 +2446,7 @@ async function updateFreightAnnouncement(req, res) {
       ).toLowerCase();
       const isCompanyAssignment =
         assignmentKind === 'company' || assignmentKind === 'شرکتی';
-      const incomingDriverId =
+      let incomingDriverId =
         assignedDriverId !== undefined && String(assignedDriverId || '').trim()
           ? String(assignedDriverId).trim()
           : null;
@@ -2311,7 +2454,44 @@ async function updateFreightAnnouncement(req, res) {
         assignedVehicleId !== undefined && String(assignedVehicleId || '').trim()
           ? String(assignedVehicleId).trim()
           : null;
-      const driverIdForSnapshot = incomingDriverId || oldRecord.assigned_driver_id || null;
+      const nameChanged =
+        assignedDriverName != null &&
+        String(assignedDriverName).trim() !== String(oldRecord.assigned_driver_name || '').trim();
+      if (isCompanyAssignment && (!incomingDriverId || nameChanged)) {
+        try {
+          const emp = assignedDriverEmployeeId || req.body?.assigned_driver_employee_id;
+          if (emp && String(emp).trim()) {
+            const byEmp = await client.query(
+              `SELECT id FROM drivers
+               WHERE COALESCE(is_deleted, FALSE) = FALSE AND TRIM(COALESCE(employee_id, '')) = $1
+               LIMIT 1`,
+              [String(emp).trim()]
+            );
+            if (byEmp.rows[0]) incomingDriverId = String(byEmp.rows[0].id);
+          }
+          if ((!incomingDriverId || nameChanged) && assignedDriverName && String(assignedDriverName).trim()) {
+            const byName = await client.query(
+              `SELECT id FROM drivers
+               WHERE COALESCE(is_deleted, FALSE) = FALSE AND TRIM(name) ILIKE $1
+               LIMIT 2`,
+              [String(assignedDriverName).trim()]
+            );
+            if (byName.rows.length === 1) {
+              incomingDriverId = String(byName.rows[0].id);
+            } else if (byName.rows.length > 1 && oldRecord.assigned_driver_id) {
+              const other = byName.rows.find(
+                (row) => String(row.id) !== String(oldRecord.assigned_driver_id)
+              );
+              if (other) incomingDriverId = String(other.id);
+            }
+          }
+        } catch (lookupErr) {
+          console.warn('⚠️ [updateFreightAnnouncement] driver lookup:', lookupErr.message);
+        }
+      }
+      const driverIdForSnapshot = isCompanyAssignment
+        ? incomingDriverId || oldRecord.assigned_driver_id || null
+        : null;
       const vehicleIdForSnapshot = incomingVehicleId || oldRecord.assigned_vehicle_id || null;
 
       if (isCompanyAssignment && (driverIdForSnapshot || vehicleIdForSnapshot)) {
@@ -2367,17 +2547,83 @@ async function updateFreightAnnouncement(req, res) {
         }
       }
 
+      let incomingHelperId =
+        helperDriverIdRaw !== undefined && String(helperDriverIdRaw || '').trim()
+          ? String(helperDriverIdRaw).trim()
+          : null;
+      let resolvedHelperName =
+        helperDriverNameRaw !== undefined ? String(helperDriverNameRaw || '').trim() : '';
+      let resolvedHelperEmployeeId =
+        helperDriverEmployeeIdRaw !== undefined
+          ? String(helperDriverEmployeeIdRaw || '').trim()
+          : '';
+      let resolvedHelperContact =
+        helperDriverContactRaw !== undefined ? String(helperDriverContactRaw || '').trim() : '';
+
+      if (!isCompanyAssignment) {
+        incomingHelperId = null;
+        resolvedHelperName = '';
+        resolvedHelperEmployeeId = '';
+        resolvedHelperContact = '';
+      } else if (incomingHelperId || resolvedHelperName || resolvedHelperEmployeeId) {
+        try {
+          if (!incomingHelperId && resolvedHelperEmployeeId) {
+            const byEmp = await client.query(
+              `SELECT id FROM drivers
+               WHERE COALESCE(is_deleted, FALSE) = FALSE AND TRIM(COALESCE(employee_id, '')) = $1
+               LIMIT 1`,
+              [resolvedHelperEmployeeId]
+            );
+            if (byEmp.rows[0]) incomingHelperId = String(byEmp.rows[0].id);
+          }
+          if (!incomingHelperId && resolvedHelperName) {
+            const byName = await client.query(
+              `SELECT id FROM drivers
+               WHERE COALESCE(is_deleted, FALSE) = FALSE AND TRIM(name) ILIKE $1
+               LIMIT 2`,
+              [resolvedHelperName]
+            );
+            if (byName.rows.length === 1) incomingHelperId = String(byName.rows[0].id);
+          }
+          if (incomingHelperId && incomingDriverId && incomingHelperId === incomingDriverId) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'راننده کمکی نمی‌تواند همان راننده اصلی باشد.' });
+          }
+          if (incomingHelperId) {
+            const helperSnap = await client.query(
+              'SELECT name, mobile, employee_id FROM drivers WHERE id = $1',
+              [incomingHelperId]
+            );
+            const h = helperSnap.rows[0];
+            if (h) {
+              if (!resolvedHelperName) resolvedHelperName = h.name || '';
+              if (!resolvedHelperEmployeeId) resolvedHelperEmployeeId = h.employee_id || '';
+              if (!resolvedHelperContact) resolvedHelperContact = h.mobile || '';
+            }
+          }
+        } catch (helperErr) {
+          if (helperErr.statusCode === 400) throw helperErr;
+          console.warn('⚠️ [updateFreightAnnouncement] helper driver lookup:', helperErr.message);
+        }
+      }
+
       if (billOfLadingNumber !== undefined) { fields.push(`bill_of_lading_number = $${idx++}`); values.push(billOfLadingNumber); }
-      // رشته خالی را null نکن — در بار شرکتی شناسه راننده/خودرو پاک می‌شد و نام از JOIN هم می‌رفت
-      if (incomingDriverId) {
+      if (isCompanyAssignment && incomingDriverId) {
+        fields.push(`assigned_driver_id = $${idx++}`);
+        values.push(incomingDriverId);
+      } else if (!isCompanyAssignment && assignedDriverId !== undefined) {
         fields.push(`assigned_driver_id = $${idx++}`);
         values.push(incomingDriverId);
       }
-      if (assignedDriverName !== undefined && String(assignedDriverName || '').trim()) {
+      if (assignedDriverName !== undefined) {
+        const trimmedName = String(assignedDriverName || '').trim();
         fields.push(`assigned_driver_name = $${idx++}`);
-        values.push(String(assignedDriverName).trim());
+        values.push(trimmedName || null);
       }
-      if (assignedDriverEmployeeId !== undefined && String(assignedDriverEmployeeId || '').trim()) {
+      if (!isCompanyAssignment && assignedDriverName !== undefined) {
+        fields.push(`assigned_driver_employee_id = $${idx++}`);
+        values.push(null);
+      } else if (isCompanyAssignment && assignedDriverEmployeeId !== undefined && String(assignedDriverEmployeeId || '').trim()) {
         fields.push(`assigned_driver_employee_id = $${idx++}`);
         values.push(String(assignedDriverEmployeeId).trim());
       }
@@ -2400,6 +2646,33 @@ async function updateFreightAnnouncement(req, res) {
       if (effectiveAssignmentType !== undefined && String(effectiveAssignmentType || '').trim()) {
         fields.push(`assignment_type = $${idx++}`);
         values.push(effectiveAssignmentType);
+      }
+
+      const helperPayloadSent =
+        helperDriverIdRaw !== undefined || helperDriverNameRaw !== undefined;
+      if (!isCompanyAssignment && (helperPayloadSent || assignedDriverName !== undefined)) {
+        fields.push(`helper_driver_id = $${idx++}`);
+        values.push(null);
+        fields.push(`helper_driver_name = $${idx++}`);
+        values.push(null);
+        fields.push(`helper_driver_employee_id = $${idx++}`);
+        values.push(null);
+        fields.push(`helper_driver_contact = $${idx++}`);
+        values.push(null);
+      } else if (isCompanyAssignment && helperPayloadSent) {
+        fields.push(`helper_driver_id = $${idx++}`);
+        values.push(incomingHelperId);
+        fields.push(`helper_driver_name = $${idx++}`);
+        values.push(resolvedHelperName || null);
+        fields.push(`helper_driver_employee_id = $${idx++}`);
+        values.push(resolvedHelperEmployeeId || null);
+        fields.push(`helper_driver_contact = $${idx++}`);
+        values.push(resolvedHelperContact || null);
+      }
+
+      if (assignmentFinalizedParsed.provided) {
+        fields.push(`assignment_finalized_at = $${idx++}`);
+        values.push(assignmentFinalizedParsed.date);
       }
       
       // یادداشت — در مشارکتی پاستوریزه توضیح جدید را با قبلی با " :- " جمع کن تا پاک نشود
@@ -2521,7 +2794,9 @@ async function updateFreightAnnouncement(req, res) {
         'tariff_freight_cost',
         'bill_of_lading_number', 'assigned_driver_id', 'assigned_driver_name', 
         'assigned_driver_employee_id', 'assigned_vehicle_id', 'assigned_vehicle_model',
-        'assigned_vehicle_brand', 'vehicle_plate', 'assignment_type'
+        'assigned_vehicle_brand', 'vehicle_plate', 'assignment_type',
+        'helper_driver_id', 'helper_driver_name', 'helper_driver_employee_id',
+        'assignment_finalized_at'
       ];
       
       const fieldChanges = compareObjects(oldRecord, newRecord, fieldsToTrack);
@@ -2693,6 +2968,14 @@ async function updateFreightAnnouncement(req, res) {
         oldDriverId: oldRecord.assigned_driver_id,
         newDriverId: newRecord.assigned_driver_id,
         newVehicleId: newRecord.assigned_vehicle_id,
+        helperDriverId: newRecord.helper_driver_id,
+        helperDriverName: newRecord.helper_driver_name,
+        helperDriverEmployeeId: newRecord.helper_driver_employee_id,
+        assignmentFinalizedAt:
+          assignmentFinalizedParsed.provided
+            ? assignmentFinalizedParsed.date
+            : newRecord.assignment_finalized_at,
+        vehicleType: newRecord.vehicle_type,
       });
 
       await client.query('COMMIT');
@@ -2753,6 +3036,20 @@ async function updateFreightAnnouncement(req, res) {
             bill_of_lading_number: updated.bill_of_lading_number,
             assignedDriverName: updated.assigned_driver_name,
             assigned_driver_name: updated.assigned_driver_name,
+            assignedDriverId: updated.assigned_driver_id,
+            assigned_driver_id: updated.assigned_driver_id,
+            assignedDriverEmployeeId: updated.assigned_driver_employee_id,
+            helperDriverId: updated.helper_driver_id,
+            helper_driver_id: updated.helper_driver_id,
+            helperDriverName: updated.helper_driver_name,
+            helper_driver_name: updated.helper_driver_name,
+            helperDriverEmployeeId: updated.helper_driver_employee_id,
+            assignmentType: updated.assignment_type,
+            assignment_type: updated.assignment_type,
+            assignmentFinalizedAt: updated.assignment_finalized_at,
+            assignment_finalized_at: updated.assignment_finalized_at,
+            vehiclePlate: updated.vehicle_plate,
+            vehicle_plate: updated.vehicle_plate,
             vehicleType: updated.vehicle_type,
             vehicle_type: updated.vehicle_type,
             notes: updated.notes,
@@ -5749,7 +6046,7 @@ function sqlJalaliLoadingDate(alias) {
 async function getFreightHistory(req, res) {
   try {
     await ensureFreightHelperDriverColumns(pool);
-    const { date, loadingDate, destination, billOfLading, driverName, creatorName, vehicleCode, lineType, page = 1, limit = 50 } = req.query;
+    const { date, loadingDate, destination, billOfLading, driverName, creatorName, vehicleCode, lineType, announcementCode, page = 1, limit = 50 } = req.query;
     
     // Pagination parameters
     const pageNum = parseInt(page, 10) || 1;
@@ -5820,9 +6117,9 @@ async function getFreightHistory(req, res) {
           NULLIF(TRIM(creator_hist.user_name), '')
         ) as creator_full_name,
         u_creator.username as creator_username,
-        COALESCE(NULLIF(TRIM(d.name), ''), NULLIF(TRIM(pd.name), ''), fa.assigned_driver_name) as assigned_driver_name,
-        COALESCE(NULLIF(TRIM(hd.name), ''), fa.helper_driver_name) as helper_driver_name,
-        COALESCE(NULLIF(TRIM(d.employee_id), ''), NULLIF(TRIM(pd.driver_smart_id), ''), fa.assigned_driver_employee_id) as assigned_driver_employee_id,
+        COALESCE(NULLIF(TRIM(fa.assigned_driver_name), ''), NULLIF(TRIM(d.name), ''), NULLIF(TRIM(pd.name), '')) as assigned_driver_name,
+        COALESCE(NULLIF(TRIM(fa.helper_driver_name), ''), NULLIF(TRIM(hd.name), '')) as helper_driver_name,
+        COALESCE(NULLIF(TRIM(fa.assigned_driver_employee_id), ''), NULLIF(TRIM(d.employee_id), ''), NULLIF(TRIM(pd.driver_smart_id), '')) as assigned_driver_employee_id,
         COALESCE(NULLIF(TRIM(v.model), ''), fa.assigned_vehicle_model) as assigned_vehicle_model,
         COALESCE(NULLIF(TRIM(v.brand), ''), fa.assigned_vehicle_brand) as assigned_vehicle_brand,
         COALESCE(
@@ -5833,6 +6130,7 @@ async function getFreightHistory(req, res) {
           fa.vehicle_plate
         ) as vehicle_plate,
         v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code,
+        COALESCE(fa.assignment_finalized_at, da_fin.assignment_finalized_at) as assignment_finalized_at,
         -- آخرین تخصیص موفق (شرکتی/شخصی) از تاریخچه یا ثبت نوبت
         (
           SELECT MAX(src.ts)
@@ -5866,7 +6164,15 @@ async function getFreightHistory(req, res) {
       LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
       LEFT JOIN drivers hd ON fa.helper_driver_id = hd.id
       LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
-      WHERE fa.status IN ('Finalized', 'InTransit')
+      LEFT JOIN LATERAL (
+        SELECT assignment_finalized_at
+        FROM dispatch_assignments
+        WHERE freight_announcement_id = fa.id
+          AND (is_cancelled IS NULL OR is_cancelled = FALSE)
+        ORDER BY assignment_finalized_at DESC NULLS LAST, created_at DESC
+        LIMIT 1
+      ) da_fin ON true
+      WHERE fa.status IN ('Finalized', 'InTransit', 'نهایی شده', 'در حال حمل')
     `;
     const params = [];
     let paramIndex = 1;
@@ -5883,12 +6189,25 @@ async function getFreightHistory(req, res) {
       console.log(`🏢 [getFreightHistory] Branch finance filter applied for city: ${branchCity}`);
     }
     
-    // فیلتر بر اساس lineType - فقط برای تب فعلی
-    if (lineType && lineType.trim()) {
-      query += ` AND fa.line_type = $${paramIndex}`;
-      params.push(lineType.trim());
+    const announcementCodeRaw = String(
+      announcementCode || req.query.announcement_code || req.query.code || ''
+    ).trim();
+
+    // فیلتر خط فقط وقتی جستجوی کد اعلام بار نیست تا رکورد در تب دیگر هم پیدا شود
+    if (lineType && String(lineType).trim() && !announcementCodeRaw) {
+      const aliases = lineTypeSqlAliases(lineType);
+      if (aliases.length) {
+        query += ` AND fa.line_type::text = ANY($${paramIndex}::text[])`;
+        params.push(aliases);
+        paramIndex += 1;
+        console.log(`📦 [getFreightHistory] Filtering by lineType: ${lineType} → ${aliases.join('|')}`);
+      }
+    }
+
+    if (announcementCodeRaw) {
+      query += ` AND fa.announcement_code ILIKE $${paramIndex}`;
+      params.push(`%${announcementCodeRaw}%`);
       paramIndex += 1;
-      console.log(`📦 [getFreightHistory] Filtering by lineType: ${lineType}`);
     }
     
     // بازه dateFrom/dateTo برای خروجی اکسل: تاریخ بارگیری (نه تاریخ اعلام بار)

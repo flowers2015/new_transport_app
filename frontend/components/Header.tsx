@@ -232,7 +232,7 @@ const Header: React.FC<HeaderProps> = ({
                                                 const hasBlinking = (item as any).special === 'blinking';
 
                                                 return (
-                                                    <a key={item.view} onClick={() => handleNavigate(item.view!)} className="cursor-pointer text-slate-700 block px-4 py-2 text-sm hover:bg-slate-100 flex justify-between items-center">
+                                                    <a key={`${item.view}-${item.label}`} onClick={() => handleNavigate(item.view!)} className="cursor-pointer text-slate-700 block px-4 py-2 text-sm hover:bg-slate-100 flex justify-between items-center">
                                                         <span className="flex items-center gap-2">
                                                             {item.label}
                                                             {hasBlinking && <span className="blinking-dot !w-2 !h-2"></span>}
@@ -279,7 +279,7 @@ const Header: React.FC<HeaderProps> = ({
                                 {sortNavItemsForRole(
                                     navItems.filter(item => item.type !== 'divider' && hasAccess(item.roles))
                                 ).map(item => (
-                                    <button key={item.view} onClick={() => handleNavigate(item.view!)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition flex items-center gap-2 whitespace-nowrap">
+                                    <button key={`${item.view}-${item.label}`} onClick={() => handleNavigate(item.view!)} className="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100 transition flex items-center gap-2 whitespace-nowrap">
                                         <span>{item.label}</span>
                                         {(item as any).special === 'blinking' && <span className="blinking-dot"></span>}
                                         {item.view === View.Alerts && alertsCount > 0 && <span className="bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{alertsCount}</span>}

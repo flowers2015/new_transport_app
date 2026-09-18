@@ -1921,7 +1921,7 @@ const DispatchQueueManager: React.FC<DispatchQueueManagerProps> = ({ currentUser
                         {hasVeryFarBefore && (
                             <div
                                 className="truncate text-[9px] text-red-700 font-semibold mt-0.5"
-                                title="تعداد بار خیلی‌دور نهایی‌شده فقط در دوره جاری نوبت (۲۶ تا ۲۵)"
+                                title="تعداد بار خیلی‌دور با تاریخ اتمام تخصیص در دوره جاری نوبت (۲۶ تا ۲۵)"
                             >
                                 خیلی‌دور قبلاً رفته بوده
                                 {veryFarCount > 0

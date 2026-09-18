@@ -31,6 +31,7 @@ import {
 import { isFinanceRejectedAnn } from '../utils/financeRejection';
 import { computeTourFuelCost } from '../utils/fuelCostCalculation';
 import { subscribeFinanceDataChanged } from '../utils/financeDataSync';
+import { formatFreightLineTypeLabel } from '../utils/freightDisplay';
 
 // Helper function for padding
 const pad2 = (n: number): string => n < 10 ? `0${n}` : String(n);
@@ -358,7 +359,7 @@ function getTourDetailSortValue(tour: DriverTourDetailWithCalculation, field: To
         case 'plate':
             return `${tour.vehicleCode || ''} ${tour.plateNumber || ''}`.trim();
         case 'lineType':
-            return tour.lineType || '';
+            return formatFreightLineTypeLabel(tour.lineType);
         case 'destinations':
             return Array.isArray(tour.destinations)
                 ? tour.destinations.join('، ')
@@ -2431,7 +2432,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                         tour.announcementCode || '',
                         tour.vehicleType || '',
                         `${tour.vehicleCode || '-'} * ${tour.plateNumber || '-'}`,
-                        tour.lineType || '',
+                        formatFreightLineTypeLabel(tour.lineType),
                         (Array.isArray(tour.destinations) ? tour.destinations.join('، ') : (tour.destinations || '')) || '',
                         tour.billOfLadingNumber || '',
                         billDateStr,
@@ -6600,7 +6601,7 @@ const TransportFinanceCalculation: React.FC<TransportFinanceCalculationProps> = 
                                                         </td>
                                                         <td className="p-3 border-l border-slate-200">{tour.vehicleType}</td>
                                                         <td className="p-3 border-l border-slate-200">{tour.vehicleCode || '-'} * {tour.plateNumber || '-'}</td>
-                                                        <td className="p-3 border-l border-slate-200">{tour.lineType}</td>
+                                                        <td className="p-3 border-l border-slate-200">{formatFreightLineTypeLabel(tour.lineType)}</td>
                                                         <td className="p-3 border-l border-slate-200">
                                                             <div className="flex flex-col gap-1 items-start">
                                                                 {(tour as any).isFinanceException && (

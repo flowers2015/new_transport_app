@@ -17,12 +17,20 @@ export function formatNumberWithSeparator(value: number | string | null | undefi
     return num.toLocaleString('fa-IR');
 }
 
+function toAsciiDigits(value: string): string {
+    return String(value || '')
+        .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+        .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+}
+
 /**
  * تابع برای حذف جداکننده‌ها و تبدیل به عدد
  */
 export function parseNumberFromFormatted(value: string): number {
     if (!value) return 0;
-    const cleaned = value.replace(/,/g, '').replace(/[^\d]/g, '');
+    const cleaned = toAsciiDigits(value)
+        .replace(/[٬،,]/g, '')
+        .replace(/[^\d.]/g, '');
     return cleaned ? Number(cleaned) : 0;
 }
 

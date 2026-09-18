@@ -552,21 +552,25 @@ function resolveTripKmAndBucket(row) {
   return { km, bucket };
 }
 
+/** تاریخ قرارگرفتن تور در دوره نوبت: اتمام تخصیص روی نوبت، وگرنه روی اعلام‌بار */
+const CYCLE_MEMBERSHIP_AT_SQL = `COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at)`;
+
 async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, options = {}) {
   if (!driverIds?.length) return [];
   const finalizedOnly = options.finalizedOnly !== false;
+  const membershipSql = `
+        AND ${CYCLE_MEMBERSHIP_AT_SQL} IS NOT NULL
+        AND ${CYCLE_MEMBERSHIP_AT_SQL} >= $2
+        AND ${CYCLE_MEMBERSHIP_AT_SQL} <= $3`;
   const finalizedSql = finalizedOnly
-    ? `AND (
-          COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-          OR fa.status IN ('Finalized', 'InTransit')
-        )
+    ? `${membershipSql}
         AND (
           da.is_cancelled IS NULL
           OR da.is_cancelled = FALSE
-          OR COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) IS NOT NULL
-          OR fa.status IN ('Finalized', 'InTransit')
+          OR ${CYCLE_MEMBERSHIP_AT_SQL} IS NOT NULL
         )`
-    : `AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)`;
+    : `${membershipSql}
+        AND (da.is_cancelled IS NULL OR da.is_cancelled = FALSE)`;
   const { rows } = await pool.query(
     `
       SELECT
@@ -574,6 +578,7 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
         da.driver_id,
         da.freight_announcement_id,
         da.created_at,
+        ${CYCLE_MEMBERSHIP_AT_SQL} AS cycle_at,
         da.stage,
         da.distance_km AS assignment_distance_km,
         da.vehicle_category AS assignment_vehicle_category,
@@ -588,7 +593,8 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
         dest.round_trip_km AS dest_route_km,
         dest.distance_category AS dest_distance_category,
         dest.route_category AS dest_route_category,
-        dest.city AS dest_city
+        dest.city AS dest_city,
+        dest_cities.cities AS dest_cities_label
       FROM dispatch_assignments da
       LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
       LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
@@ -608,9 +614,19 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
         ORDER BY COALESCE(dr2.round_trip_km, 0) DESC NULLS LAST
         LIMIT 1
       ) dest ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT string_agg(x.city, '، ' ORDER BY x.min_sort) AS cities
+        FROM (
+          SELECT
+            MIN(TRIM(fd.city)) AS city,
+            MIN(COALESCE(fd.sort_order, 999999)) AS min_sort
+          FROM freight_destinations fd
+          WHERE fd.freight_announcement_id = fa.id
+            AND NULLIF(TRIM(fd.city), '') IS NOT NULL
+          GROUP BY REPLACE(REPLACE(REPLACE(REPLACE(TRIM(fd.city), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+        ) x
+      ) dest_cities ON TRUE
       WHERE da.driver_id = ANY($1::varchar[])
-        AND da.created_at >= $2
-        AND da.created_at <= $3
         AND (fa.id IS NULL OR fa.status IS NULL OR fa.status NOT IN ('Cancelled'))
         AND COALESCE(fa.finance_disposition, '') <> 'rejected'
         ${finalizedSql}
@@ -624,9 +640,10 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
       driverId: row.driver_id,
       announcementId: row.freight_announcement_id,
       announcementCode: row.announcement_code,
-      createdAt: row.created_at,
+      createdAt: row.cycle_at || row.created_at,
+      assignedAt: row.created_at,
       stage: row.stage,
-      city: row.dest_city || row.assigned_route_city || null,
+      city: row.dest_cities_label || row.dest_city || row.assigned_route_city || null,
       categoryLabel: resolveTripCategoryLabel(row),
       km,
       bucket,
@@ -660,7 +677,7 @@ function aggregateCycleTripStats(trips, categoryLabel = null) {
     } else if (prev.bucket !== 'veryFar' && trip.bucket) {
       prev.bucket = trip.bucket;
     }
-    if (!prev.city && trip.city) prev.city = trip.city;
+    if (trip.city && (!prev.city || trip.city.length > prev.city.length)) prev.city = trip.city;
   }
 
   const kmMap = new Map();

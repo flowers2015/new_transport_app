@@ -132,12 +132,13 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
     const [filterDriverName, setFilterDriverName] = useState<string>(''); // نام راننده
     const [filterCreatorName, setFilterCreatorName] = useState<string>(''); // کارمند اعلام‌کننده
     const [filterVehicleCode, setFilterVehicleCode] = useState<string>('');
+    const [filterAnnouncementCode, setFilterAnnouncementCode] = useState<string>('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
-    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, creatorName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50, loadingDate?: string, vehicleCode?: string) => {
+    const fetchHistoryData = async (date?: string, destination?: string, billOfLading?: string, driverName?: string, creatorName?: string, lineType?: FreightLineType, page: number = 1, limit: number = 50, loadingDate?: string, vehicleCode?: string, announcementCode?: string) => {
         setLoading(true);
         setError(null);
         try {
@@ -153,6 +154,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             if (driverName && driverName.trim()) params.append('driverName', driverName.trim());
             if (creatorName && creatorName.trim()) params.append('creatorName', creatorName.trim());
             if (vehicleCode && vehicleCode.trim()) params.append('vehicleCode', vehicleCode.trim());
+            if (announcementCode && announcementCode.trim()) params.append('announcementCode', announcementCode.trim());
             if (lineType) params.append('lineType', lineType);
             params.append('page', page.toString());
             params.append('limit', limit.toString());
@@ -236,6 +238,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
                 if (filterDriverName?.trim()) params.append('driverName', filterDriverName.trim());
                 if (filterCreatorName?.trim()) params.append('creatorName', filterCreatorName.trim());
                 if (filterVehicleCode?.trim()) params.append('vehicleCode', filterVehicleCode.trim());
+                if (filterAnnouncementCode?.trim()) params.append('announcementCode', filterAnnouncementCode.trim());
                 params.append('lineType', activeLine);
                 params.append('page', String(page));
                 params.append('limit', String(pageSize));
@@ -270,6 +273,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             filterDriverName,
             filterCreatorName,
             filterVehicleCode,
+            filterAnnouncementCode,
         ]
     );
 
@@ -292,7 +296,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             1, // Reset to first page
             itemsPerPage,
             filterLoadingDate?.trim() || undefined,
-            filterVehicleCode?.trim() || undefined
+            filterVehicleCode?.trim() || undefined,
+            filterAnnouncementCode?.trim() || undefined
         );
     };
 
@@ -304,6 +309,7 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
         setFilterDriverName('');
         setFilterCreatorName('');
         setFilterVehicleCode('');
+        setFilterAnnouncementCode('');
         setCurrentPage(1);
         fetchHistoryData(undefined, undefined, undefined, undefined, undefined, activeLine, 1, itemsPerPage);
     };
@@ -320,7 +326,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             newPage,
             itemsPerPage,
             filterLoadingDate?.trim() || undefined,
-            filterVehicleCode?.trim() || undefined
+            filterVehicleCode?.trim() || undefined,
+            filterAnnouncementCode?.trim() || undefined
         );
     };
     
@@ -337,7 +344,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             1,
             newLimit,
             filterLoadingDate?.trim() || undefined,
-            filterVehicleCode?.trim() || undefined
+            filterVehicleCode?.trim() || undefined,
+            filterAnnouncementCode?.trim() || undefined
         );
     };
 
@@ -368,6 +376,8 @@ const FreightHistoryContainer: React.FC<{ currentUser: User }> = ({ currentUser 
             setFilterCreatorName={setFilterCreatorName}
             filterVehicleCode={filterVehicleCode}
             setFilterVehicleCode={setFilterVehicleCode}
+            filterAnnouncementCode={filterAnnouncementCode}
+            setFilterAnnouncementCode={setFilterAnnouncementCode}
             onSearch={handleSearch}
             onClearFilters={handleClearFilters}
             currentPage={currentPage}
