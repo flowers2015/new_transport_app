@@ -5,24 +5,7 @@ import { getApiUrl } from '../utils/apiConfig';
 import { parseFreightApiErrorMessage, isFreightIntakeLockedError, fetchFreightIntakeLocks, lineTypeToIntakeLockKey, FREIGHT_INTAKE_LOCK_MESSAGE } from '../utils/freightIntakeLock';
 import { useRealtimeUpdates } from '../hooks/useRealtimeUpdates';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
-import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem, normalizeTonnageKg } from '../utils/freightDisplay';
-
-const PLANNING_STATUS_MAP: Record<string, FreightAnnouncementStatus> = {
-    Draft: FreightAnnouncementStatus.Draft,
-    PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
-    Rejected: FreightAnnouncementStatus.Rejected,
-    PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
-    PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
-    Assigned: FreightAnnouncementStatus.Assigned,
-    InTransit: FreightAnnouncementStatus.InTransit,
-    Finalized: FreightAnnouncementStatus.Finalized,
-    Cancelled: FreightAnnouncementStatus.Cancelled,
-    ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
-    Leftover: FreightAnnouncementStatus.Leftover,
-    ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
-    ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
-    Archived: FreightAnnouncementStatus.Archived,
-};
+import { applyIceCreamDisplayOrderUpdates, IceCreamDisplayOrderItem, freightStatusToFrontend, lineTypeToFrontend, normalizeTonnageKg } from '../utils/freightDisplay';
 
 /** نرمال‌سازی از API یا payload realtime — بدون refetch کامل */
 function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
@@ -37,8 +20,8 @@ function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
             }
             return new Date(raw || Date.now());
         })(),
-        lineType: a.line_type || a.lineType,
-        status: PLANNING_STATUS_MAP[a.status] || a.status,
+        lineType: lineTypeToFrontend(a.line_type || a.lineType) as any,
+        status: freightStatusToFrontend(a.status) as any,
         cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
         vehicleType: a.vehicle_type || a.vehicleType || '',
         deliveryDate: a.delivery_date || a.deliveryDate || null,
@@ -69,7 +52,8 @@ function normalizePlanningAnnouncement(a: any): FreightAnnouncement {
         announcementWeekDay: a.announcement_week_day || a.announcementWeekDay || undefined,
         creator_full_name: a.creator_full_name || a.creatorFullName,
         creator_username: a.creator_username || a.creatorUsername,
-        creator_user_id: a.creator_user_id || a.creatorUserId,
+        creator_user_id: a.creator_user_id || a.creatorUserId || a.created_by_user_id || a.createdByUserId,
+        createdByUserId: a.created_by_user_id || a.createdByUserId || a.creator_user_id || a.creatorUserId,
         destinations: Array.isArray(a.destinations)
             ? a.destinations.map((d: any) => ({
                   id: d.id,
@@ -292,10 +276,16 @@ const FreightPlanningContainer: React.FC<{ currentUser: User }> = ({ currentUser
                     return prev.map((a, i) => (i === index ? { ...prev[index], ...incoming } : a));
                 }
 
+                const patch: any = { ...data };
+                if (patch.status != null) {
+                    patch.status = freightStatusToFrontend(patch.status);
+                }
+                if (patch.lineType != null || patch.line_type != null) {
+                    patch.lineType = lineTypeToFrontend(patch.lineType || patch.line_type);
+                }
                 return applyOptimisticUpdate(prev, announcementId, {
-                    status: data.status as FreightAnnouncementStatus,
-                    assignmentType: data.assignmentType,
-                    ...data,
+                    assignmentType: patch.assignmentType,
+                    ...patch,
                 });
             });
         },

@@ -48,6 +48,75 @@ let usersNameColumnCache = null;
 let hasIsReannouncementColCache = null;
 let destinationSortOrderColumnCache = null;
 
+async function resolveUsersDisplayNameColumn() {
+  if (usersNameColumnCache) return usersNameColumnCache;
+  try {
+    const columnCheck = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'users'
+        AND column_name IN ('full_name', 'name')
+    `);
+    const hasFullName = columnCheck.rows.some((r) => r.column_name === 'full_name');
+    const hasName = columnCheck.rows.some((r) => r.column_name === 'name');
+    usersNameColumnCache = hasFullName ? 'full_name' : hasName ? 'name' : 'username';
+  } catch (_) {
+    usersNameColumnCache = 'username';
+  }
+  return usersNameColumnCache;
+}
+
+async function fetchDestinationsWithCreators(clientOrPool, announcementId) {
+  const db = clientOrPool || pool;
+  const nameColumn = await resolveUsersDisplayNameColumn();
+  const hasOrig = await hasDestinationOriginalCreatorColumn(db);
+  if (hasOrig) {
+    const destResult = await db.query(
+      `SELECT
+         d.*,
+         u_orig.id AS original_creator_user_id,
+         u_orig.${nameColumn} AS original_creator_full_name,
+         u_orig.username AS original_creator_username
+       FROM freight_destinations d
+       LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
+       WHERE d.freight_announcement_id = $1
+       ORDER BY COALESCE(d.sort_order, 999999) ASC, d.created_at ASC`,
+      [announcementId]
+    );
+    return destResult.rows;
+  }
+  const destResult = await db.query(
+    `SELECT *
+     FROM freight_destinations
+     WHERE freight_announcement_id = $1
+     ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
+    [announcementId]
+  );
+  return destResult.rows;
+}
+
+async function attachAnnouncementCreatorFields(clientOrPool, announcement) {
+  if (!announcement) return announcement;
+  const nameColumn = await resolveUsersDisplayNameColumn();
+  const creatorId = announcement.created_by_user_id;
+  if (!creatorId) {
+    announcement.creator_user_id = announcement.creator_user_id || null;
+    return announcement;
+  }
+  const db = clientOrPool || pool;
+  const { rows } = await db.query(
+    `SELECT id, ${nameColumn} AS creator_full_name, username AS creator_username
+     FROM users WHERE id = $1`,
+    [creatorId]
+  );
+  if (rows[0]) {
+    announcement.creator_user_id = rows[0].id;
+    announcement.creator_full_name = rows[0].creator_full_name;
+    announcement.creator_username = rows[0].creator_username;
+  }
+  return announcement;
+}
+
 function resolveActingUserId(user) {
   return user?.userId || user?.id || null;
 }
@@ -227,6 +296,43 @@ function normalizeFreightLineTypeKey(lineType) {
   if (lineType === 'پاستوریزه' || lineType === 'Dairy') return 'Dairy';
   if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') return 'Ambient';
   return lineType;
+}
+
+function normalizeFreightAnnouncementStatus(status) {
+  if (status == null || status === '') return status;
+  const map = {
+    Draft: 'Draft',
+    'پیش‌نویس': 'Draft',
+    PendingManagerApproval: 'PendingManagerApproval',
+    'در انتظار تایید مدیر': 'PendingManagerApproval',
+    Rejected: 'Rejected',
+    'رد شده': 'Rejected',
+    PendingPersonalAssignment: 'PendingPersonalAssignment',
+    'در انتظار تخصیص (شخصی)': 'PendingPersonalAssignment',
+    PendingCompanyAssignment: 'PendingCompanyAssignment',
+    'در انتظار تخصیص (شرکت)': 'PendingCompanyAssignment',
+    Assigned: 'Assigned',
+    'تخصیص یافته': 'Assigned',
+    InTransit: 'InTransit',
+    'در حال حمل': 'InTransit',
+    Finalized: 'Finalized',
+    'نهایی شده': 'Finalized',
+    'تکمیل شده': 'Finalized',
+    Cancelled: 'Cancelled',
+    'لغو شده': 'Cancelled',
+    ReAnnounced: 'ReAnnounced',
+    Reannounced: 'ReAnnounced',
+    'اعلام مجدد شده': 'ReAnnounced',
+    Leftover: 'Leftover',
+    'بار مانده': 'Leftover',
+    ReturnedToCreator: 'ReturnedToCreator',
+    'برگشت به اعلام‌کننده': 'ReturnedToCreator',
+    ChangeRequested: 'ChangeRequested',
+    'درخواست تغییر': 'ChangeRequested',
+    Archived: 'Archived',
+    'بایگانی شده': 'Archived',
+  };
+  return map[status] || status;
 }
 
 function lineTypeSqlAliases(lineType) {
@@ -664,7 +770,7 @@ async function syncAnnouncementAggregatesFromDestinations(client, announcementId
     await client.query(
       `UPDATE freight_announcements
        SET created_by_user_id = $1, updated_at = NOW()
-       WHERE id = $2`,
+       WHERE id = $2 AND created_by_user_id IS NULL`,
       [rows[0].creator_id, announcementId]
     );
   }
@@ -916,7 +1022,7 @@ async function upsertFreightDestinations(client, announcementId, destinations, o
     ? String(options.announcementCreatorUserId)
     : '';
   const protectOthers = !!options.protectOthersDestinations;
-  const newDestOwnerUserId = editorUserId || announcementCreatorUserId || null;
+  const newDestOwnerUserId = announcementCreatorUserId || editorUserId || null;
 
   const includeOriginalCreator = await hasDestinationOriginalCreatorColumn(client);
   const hasSortOrder = await ensureDestinationSortOrderColumn();
@@ -2320,11 +2426,11 @@ async function updateFreightAnnouncement(req, res) {
       }
 
       // کارشناس فروش: ارجاع مثل تایید مدیر → مستقیم صف شخصی/شرکتی
-      let effectiveStatus = status;
+      let effectiveStatus = normalizeFreightAnnouncementStatus(status);
       let effectiveAssignmentType = assignmentType;
       if (
         isSalesExpertRole(req.user?.role) &&
-        status === 'PendingManagerApproval'
+        effectiveStatus === 'PendingManagerApproval'
       ) {
         const queue = resolveAssignmentQueueFromLineType(lineType || oldRecord.line_type);
         effectiveStatus = queue.status;
@@ -2782,6 +2888,8 @@ async function updateFreightAnnouncement(req, res) {
         newDestinations = destAfter.rows;
       }
 
+      await syncAnnouncementAggregatesFromDestinations(client, id);
+
       // 4. گرفتن رکورد جدید (برای مقایسه)
       const newRecordQuery = await client.query('SELECT * FROM freight_announcements WHERE id = $1', [id]);
       const newRecord = newRecordQuery.rows[0];
@@ -2894,7 +3002,10 @@ async function updateFreightAnnouncement(req, res) {
           'PendingCompanyAssignment',
         ];
         if (
-          (oldRecord.status === 'Draft' || oldRecord.status === 'Leftover') &&
+          (oldRecord.status === 'Draft' ||
+            oldRecord.status === 'پیش‌نویس' ||
+            oldRecord.status === 'Leftover' ||
+            oldRecord.status === 'بار مانده') &&
           routedStatuses.includes(newRecord.status)
         ) {
           // فقط تغییر وضعیت را نگه دار، بقیه را حذف کن
@@ -3004,13 +3115,8 @@ async function updateFreightAnnouncement(req, res) {
         updated.delivery_date = normalizeJalaliDate(updated.delivery_date);
       }
       
-      const destRows = await pool.query(
-        `SELECT * FROM freight_destinations
-         WHERE freight_announcement_id = $1
-         ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
-        [id]
-      );
-      updated.destinations = destRows.rows;
+      updated.destinations = await fetchDestinationsWithCreators(pool, id);
+      await attachAnnouncementCreatorFields(pool, updated);
 
       // ارسال real-time notification برای update (با فیلدهای کامل تا UI فوری عوض شود)
       try {
@@ -3230,7 +3336,7 @@ async function createFreightAnnouncement(req, res) {
       announcementCode,
       normalizedLoadingDate,
       normalizedDeliveryDate,
-      lineType,
+      normalizeFreightLineTypeKey(lineType) || lineType,
       status,
       cargoValue || 0,
       vehicleType,
@@ -3254,7 +3360,7 @@ async function createFreightAnnouncement(req, res) {
     // Insert destinations if provided
     if (Array.isArray(destinations) && destinations.length > 0) {
       // Detect unload_time column existence for flexible insert
-      await insertFreightDestinations(pool, id, destinations);
+      await insertFreightDestinations(pool, id, destinations, userId || null);
     }
 
     // Fetch the created record with destinations for response
@@ -3295,11 +3401,8 @@ async function createFreightAnnouncement(req, res) {
       created.delivery_date = normalizeJalaliDate(created.delivery_date);
     }
     
-    const destRows = await pool.query(
-      'SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ORDER BY created_at ASC',
-      [id]
-    );
-    created.destinations = destRows.rows;
+    created.destinations = await fetchDestinationsWithCreators(pool, id);
+    await attachAnnouncementCreatorFields(pool, created);
 
     // Attach optional UI fields if supplied to avoid null reference on client
     created.origin_city = originCity || null;

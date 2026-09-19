@@ -12,7 +12,7 @@ import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import FreightHistoryDialog from './FreightHistoryDialog';
 import { generateUUID } from '../utils/uuid';
-import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDestinationRepCompactSegment, formatTonnageKgFromRaw, formatTotalTonnageFromDestinations, ANNOUNCEMENT_WEEK_DAYS, normalizeAnnouncementWeekDay, normalizeTonnageKg, sanitizeNumericInputString } from '../utils/freightDisplay';
+import { formatLoadingType, formatRepresentativeType, getDestinationCitiesLabel, getAnnouncementCreatorLabel, getRepresentativeNameLabel, localizeExcelValue, resolveDestinationRepTypeLabel, sortByIceCreamDisplayOrder, buildIceCreamDisplayOrderPayload, DAIRY_DESTINATION_PRODUCT_OPTIONS, AMBIENT_DESTINATION_PRODUCT_OPTIONS, formatDestinationBrandTypeLabel, formatDestinationBrandLabel, formatDestinationProductsLabel, formatDestinationRepCompactSegment, formatTonnageKgFromRaw, formatTotalTonnageFromDestinations, ANNOUNCEMENT_WEEK_DAYS, normalizeAnnouncementWeekDay, normalizeTonnageKg, sanitizeNumericInputString, matchesFreightLine, freightStatusToFrontend } from '../utils/freightDisplay';
 import CargoValueInput from './CargoValueInput';
 import CityAutocomplete from './CityAutocomplete';
 import IceCreamDisplayOrderControls from './IceCreamDisplayOrderControls';
@@ -361,6 +361,20 @@ const isPlanningManagerUser = (user?: User): boolean => {
         user.role === 'admin' ||
         user.role === 'ادمین'
     );
+};
+
+const isPlanningBulkSelectable = (ann: FreightAnnouncement, currentUser?: User): boolean => {
+    const status = freightStatusToFrontend(ann.status);
+    if (
+        status === FreightAnnouncementStatus.Draft ||
+        status === FreightAnnouncementStatus.Rejected ||
+        status === FreightAnnouncementStatus.Leftover ||
+        status === FreightAnnouncementStatus.ReturnedToCreator ||
+        status === FreightAnnouncementStatus.ChangeRequested
+    ) {
+        return true;
+    }
+    return status === FreightAnnouncementStatus.PendingManagerApproval && isPlanningManagerUser(currentUser);
 };
 
 const isPendingManagerApprovalStatus = (ann: FreightAnnouncement): boolean => {
@@ -818,23 +832,21 @@ const columnsConfig = (props: {
         { header: '', width: '40px', display: () => true, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const { selectedIds = [], onToggleSelect } = props;
             const isSelected = selectedIds.includes(ann.id);
-            // Draft، Rejected، Leftover و PendingManagerApproval قابل انتخاب هستند
-            // بررسی تطابق با enum و همچنین مقادیر رشته‌ای
-            const statusStr = String(ann.status);
-            const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
-            const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
-            const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
-            const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
-            const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
-            const canSelectPending = isPlanningManagerUser(props?.currentUser);
-            const isSelectable = isDraft || isRejected || isLeftover || isReturned || (isPendingApproval && canSelectPending);
+            const isSelectable = isPlanningBulkSelectable(ann, props?.currentUser);
             return (
                 <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => onToggleSelect?.(ann.id)}
-                    className="cursor-pointer"
+                    onChange={() => {
+                        if (isSelectable) onToggleSelect?.(ann.id);
+                    }}
+                    className="cursor-pointer relative z-10"
                     disabled={!isSelectable}
+                    title={
+                        isSelectable
+                            ? 'انتخاب برای ارجاع گروهی'
+                            : 'این وضعیت برای انتخاب گروهی قابل ارجاع نیست'
+                    }
                 />
             );
         }, accessor: (_: any) => '' },
@@ -875,8 +887,8 @@ const columnsConfig = (props: {
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
-            const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+            const status = freightStatusToFrontend(ann.status);
+            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[status as FreightAnnouncementStatus]}`}>{status}</span>;
         }},
         { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_vm: string, lt:any) => lt === FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
@@ -900,8 +912,8 @@ const columnsConfig = (props: {
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
-            const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+            const status = freightStatusToFrontend(ann.status);
+            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[status as FreightAnnouncementStatus]}`}>{status}</span>;
         }},
         { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (_:string, lt:any) => lt !== FreightLineType.IceCream, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
@@ -956,8 +968,8 @@ const columnsConfig = (props: {
         { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
         { header: 'توضیحات', accessor: 'notes', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement) => ann.notes || '-' },
         { header: 'وضعیت', accessor: 'status', width: '120px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement, idx: number, props: any) => {
-            const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+            const status = freightStatusToFrontend(ann.status);
+            return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[status as FreightAnnouncementStatus]}`}>{status}</span>;
         }},
         { header: 'علت رد', accessor: 'rejectionReason', width: '200px', display: (vm: string, lt:any) => vm === 'compact' && lt === FreightLineType.Dairy, render: (ann: FreightAnnouncement, idx: number, props: any) => {
             const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
@@ -1469,20 +1481,12 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         }
         try {
             // فیلتر بر اساس lineType فعلی (پاستوریزه، بستنی، لبنیات-فروتلند)
-            const currentLineTypeAnnouncements = announcements.filter(ann => ann.lineType === activeTab);
+            const currentLineTypeAnnouncements = announcements.filter(ann => matchesFreightLine(ann, activeTab));
             console.log('🔍 [handleBulkSendForApproval] Current lineType:', activeTab, 'Total announcements:', currentLineTypeAnnouncements.length);
             
             const selectedAnnouncements = currentLineTypeAnnouncements.filter(ann => {
                 if (!selectedIds.includes(ann.id)) return false;
-                const statusStr = String(ann.status);
-                const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
-                const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
-                const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
-                const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
-                const isPendingApproval = ann.status === FreightAnnouncementStatus.PendingManagerApproval || statusStr === 'در انتظار تایید مدیر' || statusStr === 'PendingManagerApproval';
-                const isSelectable = isDraft || isRejected || isLeftover || isReturned || isPendingApproval;
-                console.log('🔍 [handleBulkSendForApproval] Announcement:', ann.announcementCode, 'lineType:', ann.lineType, 'status:', ann.status, 'isSelectable:', isSelectable);
-                return isSelectable;
+                return isPlanningBulkSelectable(ann, currentUser);
             });
             
             console.log('🔍 [handleBulkSendForApproval] Selected announcements:', selectedAnnouncements.length, selectedAnnouncements.map(a => ({ code: a.announcementCode, lineType: a.lineType, status: a.status })));
@@ -1502,12 +1506,14 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 : [];
 
             const announcementsToSend = selectedAnnouncements.filter(ann => {
-                const statusStr = String(ann.status);
-                const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
-                const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
-                const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
-                const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
-                return isDraft || isRejected || isLeftover || isReturned;
+                const status = freightStatusToFrontend(ann.status);
+                return (
+                    status === FreightAnnouncementStatus.Draft ||
+                    status === FreightAnnouncementStatus.Rejected ||
+                    status === FreightAnnouncementStatus.Leftover ||
+                    status === FreightAnnouncementStatus.ReturnedToCreator ||
+                    status === FreightAnnouncementStatus.ChangeRequested
+                );
             });
 
             const skippedPendingCount = canApprove
@@ -1745,13 +1751,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     accessor: 'status',
                     width: '110px',
                     render: (ann: FreightAnnouncement) => {
-                        const status =
-                            ann.status === FreightAnnouncementStatus.ChangeRequested
-                                ? 'درخواست تغییر'
-                                : ann.status;
+                        const status = freightStatusToFrontend(ann.status);
                         return (
                             <span
-                                className={`inline-block max-w-full px-1.5 py-0.5 rounded-md text-[10px] font-semibold leading-snug whitespace-normal break-words ${statusStyles[ann.status]}`}
+                                className={`inline-block max-w-full px-1.5 py-0.5 rounded-md text-[10px] font-semibold leading-snug whitespace-normal break-words ${statusStyles[status as FreightAnnouncementStatus]}`}
                             >
                                 {status}
                             </span>
@@ -1810,8 +1813,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
-                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+                    const status = freightStatusToFrontend(ann.status);
+                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[status as FreightAnnouncementStatus]}`}>{status}</span>;
                 }},
                 { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
                     const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
@@ -1892,13 +1895,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     accessor: 'status',
                     width: '120px',
                     render: (ann: FreightAnnouncement) => {
-                        const status =
-                            ann.status === FreightAnnouncementStatus.ChangeRequested
-                                ? 'درخواست تغییر'
-                                : ann.status;
+                        const status = freightStatusToFrontend(ann.status);
                         return (
                             <span
-                                className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}
+                                className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[status as FreightAnnouncementStatus]}`}
                             >
                                 {status}
                             </span>
@@ -1946,8 +1946,8 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 { header: 'تاریخ اعلام بار', accessor: (ann: FreightAnnouncement) => formatJalaliDateTime(ann.createdAt), width: '130px', render: (ann: FreightAnnouncement) => <span className="whitespace-nowrap">{formatJalaliDateTime(ann.createdAt)}</span> },
                 { header: 'توضیحات', accessor: 'notes', width: '200px', render: (ann: FreightAnnouncement) => ann.notes || '-' },
                 { header: 'وضعیت', accessor: 'status', width: '120px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
-                    const status = ann.status === FreightAnnouncementStatus.ChangeRequested ? 'درخواست تغییر' : ann.status;
-                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[ann.status]}`}>{status}</span>;
+                    const status = freightStatusToFrontend(ann.status);
+                    return <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyles[status as FreightAnnouncementStatus]}`}>{status}</span>;
                 }},
                 { header: 'علت رد', accessor: 'rejectionReason', width: '200px', render: (ann: FreightAnnouncement, idx: number, props: any) => {
                     const changeReq = (props.changeRequests || []).find((cr: any) => cr.announcement_id === ann.id || cr.freight_announcement_id === ann.id);
@@ -1984,7 +1984,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         let data = announcements;
 
         // فیلتر بر اساس لاین فعلی
-        data = data.filter(a => a.lineType === activeTab);
+        data = data.filter(a => matchesFreightLine(a, activeTab));
         
         // فیلتر بر اساس مجوزهای کاربر (برای مدیران و کارمندان برنامه‌ریزی)
         if (currentUser && currentUser.role !== UserRole.Admin) {
@@ -1995,7 +1995,9 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
             
             if (isManager || isEmployee) {
                 // فقط بارهای لاین‌های مجاز را نمایش بده
-                data = data.filter(a => allowedLineTypes.includes(a.lineType as any));
+                data = data.filter(a =>
+                    allowedLineTypes.some((lt) => matchesFreightLine(a, lt))
+                );
             }
         }
         
@@ -2222,16 +2224,10 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
     );
 
     // Helper function to check if an announcement is selectable
-    const isAnnouncementSelectable = useCallback((ann: FreightAnnouncement) => {
-        const statusStr = String(ann.status);
-        const isDraft = ann.status === FreightAnnouncementStatus.Draft || statusStr === 'پیش‌نویس' || statusStr === 'Draft';
-        const isRejected = ann.status === FreightAnnouncementStatus.Rejected || statusStr === 'رد شده' || statusStr === 'Rejected';
-        const isLeftover = ann.status === FreightAnnouncementStatus.Leftover || statusStr === 'بار مانده' || statusStr === 'Leftover';
-        const isReturned = ann.status === FreightAnnouncementStatus.ReturnedToCreator || statusStr === 'برگشت به اعلام‌کننده' || statusStr === 'ReturnedToCreator';
-        const isPendingApproval = isPendingManagerApprovalStatus(ann);
-        const canSelectPending = isPlanningManagerUser(currentUser);
-        return isDraft || isRejected || isLeftover || isReturned || (isPendingApproval && canSelectPending);
-    }, [currentUser]);
+    const isAnnouncementSelectable = useCallback(
+        (ann: FreightAnnouncement) => isPlanningBulkSelectable(ann, currentUser),
+        [currentUser]
+    );
 
     const handleSelectAll = useCallback(() => {
         console.log('[handleSelectAll] Total filteredAnnouncements:', filteredAnnouncements.length);
@@ -2495,7 +2491,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                     <tr className="print:hidden">
                                         {visibleColumns.map((col) => (
                                             <th key={`${col.header}-filter`} className={`p-1 font-normal ${getDairyCompactColClass(col.header)}`}>
-                                                {'accessor' in col && col.accessor ? (
+                                                {col.header !== '' && 'accessor' in col && col.accessor ? (
                                                     <input
                                                     type="text"
                                                     placeholder="فیلتر..."
@@ -2535,14 +2531,18 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                 <>
                                                     {/* Checkbox column */}
                                                     <td className="p-2 text-center border">
-                                                        {isAnnouncementSelectable(ann) && (
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedIds.includes(ann.id)}
-                                                                onChange={() => handleToggleSelect(ann.id)}
-                                                                className="cursor-pointer"
-                                                            />
-                                                        )}
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedIds.includes(ann.id)}
+                                                            onChange={() => handleToggleSelect(ann.id)}
+                                                            className="cursor-pointer"
+                                                            disabled={!isAnnouncementSelectable(ann)}
+                                                            title={
+                                                                isAnnouncementSelectable(ann)
+                                                                    ? 'انتخاب برای ارجاع گروهی'
+                                                                    : 'این وضعیت برای انتخاب گروهی قابل ارجاع نیست'
+                                                            }
+                                                        />
                                                     </td>
                                                     {commonCols.map(col => <td key={col.header} className="p-2 text-center border">{col.render(ann, idx, { ...props, ...tableCellProps }, activeTab as FreightLineType)}</td>)}
                                                     {[0, 1, 2, 3].map(i => {
@@ -2633,10 +2633,20 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     overflow-wrap: anywhere;
                     word-break: break-word;
                 }
-                .planning-dairy-compact .col-checkbox { width: 2.25rem; max-width: 2.25rem; }
+                .planning-dairy-compact .col-checkbox {
+                    width: 2.5rem;
+                    max-width: 2.5rem;
+                    overflow: visible;
+                    position: relative;
+                    z-index: 2;
+                }
                 .planning-dairy-compact .col-operations {
                     width: 11%;
+                    max-width: none;
+                    overflow: visible;
                     vertical-align: middle;
+                    position: relative;
+                    z-index: 2;
                 }
                 .planning-dairy-compact .col-operations > div {
                     display: flex;

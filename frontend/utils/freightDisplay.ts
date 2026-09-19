@@ -1320,18 +1320,55 @@ export function buildFreightReferSummary(ann: FreightAnnouncement): string {
     return [vehicle, destCities, tonnagePart, originPart].filter(Boolean).join(' — ');
 }
 
+export function lineTypeToFrontend(line: unknown): FreightLineType | string {
+    const v = String(line || '').trim();
+    if (v === FreightLineType.IceCream || v === 'IceCream' || v === 'بستنی') return FreightLineType.IceCream;
+    if (v === FreightLineType.Dairy || v === 'Dairy' || v === 'پاستوریزه') return FreightLineType.Dairy;
+    if (v === FreightLineType.Ambient || v === 'Ambient' || v === 'لبنیات-فروتلند') return FreightLineType.Ambient;
+    return v;
+}
+
+export function freightStatusToFrontend(status: unknown): FreightAnnouncementStatus | string {
+    const v = String(status || '').trim();
+    const map: Record<string, FreightAnnouncementStatus> = {
+        Draft: FreightAnnouncementStatus.Draft,
+        'پیش‌نویس': FreightAnnouncementStatus.Draft,
+        PendingManagerApproval: FreightAnnouncementStatus.PendingManagerApproval,
+        'در انتظار تایید مدیر': FreightAnnouncementStatus.PendingManagerApproval,
+        Rejected: FreightAnnouncementStatus.Rejected,
+        'رد شده': FreightAnnouncementStatus.Rejected,
+        PendingPersonalAssignment: FreightAnnouncementStatus.PendingPersonalAssignment,
+        'در انتظار تخصیص (شخصی)': FreightAnnouncementStatus.PendingPersonalAssignment,
+        PendingCompanyAssignment: FreightAnnouncementStatus.PendingCompanyAssignment,
+        'در انتظار تخصیص (شرکت)': FreightAnnouncementStatus.PendingCompanyAssignment,
+        Assigned: FreightAnnouncementStatus.Assigned,
+        'تخصیص یافته': FreightAnnouncementStatus.Assigned,
+        InTransit: FreightAnnouncementStatus.InTransit,
+        'در حال حمل': FreightAnnouncementStatus.InTransit,
+        Finalized: FreightAnnouncementStatus.Finalized,
+        'نهایی شده': FreightAnnouncementStatus.Finalized,
+        'تکمیل شده': FreightAnnouncementStatus.Finalized,
+        Cancelled: FreightAnnouncementStatus.Cancelled,
+        'لغو شده': FreightAnnouncementStatus.Cancelled,
+        ReAnnounced: FreightAnnouncementStatus.ReAnnounced,
+        Reannounced: FreightAnnouncementStatus.ReAnnounced,
+        'اعلام مجدد شده': FreightAnnouncementStatus.ReAnnounced,
+        Leftover: FreightAnnouncementStatus.Leftover,
+        'بار مانده': FreightAnnouncementStatus.Leftover,
+        ReturnedToCreator: FreightAnnouncementStatus.ReturnedToCreator,
+        'برگشت به اعلام‌کننده': FreightAnnouncementStatus.ReturnedToCreator,
+        ChangeRequested: FreightAnnouncementStatus.ChangeRequested,
+        'درخواست تغییر': FreightAnnouncementStatus.ChangeRequested,
+        Archived: FreightAnnouncementStatus.Archived,
+        'بایگانی شده': FreightAnnouncementStatus.Archived,
+    };
+    return map[v] || v;
+}
+
 export function matchesFreightLine(ann: FreightAnnouncement, line: FreightLineType): boolean {
-    const lt = ann.lineType as string;
-    if (line === FreightLineType.IceCream) {
-        return lt === FreightLineType.IceCream || lt === 'IceCream' || lt === 'بستنی';
-    }
-    if (line === FreightLineType.Dairy) {
-        return lt === FreightLineType.Dairy || lt === 'Dairy' || lt === 'پاستوریزه';
-    }
-    if (line === FreightLineType.Ambient) {
-        return lt === FreightLineType.Ambient || lt === 'Ambient' || lt === 'لبنیات-فروتلند';
-    }
-    return lt === line;
+    const lt = String(ann.lineType || '');
+    const normalized = lineTypeToFrontend(lt);
+    return normalized === line;
 }
 
 export function lineTypeToBackend(line: FreightLineType | string): string {

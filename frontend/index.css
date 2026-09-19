@@ -40,7 +40,7 @@ body {
 
 /* برنامه‌ریزی ارسال بار: هدر + ردیف فیلتر */
 .freight-sticky-table-wrap[data-sticky-rows='planning-compact'] {
-  --freight-sticky-h1: 2.35rem;
+  --freight-sticky-h1: 3.75rem;
 }
 
 /* برنامه‌ریزی کامل: هدر گروه‌بندی + زیرستون مقصد + فیلتر */
@@ -62,6 +62,13 @@ body {
   z-index: 12;
   background-color: #f9fafb;
   box-shadow: 0 1px 0 #e5e7eb;
+  pointer-events: none;
+}
+
+.freight-sticky-table-wrap table thead th input,
+.freight-sticky-table-wrap table thead th button,
+.freight-sticky-table-wrap table thead th select {
+  pointer-events: auto;
 }
 
 .freight-sticky-table-wrap table thead tr:first-child th {
