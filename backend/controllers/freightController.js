@@ -36,6 +36,19 @@ const {
   warehouseMatchesAnnouncement,
   isWarehouseKeeperRole,
 } = require('../utils/warehouseLoading');
+const {
+  DAIRY_LINE_TYPES_SQL,
+  normalizeFreightLineTypeKey,
+  normalizeFreightAnnouncementStatus,
+  lineTypeSqlAliases,
+  allLineTypeSqlValues,
+  formatFreightLineTypeFa,
+  isDairyLineTypeValue,
+  isDairyOrAmbientLineType,
+  isPlannerFullEditStatus,
+  resolveAssignmentQueueFromLineType,
+  statusMatchesAny,
+} = require('../utils/freightEnums');
 
 const CHANGE_REQUESTED_STATUSES = ['ChangeRequested', 'درخواست تغییر'];
 const ARCHIVED_STATUS_CANDIDATES = ['Archived', 'بایگانی شده'];
@@ -178,7 +191,6 @@ const PLANNING_EMPLOYEE_ROLES = new Set([
   'planning_employee',
 ]);
 
-const DAIRY_LINE_TYPES_SQL = "('پاستوریزه', 'Dairy')";
 
 function isCreatePermissionRole(role) {
   return CREATE_PERMISSION_ROLES.has(role);
@@ -203,10 +215,6 @@ const PLANNING_MANAGER_ROLES = new Set([
 
 function isPlanningManagerRole(role) {
   return PLANNING_MANAGER_ROLES.has(role);
-}
-
-function isDairyLineTypeValue(lineType) {
-  return lineType === 'Dairy' || lineType === 'پاستوریزه';
 }
 
 /** شیت عملیاتی پاستوریزه — جدا از تاریخ بارگیری */
@@ -246,41 +254,20 @@ function resolveAnnouncementWeekDayForLine(lineType, value, { required = false }
   return normalized || null;
 }
 
-/** وضعیت‌هایی که کارمند/کارشناس هنوز ویرایش کامل دارند */
-function isPlannerFullEditStatus(status) {
-  return [
-    'Draft',
-    'پیش‌نویس',
-    'Rejected',
-    'رد شده',
-    'ReturnedToCreator',
-    'برگشت به اعلام‌کننده',
-    'Leftover',
-    'بار مانده',
-    'ChangeRequested',
-    'درخواست تغییر',
-  ].includes(status);
-}
-
 /** بعد از ارجاع تا قبل از اتمام تخصیص — فقط LIS */
 function isDairyLisOnlyWindowStatus(status) {
-  return [
+  return statusMatchesAny(status, [
     'PendingManagerApproval',
-    'در انتظار تایید مدیر',
     'PendingPersonalAssignment',
-    'در انتظار تخصیص (شخصی)',
     'PendingCompanyAssignment',
-    'در انتظار تخصیص (شرکت)',
     'Assigned',
-    'تخصیص یافته',
-  ].includes(status);
+  ]);
 }
 
 function isAssignmentFinalizedRecord(record) {
   if (!record) return false;
   if (record.assignment_finalized_at) return true;
-  const status = record.status;
-  return status === 'Finalized' || status === 'نهایی شده' || status === 'InTransit' || status === 'در حال حمل';
+  return statusMatchesAny(record.status, ['Finalized', 'InTransit']);
 }
 
 async function keeperOwnsAnnouncement(userId, announcement) {
@@ -314,74 +301,6 @@ function mapDestRowsForRealtime(rows) {
     cargoValue: d.cargo_value,
     originalCreatedByUserId: d.original_created_by_user_id,
   }));
-}
-
-function normalizeFreightLineTypeKey(lineType) {
-  if (lineType === 'بستنی' || lineType === 'IceCream') return 'IceCream';
-  if (lineType === 'پاستوریزه' || lineType === 'Dairy') return 'Dairy';
-  if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') return 'Ambient';
-  return lineType;
-}
-
-function normalizeFreightAnnouncementStatus(status) {
-  if (status == null || status === '') return status;
-  const map = {
-    Draft: 'Draft',
-    'پیش‌نویس': 'Draft',
-    PendingManagerApproval: 'PendingManagerApproval',
-    'در انتظار تایید مدیر': 'PendingManagerApproval',
-    Rejected: 'Rejected',
-    'رد شده': 'Rejected',
-    PendingPersonalAssignment: 'PendingPersonalAssignment',
-    'در انتظار تخصیص (شخصی)': 'PendingPersonalAssignment',
-    PendingCompanyAssignment: 'PendingCompanyAssignment',
-    'در انتظار تخصیص (شرکت)': 'PendingCompanyAssignment',
-    Assigned: 'Assigned',
-    'تخصیص یافته': 'Assigned',
-    InTransit: 'InTransit',
-    'در حال حمل': 'InTransit',
-    Finalized: 'Finalized',
-    'نهایی شده': 'Finalized',
-    'تکمیل شده': 'Finalized',
-    Cancelled: 'Cancelled',
-    'لغو شده': 'Cancelled',
-    ReAnnounced: 'ReAnnounced',
-    Reannounced: 'ReAnnounced',
-    'اعلام مجدد شده': 'ReAnnounced',
-    Leftover: 'Leftover',
-    'بار مانده': 'Leftover',
-    ReturnedToCreator: 'ReturnedToCreator',
-    'برگشت به اعلام‌کننده': 'ReturnedToCreator',
-    ChangeRequested: 'ChangeRequested',
-    'درخواست تغییر': 'ChangeRequested',
-    Archived: 'Archived',
-    'بایگانی شده': 'Archived',
-  };
-  return map[status] || status;
-}
-
-function lineTypeSqlAliases(lineType) {
-  const key = normalizeFreightLineTypeKey(lineType);
-  if (key === 'IceCream') return ['IceCream', 'بستنی'];
-  if (key === 'Dairy') return ['Dairy', 'پاستوریزه'];
-  if (key === 'Ambient') return ['Ambient', 'لبنیات-فروتلند'];
-  const raw = String(lineType || '').trim();
-  return raw ? [raw] : [];
-}
-
-/** همان منطق تایید مدیر: بستنی→شرکتی، پاستوریزه/محیطی→شخصی */
-function resolveAssignmentQueueFromLineType(lineType) {
-  const iceCreamMatches = ['IceCream', 'بستنی'];
-  const dairyMatches = ['Dairy', 'پاستوریزه'];
-  const ambientMatches = ['Ambient', 'لبنیات-فروتلند'];
-
-  if (iceCreamMatches.includes(lineType)) {
-    return { status: 'PendingCompanyAssignment', assignmentType: 'company', queueLabel: 'شرکتی' };
-  }
-  if (dairyMatches.includes(lineType) || ambientMatches.includes(lineType)) {
-    return { status: 'PendingPersonalAssignment', assignmentType: 'personal', queueLabel: 'شخصی' };
-  }
-  return { status: 'PendingCompanyAssignment', assignmentType: 'company', queueLabel: 'شرکتی' };
 }
 
 async function assertCreateLinePermission(userId, lineType) {
@@ -1387,6 +1306,217 @@ function calculateMode(values, precision = 2) {
 }
 
 /**
+ * جستجوی محدود مدیریت اعلام بار (ادمین) — بدون بارگذاری کل جدول.
+ * GET /api/freight-announcements?adminSearch=true&announcementCode=...
+ */
+async function getFreightAnnouncementsAdminSearch(req, res) {
+  try {
+    const {
+      date,
+      loadingDate,
+      destination,
+      billOfLading,
+      driverName,
+      creatorName,
+      vehicleCode,
+      lineType,
+      announcementCode,
+    } = req.query;
+
+    const announcementCodeRaw = String(
+      announcementCode || req.query.announcement_code || req.query.code || ''
+    ).trim();
+    const dateRaw = String(date || '').trim();
+    const loadingDateRaw = String(loadingDate || req.query.loading_date || '').trim();
+    const destRaw = String(destination || '').trim();
+    const bolRaw = String(billOfLading || '').trim();
+    const driverRaw = String(driverName || '').trim();
+    const creatorRaw = String(creatorName || '').trim();
+    const vehicleRaw = String(vehicleCode || req.query.vehicle_code || '').trim();
+
+    if (
+      !announcementCodeRaw &&
+      !dateRaw &&
+      !loadingDateRaw &&
+      !destRaw &&
+      !bolRaw &&
+      !driverRaw &&
+      !creatorRaw &&
+      !vehicleRaw
+    ) {
+      return res.json([]);
+    }
+
+    const nameColumn = await resolveUsersDisplayNameColumn();
+    const limitNum = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 200);
+    const faLoadingNorm = sqlJalaliLoadingDate('fa');
+    const fdLoadingNorm = sqlJalaliLoadingDate('fd');
+
+    let query = `
+      SELECT DISTINCT ON (fa.id)
+        fa.*,
+        u_creator.id as creator_user_id,
+        u_creator.${nameColumn} as creator_full_name,
+        u_creator.username as creator_username,
+        COALESCE(NULLIF(TRIM(fa.assigned_driver_name), ''), NULLIF(TRIM(d.name), ''), NULLIF(TRIM(pd.name), '')) as assigned_driver_name,
+        fa.carrier_name,
+        COALESCE(d.mobile, pd.mobile) as resolved_driver_contact,
+        COALESCE(fa.assigned_driver_employee_id, d.employee_id, pd.driver_smart_id) as assigned_driver_employee_id,
+        COALESCE(fa.assigned_vehicle_model, v.model) as assigned_vehicle_model,
+        COALESCE(fa.assigned_vehicle_brand, v.brand) as assigned_vehicle_brand,
+        COALESCE(
+          fa.vehicle_plate,
+          CASE WHEN v.plate_part1 IS NOT NULL
+            THEN CONCAT(v.plate_part1, v.plate_letter, v.plate_part2, '-', v.plate_city_code)
+            ELSE NULL
+          END
+        ) as vehicle_plate,
+        v.plate_part1, v.plate_letter, v.plate_part2, v.plate_city_code
+      FROM freight_announcements fa
+      LEFT JOIN users u_creator ON fa.created_by_user_id = u_creator.id
+      LEFT JOIN LATERAL (
+        SELECT user_name
+        FROM freight_announcement_history
+        WHERE freight_announcement_id = fa.id AND action = 'CREATED'
+        ORDER BY created_at ASC
+        LIMIT 1
+      ) creator_hist ON true
+      LEFT JOIN drivers d ON fa.assigned_driver_id = d.id
+      LEFT JOIN vehicles v ON fa.assigned_vehicle_id = v.id
+      LEFT JOIN personal_drivers pd ON fa.assigned_driver_id = pd.id
+      WHERE fa.status NOT IN ('Reannounced', 'Archived', 'بایگانی شده', 'Cancelled')
+    `;
+    const params = [];
+    let paramIndex = 1;
+
+    if (lineType && String(lineType).trim() && !announcementCodeRaw) {
+      const aliases = lineTypeSqlAliases(lineType);
+      if (aliases.length) {
+        query += ` AND fa.line_type::text = ANY($${paramIndex}::text[])`;
+        params.push(aliases);
+        paramIndex += 1;
+      }
+    }
+
+    if (announcementCodeRaw) {
+      query += ` AND fa.announcement_code ILIKE $${paramIndex}`;
+      params.push(`%${announcementCodeRaw}%`);
+      paramIndex += 1;
+    }
+
+    if (loadingDateRaw) {
+      const loadingNorm = loadingDateRaw.replace(/-/g, '/');
+      query += ` AND (
+        ${faLoadingNorm} LIKE $${paramIndex}
+        OR EXISTS (
+          SELECT 1 FROM freight_destinations fd
+          WHERE fd.freight_announcement_id = fa.id
+            AND ${fdLoadingNorm} LIKE $${paramIndex}
+        )
+      )`;
+      params.push(`%${loadingNorm}%`);
+      paramIndex += 1;
+    }
+
+    if (dateRaw) {
+      const normalizedDate = dateRaw.replace(/\//g, '-');
+      const dateMatch = normalizedDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (dateMatch) {
+        const [, jy, jm, jd] = dateMatch.map(Number);
+        const jalaliDateStr = `${jy}-${String(jm).padStart(2, '0')}-${String(jd).padStart(2, '0')}`;
+        const dayStart = parseJalaliDateString(jalaliDateStr.replace(/-/g, '/'));
+        if (dayStart) {
+          const dayEnd = new Date(dayStart);
+          dayEnd.setDate(dayEnd.getDate() + 1);
+          query += ` AND fa.created_at >= $${paramIndex} AND fa.created_at < $${paramIndex + 1}`;
+          params.push(dayStart, dayEnd);
+          paramIndex += 2;
+        }
+      }
+    }
+
+    if (bolRaw) {
+      query += ` AND fa.bill_of_lading_number ILIKE $${paramIndex}`;
+      params.push(`%${bolRaw}%`);
+      paramIndex += 1;
+    }
+
+    if (driverRaw) {
+      query += ` AND (COALESCE(fa.assigned_driver_name, d.name, pd.name) ILIKE $${paramIndex})`;
+      params.push(`%${driverRaw}%`);
+      paramIndex += 1;
+    }
+
+    if (creatorRaw) {
+      query += ` AND (
+        COALESCE(
+          NULLIF(TRIM(u_creator.${nameColumn}), ''),
+          NULLIF(TRIM(creator_hist.user_name), '')
+        ) ILIKE $${paramIndex}
+        OR u_creator.username ILIKE $${paramIndex}
+      )`;
+      params.push(`%${creatorRaw}%`);
+      paramIndex += 1;
+    }
+
+    if (vehicleRaw) {
+      query += ` AND (
+        COALESCE(v.vehicle_code, '') ILIKE $${paramIndex}
+        OR COALESCE(v.serial_number, '') ILIKE $${paramIndex}
+      )`;
+      params.push(`%${vehicleRaw}%`);
+      paramIndex += 1;
+    }
+
+    if (destRaw) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM freight_destinations fd
+        WHERE fd.freight_announcement_id = fa.id
+          AND fd.city ILIKE $${paramIndex}
+      )`;
+      params.push(`%${destRaw}%`);
+      paramIndex += 1;
+    }
+
+    query += ` ORDER BY fa.id, fa.created_at DESC`;
+    query = `
+      SELECT * FROM (${query}) admin_fa
+      ORDER BY admin_fa.loading_date DESC NULLS LAST, admin_fa.created_at DESC
+      LIMIT $${paramIndex}
+    `;
+    params.push(limitNum);
+
+    const { rows } = await pool.query(query, params);
+    const ids = rows.map((r) => r.id);
+    if (ids.length > 0) {
+      const destResult = await pool.query(
+        `SELECT * FROM freight_destinations
+         WHERE freight_announcement_id = ANY($1)
+         ORDER BY created_at ASC`,
+        [ids]
+      );
+      const byFa = new Map();
+      for (const d of destResult.rows) {
+        const key = d.freight_announcement_id;
+        if (!byFa.has(key)) byFa.set(key, []);
+        byFa.get(key).push(d);
+      }
+      for (const announcement of rows) {
+        announcement.destinations = byFa.get(announcement.id) || [];
+        if (announcement.loading_date && typeof announcement.loading_date === 'string') {
+          announcement.loading_date = announcement.loading_date.replace(/-/g, '/');
+        }
+      }
+    }
+
+    return res.json(rows);
+  } catch (error) {
+    console.error('❌ [getFreightAnnouncementsAdminSearch]', error);
+    return res.status(500).json({ message: 'خطا در جستجوی اعلام بار' });
+  }
+}
+
+/**
  * Fetches all freight announcements with related information.
  */
 async function getFreightAnnouncements(req, res) {
@@ -1432,6 +1562,10 @@ async function getFreightAnnouncements(req, res) {
       } catch (alterError) {
         console.warn('⚠️ [getFreightAnnouncements] Could not ensure assignment/finalize columns exist:', alterError.message);
       }
+    }
+
+    if (['true', '1', 'yes'].includes(String(req.query.adminSearch || '').toLowerCase())) {
+      return getFreightAnnouncementsAdminSearch(req, res);
     }
     
     // اگر includeLeftover=true باشد، Leftover را هم شامل می‌کند (برای صفحه برنامه ریزی)
@@ -4482,11 +4616,6 @@ async function checkDuplicateBillOfLading(req, res) {
     console.error('[checkDuplicateBillOfLading]', error.message);
     return res.status(500).json({ message: 'خطا در بررسی تکراری بودن بارنامه' });
   }
-}
-
-function isDairyOrAmbientLineType(lineType) {
-  const lt = String(lineType || '');
-  return ['Dairy', 'Ambient', 'پاستوریزه', 'لبنیات-فروتلند'].includes(lt);
 }
 
 const DAIRY_AMBIENT_PLACEHOLDER_MOBILE = '11';
@@ -8702,7 +8831,7 @@ async function getCityDetails(req, res) {
 
 async function getLineAnalytics(req, res) {
   try {
-    const supportedLineTypes = ['بستنی', 'پاستوریزه', 'لبنیات-فروتلند'];
+    const supportedLineTypes = allLineTypeSqlValues();
     
     // پشتیبانی از فرمت جدید (بازه تاریخ) یا فرمت قدیمی (year/month)
     const { year, month, timeRange = 'month', startYear, startMonth, startDay, endYear, endMonth, endDay } = req.query;
@@ -8854,11 +8983,12 @@ async function getLineAnalytics(req, res) {
         return;
       }
 
-      const lineType = row.line_type || 'نامشخص';
-      if (!supportedLineTypes.includes(lineType)) {
+      const lineKey = normalizeFreightLineTypeKey(row.line_type);
+      if (!['IceCream', 'Dairy', 'Ambient'].includes(lineKey)) {
         skippedUnsupportedLine += 1;
         return;
       }
+      const lineType = formatFreightLineTypeFa(lineKey);
 
       const announcementId = row.announcement_id;
       let announcement = announcements.get(announcementId);
@@ -12648,8 +12778,8 @@ async function changeVehicleType(req, res) {
     }
     const announcement = annRows[0];
 
-    // بررسی اینکه فقط برای پاستوریزه و لبنیات-فروتلند مجاز است
-    if (!['پاستوریزه', 'لبنیات-فروتلند'].includes(announcement.line_type)) {
+    // پاستوریزه و لبنیات-فروتلند (فارسی یا انگلیسی)
+    if (!isDairyOrAmbientLineType(announcement.line_type)) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'تغییر نوع خودرو فقط برای پاستوریزه و لبنیات-فروتلند مجاز است.' });
     }

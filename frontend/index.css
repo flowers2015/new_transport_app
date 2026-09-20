@@ -34,6 +34,14 @@ body {
   --freight-sticky-h1: 1.85rem;
 }
 
+.freight-sticky-table-wrap[data-sticky-rows='planning-compact'] {
+  --freight-sticky-h1: 2.85rem;
+}
+
+.freight-sticky-table-wrap[data-sticky-rows='planning-full'] {
+  --freight-sticky-h1: 3.4rem;
+}
+
 .freight-sticky-table-wrap[data-sticky-rows='full'] {
   --freight-sticky-h1: 2.4rem;
 }
@@ -62,6 +70,19 @@ body {
 
 .freight-sticky-table-wrap table thead th.freight-sticky-corner {
   z-index: 30;
+  background-color: #f8fafc;
+}
+
+.freight-sticky-table-wrap table thead th.col-checkbox {
+  inset-inline-start: 0;
+  top: 0;
+  overflow: visible;
+}
+
+.freight-sticky-table-wrap table thead th.col-operations {
+  inset-inline-end: 0;
+  top: 0;
+  overflow: visible;
 }
 
 .freight-sticky-table-wrap table tbody td.col-checkbox,

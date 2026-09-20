@@ -1,6 +1,10 @@
+const { lineTypeMatches } = require('./freightEnums');
+
 const LINE_PAIRS = [
   ['Basteni', 'بستنی'],
+  ['IceCream', 'بستنی'],
   ['Pasturized', 'پاستوریزه'],
+  ['Dairy', 'پاستوریزه'],
   ['Ambient', 'لبنیات-فروتلند'],
 ];
 
@@ -17,6 +21,7 @@ function linesMatch(warehouseLine, announcementLine) {
   const a = String(announcementLine || '').trim();
   if (!w || !a) return false;
   if (w === a) return true;
+  if (lineTypeMatches(w, a)) return true;
   return LINE_PAIRS.some(
     ([en, fa]) => (w === en && a === fa) || (w === fa && a === en)
   );

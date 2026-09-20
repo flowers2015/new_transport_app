@@ -1,30 +1,16 @@
 const pool = require('../db');
 const { logFreightHistory } = require('./freightHistoryService');
+const {
+  LINE_KEY,
+  normalizeFreightLineTypeKey,
+  isTransportIntakeStatus,
+  isEnteringTransportIntake,
+} = require('../utils/freightEnums');
 
 const INTAKE_LOCK_MESSAGE =
   'بدلیل اتمام تایم اعلام بار، ارسال درخواست قفل می‌باشد. در صورت ضرورت با ترابری تماس بگیرید.';
 
-const LINE_TYPES = ['IceCream', 'Dairy', 'Ambient'];
-
-const TRANSPORT_INTAKE_STATUSES = new Set([
-  'PendingCompanyAssignment',
-  'PendingPersonalAssignment',
-]);
-
-function normalizeFreightLineTypeKey(lineType) {
-  if (lineType === 'بستنی' || lineType === 'IceCream') return 'IceCream';
-  if (lineType === 'پاستوریزه' || lineType === 'Dairy') return 'Dairy';
-  if (lineType === 'لبنیات-فروتلند' || lineType === 'Ambient') return 'Ambient';
-  return lineType;
-}
-
-function isTransportIntakeStatus(status) {
-  return TRANSPORT_INTAKE_STATUSES.has(status);
-}
-
-function isEnteringTransportIntake(oldStatus, newStatus) {
-  return isTransportIntakeStatus(newStatus) && !isTransportIntakeStatus(oldStatus);
-}
+const LINE_TYPES = [LINE_KEY.IceCream, LINE_KEY.Dairy, LINE_KEY.Ambient];
 
 async function ensureLockRows(client) {
   const db = client || pool;

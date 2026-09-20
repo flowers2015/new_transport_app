@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "setup": "node setup.js"
+    "setup": "node setup.js",
+    "test:freight-kartabl": "node scripts/test-freight-kartabl-unification.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

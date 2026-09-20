@@ -11,15 +11,7 @@ const PERSONAL_ROLES = [
 ];
 const CARRIER_ROLE = 'carrier_user';
 
-function isDairyOrAmbientLineType(lineType) {
-  const lt = String(lineType || '');
-  return ['Dairy', 'Ambient', 'پاستوریزه', 'لبنیات-فروتلند'].includes(lt);
-}
-
-function isAmbientLine(lineType) {
-  const lt = String(lineType || '');
-  return ['Ambient', 'لبنیات-فروتلند'].includes(lt);
-}
+const { isDairyOrAmbientLineType, isAmbientLineType: isAmbientLine } = require('../utils/freightEnums');
 
 async function buildUserName(req) {
   const userId = req.user?.userId || req.user?.id;

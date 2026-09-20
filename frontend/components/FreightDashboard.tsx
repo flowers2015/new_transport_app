@@ -2399,6 +2399,26 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         [isDairyCompactTable]
     );
 
+    const tableWrapRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        const wrap = tableWrapRef.current;
+        if (!wrap) return;
+        const firstRow = wrap.querySelector('thead tr:first-child') as HTMLTableRowElement | null;
+        if (!firstRow) return;
+        const applyHeight = () => {
+            const h = firstRow.getBoundingClientRect().height;
+            if (h > 0) wrap.style.setProperty('--freight-sticky-h1', `${Math.ceil(h)}px`);
+        };
+        applyHeight();
+        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(applyHeight) : null;
+        ro?.observe(firstRow);
+        window.addEventListener('resize', applyHeight);
+        return () => {
+            ro?.disconnect();
+            window.removeEventListener('resize', applyHeight);
+        };
+    }, [visibleColumns, isFullDairyAmbient, isDairyCompactTable, activeTab, viewMode, tableAnnouncements.length]);
+
 
     return (
         <div className={`relative max-w-screen-2xl mx-auto overflow-hidden print-override-overflow`}>
@@ -2446,10 +2466,11 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                         )}
                         {(
                         <div
+                            ref={tableWrapRef}
                             className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${
                                 isDairyCompactTable ? ' planning-dairy-compact-wrap' : ''
                             }`}
-                            data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
+                            data-sticky-rows={isFullDairyAmbient ? 'planning-full' : 'planning-compact'}
                             style={{ WebkitOverflowScrolling: 'touch' }}
                         >
                             <table
@@ -2530,11 +2551,24 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                     ) : (
                                         <>
                                         <tr>
-                                                {visibleColumns.map(col => (
+                                                {visibleColumns.map(col => {
+                                                    const isCorner = col.header === '' || col.header === 'عملیات';
+                                                    return (
                                                     <th
-                                                        key={col.header}
-                                                        className={`p-1.5 text-center align-bottom whitespace-normal leading-tight font-semibold break-words ${getDairyCompactColClass(col.header)}`}
-                                                        style={isDairyCompactTable ? undefined : { width: col.width }}
+                                                        key={col.header || 'select'}
+                                                        rowSpan={isCorner ? 2 : undefined}
+                                                        className={`p-1.5 text-center align-middle whitespace-normal leading-tight font-semibold break-words ${getDairyCompactColClass(col.header)}${
+                                                            col.header === ''
+                                                                ? ' sticky bg-gray-50 freight-sticky-corner col-checkbox'
+                                                                : col.header === 'عملیات'
+                                                                  ? ' sticky bg-gray-50 freight-sticky-corner col-operations'
+                                                                  : ' align-bottom'
+                                                        }`}
+                                                        style={
+                                                            isDairyCompactTable
+                                                                ? undefined
+                                                                : { width: col.width }
+                                                        }
                                                     >
                                                         {col.header === '' ? (
                                                             <input
@@ -2548,12 +2582,13 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             />
                                                         ) : col.header}
                                                     </th>
-                                                ))}
+                                                    );
+                                                })}
                                         </tr>
                                         <tr className="bg-slate-100/80 print:hidden">
-                                            {visibleColumns.map((col) => (
+                                            {visibleColumns.filter((col) => col.header !== '' && col.header !== 'عملیات').map((col) => (
                                                 <th key={`${col.header}-filter`} className={`p-1 font-normal ${getDairyCompactColClass(col.header)}`}>
-                                                    {col.header !== '' && 'accessor' in col && col.accessor ? (
+                                                    {'accessor' in col && col.accessor ? (
                                                         <input
                                                             type="search"
                                                             placeholder="فیلتر..."
@@ -2700,16 +2735,28 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     width: 2.5rem;
                     max-width: 2.5rem;
                     overflow: visible;
-                    position: relative;
-                    z-index: 2;
+                    position: sticky;
+                    inset-inline-start: 0;
+                    z-index: 30;
+                    background: #f8fafc;
+                }
+                .planning-dairy-compact tbody td.col-checkbox {
+                    z-index: 4;
+                    background: #fff;
                 }
                 .planning-dairy-compact .col-operations {
                     width: 11%;
                     max-width: none;
                     overflow: visible;
                     vertical-align: middle;
-                    position: relative;
-                    z-index: 2;
+                    position: sticky;
+                    inset-inline-end: 0;
+                    z-index: 30;
+                    background: #f8fafc;
+                }
+                .planning-dairy-compact tbody td.col-operations {
+                    z-index: 4;
+                    background: #fff;
                 }
                 .planning-dairy-compact .col-operations > div {
                     display: flex;

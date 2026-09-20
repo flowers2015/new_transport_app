@@ -3,10 +3,8 @@ import { FreightAnnouncement, FreightLineType, FreightAnnouncementStatus, User, 
 import { getApiUrl } from '../utils/apiConfig';
 import { formatJalaliDateTime, formatJalali, compareByCreatedAtDesc } from '../utils/jalali';
 import { formatNumberWhileTyping, parseNumberFromFormatted, formatNumberWithSeparator } from '../utils/numberFormatter';
-import { formatCargoValueShort, formatRialsPreview } from '../utils/cargoValueUtils';
 import CargoValueInput from './CargoValueInput';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
-import { pickAssignmentFieldsFromApi, lineTypeToBackend, isPersonalAssignmentType } from '../utils/freightDisplay';
+import { pickAssignmentFieldsFromApi, lineTypeToBackend, lineTypeToFrontend, freightStatusToFrontend, isPersonalAssignmentType, getAnnouncementCreatorLabel, matchesFreightLine } from '../utils/freightDisplay';
 import CityAutocomplete from './CityAutocomplete';
 import JalaliDateInput from './JalaliDateInput';
 import { apiCache } from '../utils/apiCache';
@@ -31,13 +29,34 @@ interface AdminAction {
 
 const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) => {
   const [announcements, setAnnouncements] = useState<FreightAnnouncement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [lineTypeFilter, setLineTypeFilter] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
+  const [activeLine, setActiveLine] = useState<FreightLineType>(FreightLineType.IceCream);
+  const [filterAnnouncementCode, setFilterAnnouncementCode] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterLoadingDate, setFilterLoadingDate] = useState('');
+  const [filterDestination, setFilterDestination] = useState('');
+  const [filterBillOfLading, setFilterBillOfLading] = useState('');
+  const [filterDriverName, setFilterDriverName] = useState('');
+  const [filterVehicleCode, setFilterVehicleCode] = useState('');
+  const [filterCreatorName, setFilterCreatorName] = useState('');
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [lastEditedAnnouncementId, setLastEditedAnnouncementId] = useState<string | null>(null); // برای پیدا کردن صفحه بعد از ویرایش
   const itemsPerPage = 30; // تعداد ردیف‌ها در هر صفحه
+  const searchParamsRef = useRef({
+    announcementCode: '',
+    date: '',
+    loadingDate: '',
+    destination: '',
+    billOfLading: '',
+    driverName: '',
+    vehicleCode: '',
+    creatorName: '',
+    lineType: FreightLineType.IceCream as FreightLineType,
+  });
+  const hasSearchedRef = useRef(false);
   
   // Debug: لاگ تغییرات announcements
   useEffect(() => {
@@ -75,19 +94,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     
     if (lastEditedAnnouncementId && announcements.length > 0) {
       // فیلتر و مرتب‌سازی مشابه filteredAnnouncements
-      const filtered = announcements.filter(ann => {
-        const matchesSearch = !searchTerm || 
-          ann.announcementCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          ann.billOfLadingNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          ann.destinations?.some(d => d.city?.toLowerCase().includes(searchTerm.toLowerCase()));
-        
-        const matchesStatus = !statusFilter || ann.status === statusFilter;
-        const matchesLineType =
-          !lineTypeFilter ||
-          lineTypeToBackend(ann.lineType) === lineTypeToBackend(lineTypeFilter);
-        
-        return matchesSearch && matchesStatus && matchesLineType;
-      });
+      const filtered = announcements.filter((ann) => matchesFreightLine(ann, activeLine));
       
       const sorted = [...filtered].sort(compareByCreatedAtDesc);
       
@@ -148,7 +155,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       // پاک کردن lastEditedAnnouncementId بعد از استفاده
       setLastEditedAnnouncementId(null);
     }
-  }, [lastEditedAnnouncementId, announcements, searchTerm, statusFilter, lineTypeFilter, itemsPerPage]);
+  }, [lastEditedAnnouncementId, announcements, activeLine, itemsPerPage]);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<FreightAnnouncement | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -289,11 +296,30 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       if (!silent) {
         setLoading(true);
       }
-      // اضافه کردن timestamp برای جلوگیری از cache
-      const timestamp = new Date().getTime();
+      const p = searchParamsRef.current;
+      if (!hasSearchedRef.current) {
+        if (!silent) setLoading(false);
+        return;
+      }
+      const qs = new URLSearchParams({
+        adminSearch: 'true',
+        includeFinalized: 'true',
+        includeLeftover: 'true',
+        limit: '100',
+      });
+      if (p.announcementCode) qs.set('announcementCode', p.announcementCode);
+      if (p.date) qs.set('date', p.date);
+      if (p.loadingDate) qs.set('loadingDate', p.loadingDate);
+      if (p.destination) qs.set('destination', p.destination);
+      if (p.billOfLading) qs.set('billOfLading', p.billOfLading);
+      if (p.driverName) qs.set('driverName', p.driverName);
+      if (p.vehicleCode) qs.set('vehicleCode', p.vehicleCode);
+      if (p.creatorName) qs.set('creatorName', p.creatorName);
+      if (p.lineType && !p.announcementCode) qs.set('lineType', p.lineType);
+      qs.set('_t', String(Date.now()));
       const headers = getHeaders();
       const res = await fetch(
-        `${getApiUrl('freight-announcements?includeFinalized=true&includeLeftover=true')}&_t=${timestamp}`,
+        `${getApiUrl('freight-announcements')}?${qs.toString()}`,
         { 
           headers,
           cache: 'no-cache'
@@ -302,6 +328,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
       if (!res.ok) throw new Error('خطا در دریافت لیست اعلام بارها');
       const raw = await res.json();
       if (gen !== fetchGenRef.current) return;
+      const payload = Array.isArray(raw) ? raw : (raw?.announcements || []);
       
       // Normalize داده‌ها (مثل FreightPlanningContainer)
       const statusMap: Record<string, FreightAnnouncementStatus> = {
@@ -335,8 +362,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           announcementCode: a.announcement_code || a.announcementCode || '-',
           createdAt: new Date(a.created_at || a.createdAt || Date.now()),
           loadingDate: loadingDate,
-          lineType: (a.line_type || a.lineType) as FreightLineType,
-          status: statusMap[a.status] || a.status,
+          lineType: lineTypeToFrontend(a.line_type || a.lineType) as FreightLineType,
+          status: (freightStatusToFrontend(a.status) as FreightAnnouncementStatus) || statusMap[a.status] || a.status,
           cargoValue: Number(a.cargo_value ?? a.cargoValue ?? 0),
           vehicleType: a.vehicle_type || a.vehicleType || '',
           notes: a.notes,
@@ -356,7 +383,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
           assignmentFinalizedAt: assignment.assignmentFinalizedAt,
           helperDriverName: assignment.helperDriverName,
           helperDriverId: assignment.helperDriverId,
-          originCity: a.origin_city,
+          originCity: a.origin_city || a.originCity,
           brand: a.brand,
           representativeType: a.representative_type,
           representativeName: a.representative_name,
@@ -405,11 +432,14 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   : [],
           })),
           createdBy: a.created_by || a.createdBy || a.user_id,
-          createdByName: a.created_by_name || a.createdByName || a.user_name || a.created_by_user_name
+          createdByName: a.created_by_name || a.createdByName || a.user_name || a.created_by_user_name || a.creator_full_name || a.creator_username,
+          creator_full_name: a.creator_full_name,
+          creator_username: a.creator_username,
+          creator_user_id: a.creator_user_id,
         } as any;
       };
 
-      const normalized = raw.map(normalize);
+      const normalized = payload.map(normalize);
       
       // مقایسه با state قبلی
       const previousState = announcements;
@@ -603,20 +633,105 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     }
   };
 
-  // بارگذاری اولیه
-  useEffect(() => {
-    fetchAnnouncements();
-  }, []); // فقط یک بار در mount
-
-  // Auto-refresh هر 30 ثانیه (بدون immediate تا از refresh مداوم جلوگیری شود)
-  useAutoRefresh({
-    refreshFn: () => fetchAnnouncements(true), // silent refresh
-    interval: 30000, // 30 ثانیه
-    onlyWhenVisible: true,
-    immediate: false, // غیرفعال کردن immediate برای جلوگیری از refresh مداوم
-    enabled: true,
-    silent: true, // silent mode برای جلوگیری از چشمک زدن
+  // بارگذاری فقط با جستجو — بدون fetch اولیه و بدون polling کل جدول
+  const collectSearchFields = () => ({
+    announcementCode: filterAnnouncementCode.trim(),
+    date: filterDate.trim(),
+    loadingDate: filterLoadingDate.trim(),
+    destination: filterDestination.trim(),
+    billOfLading: filterBillOfLading.trim(),
+    driverName: filterDriverName.trim(),
+    vehicleCode: filterVehicleCode.trim(),
+    creatorName: filterCreatorName.trim(),
+    lineType: activeLine,
   });
+
+  const hasAnyArchiveSearchField = (p: ReturnType<typeof collectSearchFields>) =>
+    Boolean(
+      p.announcementCode ||
+      p.date ||
+      p.loadingDate ||
+      p.destination ||
+      p.billOfLading ||
+      p.driverName ||
+      p.vehicleCode ||
+      p.creatorName
+    );
+
+  const handleSearch = () => {
+    const p = collectSearchFields();
+    if (!hasAnyArchiveSearchField(p)) {
+      alert('حداقل یکی از فیلدهای جستجو را پر کنید.');
+      return;
+    }
+    searchParamsRef.current = p;
+    hasSearchedRef.current = true;
+    setHasSearched(true);
+    setCurrentPage(1);
+    fetchAnnouncements();
+  };
+
+  const handleClearFilters = () => {
+    setFilterAnnouncementCode('');
+    setFilterDate('');
+    setFilterLoadingDate('');
+    setFilterDestination('');
+    setFilterBillOfLading('');
+    setFilterDriverName('');
+    setFilterVehicleCode('');
+    setFilterCreatorName('');
+    hasSearchedRef.current = false;
+    setHasSearched(false);
+    setAnnouncements([]);
+    setCurrentPage(1);
+    setSelectedIds([]);
+  };
+
+  const handleLineTab = (lt: FreightLineType) => {
+    setActiveLine(lt);
+    if (!hasSearchedRef.current) return;
+    const p = { ...searchParamsRef.current, lineType: lt };
+    searchParamsRef.current = p;
+    setCurrentPage(1);
+    fetchAnnouncements();
+  };
+
+  const handleSort = useCallback((header: string) => {
+    setSortColumn((prev) => {
+      if (prev === header) {
+        setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return header;
+      }
+      setSortDirection('asc');
+      return header;
+    });
+  }, []);
+
+  const renderSortableHeader = useCallback(
+    (header: string) => (
+      <button
+        type="button"
+        onClick={() => handleSort(header)}
+        className="inline-flex items-center justify-center gap-0.5 w-full hover:text-sky-700 focus:outline-none focus:text-sky-700"
+        title="مرتب‌سازی"
+      >
+        <span>{header}</span>
+        {sortColumn === header ? (
+          <span className="text-sky-600 text-[10px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+        ) : (
+          <span className="text-slate-300 text-[10px]">⇅</span>
+        )}
+      </button>
+    ),
+    [handleSort, sortColumn, sortDirection]
+  );
+
+  const onSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSearch();
+    }
+  };
 
   // لاگ تغییرات history state
   useEffect(() => {
@@ -629,86 +744,53 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     });
   }, [history, showHistoryDialog, selectedAnnouncement]);
 
-  // فیلتر و مرتب‌سازی اعلام بارها (جدیدترین اول)
+  const sortValueForHeader = (ann: FreightAnnouncement, header: string): string | number => {
+    switch (header) {
+      case 'کد اعلام بار':
+        return ann.announcementCode || '';
+      case 'کارمند اعلام‌کننده':
+        return getAnnouncementCreatorLabel(ann) || (ann as any).createdByName || '';
+      case 'تاریخ بارگیری':
+        return String(ann.loadingDate || '');
+      case 'مبدا بارگیری':
+        return ann.originCity || '';
+      case 'برند':
+        return ann.brand || '';
+      case 'نوع خودرو':
+        return ann.vehicleType || '';
+      case 'مقاصد':
+        return (ann.destinations || []).map((d) => d.city).join('، ');
+      case 'نام راننده':
+        return (ann as any).assignedDriverName || '';
+      case 'پلاک خودرو':
+        return (ann as any).vehiclePlate || '';
+      case 'شماره بارنامه':
+        return ann.billOfLadingNumber || '';
+      case 'کرایه کل':
+        return Number(ann.totalFreightCost || 0);
+      case 'وضعیت':
+        return String(ann.status || '');
+      case 'کارتن':
+        return Number(ann.cartonCount || 0);
+      default:
+        return '';
+    }
+  };
+
   const filteredAnnouncements = useMemo(() => {
-    console.log('🔄 [FreightManagement] محاسبه filteredAnnouncements:', {
-      announcementsCount: announcements.length,
-      searchTerm,
-      statusFilter,
-      lineTypeFilter,
-      refreshTrigger,
-      firstItem: announcements[0] ? {
-        id: announcements[0].id,
-        code: announcements[0].announcementCode,
-        loadingDate: announcements[0].loadingDate
-      } : null,
-      secondItem: announcements[1] ? {
-        id: announcements[1].id,
-        code: announcements[1].announcementCode,
-        loadingDate: announcements[1].loadingDate
-      } : null,
-      timestamp: new Date().toISOString()
+    const filtered = announcements.filter((ann) => matchesFreightLine(ann, activeLine));
+    const sorted = [...filtered].sort((a, b) => {
+      if (!sortColumn) return compareByCreatedAtDesc(a, b);
+      const va = sortValueForHeader(a, sortColumn);
+      const vb = sortValueForHeader(b, sortColumn);
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return sortDirection === 'asc' ? va - vb : vb - va;
+      }
+      const cmp = String(va).localeCompare(String(vb), 'fa');
+      return sortDirection === 'asc' ? cmp : -cmp;
     });
-    
-    // ایجاد کپی برای جلوگیری از mutation
-    const announcementsCopy = [...announcements];
-    
-    const filtered = announcementsCopy.filter(ann => {
-      const matchesSearch = !searchTerm || 
-        ann.announcementCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ann.billOfLadingNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ann.destinations?.some(d => d.city?.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-      const matchesStatus = !statusFilter || ann.status === statusFilter;
-      const matchesLineType =
-        !lineTypeFilter || lineTypeToBackend(ann.lineType) === lineTypeToBackend(lineTypeFilter);
-      
-      return matchesSearch && matchesStatus && matchesLineType;
-    });
-    
-    console.log('🔍 [FreightManagement] بعد از فیلتر:', {
-      filteredCount: filtered.length,
-      firstItem: filtered[0] ? {
-        id: filtered[0].id,
-        code: filtered[0].announcementCode,
-        status: filtered[0].status,
-        loadingDate: filtered[0].loadingDate,
-        totalFreightCost: filtered[0].totalFreightCost
-      } : null,
-      secondItem: filtered[1] ? {
-        id: filtered[1].id,
-        code: filtered[1].announcementCode,
-        status: filtered[1].status,
-        loadingDate: filtered[1].loadingDate,
-        totalFreightCost: filtered[1].totalFreightCost
-      } : null,
-      timestamp: new Date().toISOString()
-    });
-    
-    // مرتب‌سازی بر اساس تاریخ ایجاد (جدیدترین اول) - ایجاد کپی جدید برای sort
-    const sorted = [...filtered].sort(compareByCreatedAtDesc);
-    
-    console.log('✅ [FreightManagement] بعد از مرتب‌سازی:', {
-      sortedCount: sorted.length,
-      firstItem: sorted[0] ? {
-        id: sorted[0].id,
-        code: sorted[0].announcementCode,
-        createdAt: sorted[0].createdAt,
-        loadingDate: sorted[0].loadingDate,
-        totalFreightCost: sorted[0].totalFreightCost
-      } : null,
-      secondItem: sorted[1] ? {
-        id: sorted[1].id,
-        code: sorted[1].announcementCode,
-        createdAt: sorted[1].createdAt,
-        loadingDate: sorted[1].loadingDate,
-        totalFreightCost: sorted[1].totalFreightCost
-      } : null,
-      timestamp: new Date().toISOString()
-    });
-    
     return sorted;
-  }, [announcements, searchTerm, statusFilter, lineTypeFilter, refreshTrigger]);
+  }, [announcements, activeLine, sortColumn, sortDirection, refreshTrigger]);
 
   // محاسبه صفحه‌بندی
   const totalPages = Math.ceil(filteredAnnouncements.length / itemsPerPage);
@@ -741,11 +823,6 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     });
     return result;
   }, [filteredAnnouncements, startIndex, endIndex, totalPages, currentPage, tableKey, refreshTrigger]);
-
-  // وقتی فیلتر تغییر می‌کند، به صفحه اول برگرد
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, lineTypeFilter]);
 
   const applyAnnouncementToEditForm = (announcement: any) => {
     let loadingDateStr = '';
@@ -998,7 +1075,7 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
               ? {
                   ...ann,
                   loadingDate: savedRaw.loading_date || savedRaw.loadingDate || ann.loadingDate,
-                  lineType: savedRaw.line_type || savedRaw.lineType || ann.lineType,
+                  lineType: (lineTypeToFrontend(savedRaw.line_type || savedRaw.lineType || ann.lineType) as FreightLineType) || ann.lineType,
                   cargoValue: Number(savedRaw.cargo_value ?? savedRaw.cargoValue ?? ann.cargoValue) || 0,
                   vehicleType: savedRaw.vehicle_type || savedRaw.vehicleType || ann.vehicleType,
                   originCity: savedRaw.origin_city ?? savedRaw.originCity ?? ann.originCity,
@@ -1161,60 +1238,150 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
     'Cancelled': 'لغو شده'
   };
 
-  const lineTypeLabels: Record<string, string> = {
-    IceCream: 'بستنی',
-    Dairy: 'پاستوریزه',
-    Ambient: 'لبنیات-فروتلند',
-    بستنی: 'بستنی',
-    پاستوریزه: 'پاستوریزه',
-    'لبنیات-فروتلند': 'لبنیات-فروتلند',
-  };
-
-  if (loading) {
-    return <div className="p-4">در حال بارگذاری...</div>;
+  if (error) {
+    return <div className="p-4 text-red-600">{error}</div>;
   }
+
+  const isIceCreamTab = activeLine === FreightLineType.IceCream;
+  const tableColCount = (isIceCreamTab ? 15 : 13);
 
   return (
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">مدیریت اعلام بار</h1>
-        <p className="text-sm text-gray-600 mt-2">ویرایش و حذف دستی اعلام بارها با ثبت دلیل</p>
+        <p className="text-sm text-gray-600 mt-2">ویرایش و حذف دستی اعلام بارها با ثبت دلیل — لیست فقط پس از جستجو بارگذاری می‌شود</p>
       </div>
 
-      {/* فیلترها */}
-      <div className="mb-4 flex gap-4">
-        <input
-          type="text"
-          placeholder="جستجو (کد اعلام بار، شماره بارنامه، شهر مقصد)"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded flex-1"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border rounded"
+      <div className="mb-4 flex items-center p-1 bg-slate-100 rounded-lg w-fit">
+        {Object.values(FreightLineType).map((lt) => (
+          <button
+            key={lt}
+            type="button"
+            onClick={() => handleLineTab(lt)}
+            className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${
+              activeLine === lt ? 'bg-sky-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {lt}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-4 flex gap-2 flex-wrap items-center">
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">کد اعلام بار:</label>
+          <input
+            type="text"
+            placeholder="ANN-..."
+            value={filterAnnouncementCode}
+            onChange={(e) => setFilterAnnouncementCode(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-40"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">تاریخ اعلام بار:</label>
+          <input
+            type="text"
+            placeholder="1404-05-01"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-32"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">تاریخ بارگیری:</label>
+          <input
+            type="text"
+            placeholder="1404/05/01"
+            value={filterLoadingDate}
+            onChange={(e) => setFilterLoadingDate(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-32"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">مقصد:</label>
+          <input
+            type="text"
+            placeholder="جستجوی مقصد..."
+            value={filterDestination}
+            onChange={(e) => setFilterDestination(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-28"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">شماره بارنامه:</label>
+          <input
+            type="text"
+            placeholder="جستجوی بارنامه..."
+            value={filterBillOfLading}
+            onChange={(e) => setFilterBillOfLading(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-28"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">نام راننده:</label>
+          <input
+            type="text"
+            placeholder="جستجوی راننده..."
+            value={filterDriverName}
+            onChange={(e) => setFilterDriverName(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-28"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">کد خودرو:</label>
+          <input
+            type="text"
+            placeholder="مثلاً 180 یا T180"
+            value={filterVehicleCode}
+            onChange={(e) => setFilterVehicleCode(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-28"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg">
+          <label className="text-xs whitespace-nowrap">کارمند اعلام‌کننده:</label>
+          <input
+            type="text"
+            placeholder="جستجوی کارمند..."
+            value={filterCreatorName}
+            onChange={(e) => setFilterCreatorName(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            className="px-2 py-1 text-xs rounded border w-28"
+            autoComplete="off"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleSearch}
+          className="px-3 py-1 bg-blue-500 text-white rounded-md text-xs hover:bg-blue-600"
         >
-          <option value="">همه وضعیت‌ها</option>
-          {Object.entries(statusLabels).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
-        <select
-          value={lineTypeFilter}
-          onChange={(e) => setLineTypeFilter(e.target.value)}
-          className="px-4 py-2 border rounded"
+          جستجو
+        </button>
+        <button
+          type="button"
+          onClick={handleClearFilters}
+          className="px-3 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
         >
-          <option value="">همه خطوط</option>
-          {Object.entries(lineTypeLabels).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+          پاک کردن
+        </button>
         {selectedIds.length > 0 && (
           <button
             type="button"
             onClick={openBulkDeleteDialog}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 whitespace-nowrap"
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 whitespace-nowrap text-xs"
           >
             حذف انتخاب‌شده‌ها ({selectedIds.length})
           </button>
@@ -1235,47 +1402,34 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                   title="انتخاب همه ردیف‌های این صفحه"
                 />
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کد</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">خط</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">وضعیت</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">تاریخ بارگیری</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">ارزش بار</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">نوع خودرو</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">نوع تخصیص</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">مقاصد (کرایه)</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">بارنامه</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">راننده</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">خودرو</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کرایه کل</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">کرایه تعرفه</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('کد اعلام بار')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('کارمند اعلام‌کننده')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('تاریخ بارگیری')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('مبدا بارگیری')}</th>
+              {isIceCreamTab && (
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('برند')}</th>
+              )}
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('نوع خودرو')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('مقاصد')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('نام راننده')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('پلاک خودرو')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('شماره بارنامه')}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('کرایه کل')}</th>
+              {isIceCreamTab && (
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('کارتن')}</th>
+              )}
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">{renderSortableHeader('وضعیت')}</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">عملیات</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {paginatedAnnouncements.length > 0 ? paginatedAnnouncements.map((ann, idx) => {
-              // لاگ فقط برای ردیف اول و دوم با جزئیات کامل
-              if (idx === 0 || idx === 1) {
-                const rowData = {
-                  id: ann.id,
-                  code: ann.announcementCode,
-                  loadingDate: ann.loadingDate,
-                  totalFreightCost: ann.totalFreightCost,
-                  destinations: ann.destinations?.map(d => ({ city: d.city, tonnage: d.tonnage, freightCost: d.freightCost })),
-                  status: ann.status,
-                  lineType: ann.lineType,
-                  originCity: ann.originCity,
-                  brand: ann.brand,
-                  assignedDriverName: ann.assignedDriverName,
-                  assignedVehicleModel: (ann as any).assignedVehicleModel,
-                  vehiclePlate: (ann as any).vehiclePlate,
-                  billOfLadingNumber: ann.billOfLadingNumber,
-                  tableKey,
-                  refreshTrigger,
-                  timestamp: new Date().toISOString()
-                };
-                console.log(`🎨 [FreightManagement] Rendering row ${idx}:`, rowData);
-                console.log(`📋 [FreightManagement] Rendering row ${idx} (JSON):`, JSON.stringify(rowData, null, 2));
-              }
+            {loading ? (
+              <tr>
+                <td colSpan={tableColCount} className="px-4 py-6 text-center text-sm text-gray-500">
+                  در حال جستجو...
+                </td>
+              </tr>
+            ) : paginatedAnnouncements.length > 0 ? paginatedAnnouncements.map((ann, idx) => {
               return (
               <tr 
                 key={`${ann.id}-${tableKey}-${idx}`} 
@@ -1289,15 +1443,61 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     onChange={() => toggleRowSelection(ann.id)}
                   />
                 </td>
-                {/* کد اعلام بار */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
                   {ann.announcementCode || '-'}
                 </td>
-                {/* خط */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {lineTypeLabels[lineTypeToBackend(ann.lineType)] || lineTypeLabels[ann.lineType] || ann.lineType || '-'}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700">
+                  {getAnnouncementCreatorLabel(ann) || (ann as any).createdByName || '-'}
                 </td>
-                {/* وضعیت */}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {ann.loadingDate ? (typeof ann.loadingDate === 'string' ? ann.loadingDate : formatJalali(ann.loadingDate)) : '-'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {ann.originCity || '-'}
+                </td>
+                {isIceCreamTab && (
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                    {ann.brand || '-'}
+                  </td>
+                )}
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {ann.vehicleType || '-'}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {ann.destinations?.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {ann.destinations.map((d, i) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-slate-100 rounded text-[11px]">
+                          {d.city || '-'}
+                        </span>
+                      ))}
+                    </div>
+                  ) : '-'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {(ann as any).assignedDriverName || '-'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-xs font-mono text-gray-500">
+                  {(ann as any).vehiclePlate || '-'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                  {ann.billOfLadingNumber || '-'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700 font-medium" dir="ltr">
+                  {(() => {
+                    if (ann.totalFreightCost && Number(ann.totalFreightCost) > 0) {
+                      return formatNumberWithSeparator(Number(ann.totalFreightCost));
+                    }
+                    const sumFromDest = ann.destinations?.reduce((sum, d) =>
+                      sum + (Number(d.freightCost) || 0), 0) || 0;
+                    return sumFromDest > 0 ? formatNumberWithSeparator(sumFromDest) : '-';
+                  })()}
+                </td>
+                {isIceCreamTab && (
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500 text-center">
+                    {ann.cartonCount ?? '-'}
+                  </td>
+                )}
                 <td className="px-4 py-3 whitespace-nowrap text-xs">
                   <span className={`px-2 py-1 rounded text-xs ${
                     ann.status === FreightAnnouncementStatus.Finalized ? 'bg-green-100 text-green-800' :
@@ -1309,88 +1509,6 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
                     {statusLabels[ann.status as string] || ann.status}
                   </span>
                 </td>
-                {/* تاریخ بارگیری */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {ann.loadingDate ? (typeof ann.loadingDate === 'string' ? ann.loadingDate : formatJalali(ann.loadingDate)) : '-'}
-                </td>
-                {/* ارزش بار */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500" title={ann.cargoValue ? formatRialsPreview(Number(ann.cargoValue)) : undefined}>
-                  {ann.cargoValue && Number(ann.cargoValue) > 0 ? formatCargoValueShort(Number(ann.cargoValue)) : '-'}
-                </td>
-                {/* نوع خودرو */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {ann.vehicleType || '-'}
-                </td>
-                {/* نوع تخصیص */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {ann.assignmentType === 'company' ? 'شرکتی' : 
-                   ann.assignmentType === 'personal' ? 'شخصی' : '-'}
-                </td>
-                {/* مقاصد با کرایه */}
-                <td className="px-4 py-3 text-xs text-gray-500">
-                  {ann.destinations?.length > 0 ? (
-                    <div className="space-y-1">
-                      {ann.destinations.map((d, i) => (
-                        <div key={i}>
-                          <span className="font-medium">{d.city || '-'}</span>
-                          {d.freightCost && Number(d.freightCost) > 0 && (
-                            <span className="text-green-600 mr-1" dir="ltr">
-                              ({formatNumberWithSeparator(d.freightCost)})
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : '-'}
-                </td>
-                {/* شماره بارنامه */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {ann.billOfLadingNumber || '-'}
-                </td>
-                {/* راننده */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {(ann as any).assignedDriverName ? (
-                    <div>
-                      <div className="font-medium">{(ann as any).assignedDriverName}</div>
-                      {(ann as any).assignedDriverEmployeeId && (
-                        <div className="text-xs text-gray-400">{(ann as any).assignedDriverEmployeeId}</div>
-                      )}
-                    </div>
-                  ) : '-'}
-                </td>
-                {/* خودرو */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                  {(ann as any).vehiclePlate ? (
-                    <div>
-                      <div className="font-medium">{(ann as any).vehiclePlate}</div>
-                      {((ann as any).assignedVehicleModel || (ann as any).assignedVehicleBrand) && (
-                        <div className="text-xs text-gray-400">
-                          {[(ann as any).assignedVehicleBrand, (ann as any).assignedVehicleModel].filter(Boolean).join(' ')}
-                        </div>
-                      )}
-                    </div>
-                  ) : '-'}
-                </td>
-                {/* کرایه کل */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700 font-medium" dir="ltr">
-                  {(() => {
-                    // اگر کرایه کل موجود بود نمایش بده
-                    if (ann.totalFreightCost && Number(ann.totalFreightCost) > 0) {
-                      return formatNumberWithSeparator(Number(ann.totalFreightCost));
-                    }
-                    // در غیر این صورت از مجموع کرایه مقاصد محاسبه کن
-                    const sumFromDest = ann.destinations?.reduce((sum, d) => 
-                      sum + (Number(d.freightCost) || 0), 0) || 0;
-                    return sumFromDest > 0 ? formatNumberWithSeparator(sumFromDest) : '-';
-                  })()}
-                </td>
-                {/* کرایه تعرفه */}
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700 font-medium" dir="ltr">
-                  {ann.tariffFreightCost && Number(ann.tariffFreightCost) > 0
-                    ? formatNumberWithSeparator(Number(ann.tariffFreightCost))
-                    : '-'}
-                </td>
-                {/* عملیات */}
                 <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
                   <div className="flex gap-2">
                     <button
@@ -1417,8 +1535,8 @@ const FreightManagement: React.FC<FreightManagementProps> = ({ currentUser }) =>
             );
             }) : (
               <tr>
-                <td colSpan={15} className="px-4 py-4 text-center text-sm text-gray-500">
-                  هیچ اعلام باری یافت نشد
+                <td colSpan={tableColCount} className="px-4 py-4 text-center text-sm text-gray-500">
+                  {hasSearched ? 'هیچ اعلام باری یافت نشد' : 'برای نمایش اعلام بار، فیلدهای جستجو را پر کنید و دکمه جستجو را بزنید'}
                 </td>
               </tr>
             )}

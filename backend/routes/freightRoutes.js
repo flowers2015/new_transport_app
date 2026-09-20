@@ -383,7 +383,19 @@ router.post(
 router.put(
   '/:id/vehicle-type',
   authenticateToken,
-  authorizeRole(['transport_user', 'personal_transport_user', 'planner', 'planner_manager', 'admin']),
+  authorizeRole([
+    'transport_user',
+    'personal_transport_user',
+    'planner',
+    'planner_manager',
+    'admin',
+    'ادمین',
+    'کاربر ترابری (شرکت)',
+    'کاربر ترابری (شخصی)',
+    'کاربر ترابری شخصی',
+    'کارمند برنامه‌ریزی',
+    'مدیر برنامه‌ریزی',
+  ]),
   changeVehicleType
 );
 
