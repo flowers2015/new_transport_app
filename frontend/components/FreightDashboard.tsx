@@ -2042,7 +2042,36 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
         data = data.filter(ann => {
             return Object.entries(columnFilters).every(([header, filterValue]) => {
                 if (!filterValue) return true;
-                
+                const filterString: string = String(filterValue ?? '');
+
+                const destFilterMatch = header.match(/^مقصد(\d+)-(.+)$/);
+                if (destFilterMatch) {
+                    const dest = (ann.destinations || [])[Number(destFilterMatch[1]) - 1] as any;
+                    if (!dest) return false;
+                    const sub = destFilterMatch[2];
+                    const destCell =
+                        sub === 'نوع برند'
+                            ? formatDestinationBrandLabel(dest)
+                            : sub === 'کد LIS'
+                              ? dest.lisCode || dest.lis_code || ''
+                              : sub === 'محصولات'
+                                ? formatDestinationProductsLabel(dest)
+                                : sub === 'نماینده'
+                                  ? dest.representativeName || dest.representative_name || ''
+                                  : sub === 'مقصد'
+                                    ? dest.city || ''
+                                    : sub === 'تناژ'
+                                      ? dest.tonnage ?? ''
+                                      : sub === 'تاریخ تحویل'
+                                        ? dest.deliveryDate || dest.delivery_date || ''
+                                        : sub === 'ساعت تخلیه'
+                                          ? dest.unloadTime || dest.unload_time || ''
+                                          : sub === 'کرایه'
+                                            ? dest.freightCost ?? dest.freight_cost ?? ''
+                                            : '';
+                    return String(destCell).toLowerCase().includes(filterString.toLowerCase());
+                }
+
                 const column = allColumns.find(c => c.header === header);
                 if (!column || !('accessor' in column) || !column.accessor) return true;
 
@@ -2055,7 +2084,6 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                 
                 // FIX: Explicitly convert cellValue to a string to prevent 'toLowerCase' on a non-string type.
                 const valueAsString: string = String(cellValue ?? '');
-                const filterString: string = String(filterValue ?? '');
                 return valueAsString.toLowerCase().includes(filterString.toLowerCase());
             });
         });
@@ -2421,7 +2449,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                             className={`w-full max-w-full min-w-0 border border-slate-200 rounded-lg freight-sticky-table-wrap${
                                 isDairyCompactTable ? ' planning-dairy-compact-wrap' : ''
                             }`}
-                            data-sticky-rows={isFullDairyAmbient ? 'planning-full' : 'planning-compact'}
+                            data-sticky-rows={isFullDairyAmbient ? 'full' : 'compact'}
                             style={{ WebkitOverflowScrolling: 'touch' }}
                         >
                             <table
@@ -2437,7 +2465,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                      {isFullDairyAmbient ? (
                                         <>
                                             <tr>
-                                                    <th rowSpan={2} className="p-2 text-center border" style={{ width: '40px' }}>
+                                                    <th rowSpan={2} className="p-2 text-center align-middle border sticky left-0 bg-gray-50 freight-sticky-corner col-checkbox" style={{ width: '40px' }}>
                                                         <input
                                                             type="checkbox"
                                                             checked={(() => {
@@ -2448,38 +2476,73 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                             className="cursor-pointer"
                                                         />
                                                     </th>
-                                                {commonCols.map(col => <th key={col.header} rowSpan={2} className="p-2 text-center border" style={{ width: col.width }}>{col.header}</th>)}
+                                                {commonCols.map(col => (
+                                                    <th key={col.header} rowSpan={2} className="p-2 text-center align-top border" style={{ width: col.width }}>
+                                                        <div className="mb-1">{col.header}</div>
+                                                        {'accessor' in col && col.accessor ? (
+                                                            <input
+                                                                type="search"
+                                                                value={columnFilters[col.header] || ''}
+                                                                onChange={(e) => handleColumnFilterChange(col.header, e.target.value)}
+                                                                placeholder="فیلتر..."
+                                                                className="w-full min-w-[72px] max-w-[120px] px-1 py-0.5 text-[10px] border border-slate-300 rounded bg-white font-normal"
+                                                            />
+                                                        ) : null}
+                                                    </th>
+                                                ))}
                                                 <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد اول</th>
                                                 <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد دوم</th>
                                                 <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد سوم</th>
                                                 <th colSpan={fullDestSubColCount} className="p-2 text-center border-x border">مقصد چهارم</th>
-                                                {actionCol && <th key={actionCol.header} rowSpan={2} className="p-2 text-center border" style={{ width: actionCol.width }}>{actionCol.header}</th>}
+                                                {actionCol && (
+                                                    <th
+                                                        key={actionCol.header}
+                                                        rowSpan={2}
+                                                        className="p-2 text-center align-middle border sticky -left-px bg-gray-50 freight-sticky-corner col-operations"
+                                                        style={{ width: actionCol.width }}
+                                                    >
+                                                        {actionCol.header}
+                                                    </th>
+                                                )}
                                             </tr>
                                             <tr>
                                                 {[1, 2, 3, 4].map(i => (
                                                     <React.Fragment key={i}>
-                                                        {fullDestSubHeaders.map((header) => (
-                                                            <th key={`${i}-${header}`} className="p-2 text-center font-normal border">{header}</th>
-                                                        ))}
+                                                        {fullDestSubHeaders.map((header) => {
+                                                            const key = `مقصد${i}-${header}`;
+                                                            return (
+                                                                <th key={key} className="p-1 text-center font-normal border align-top">
+                                                                    <div className="text-[10px] mb-0.5">{header}</div>
+                                                                    <input
+                                                                        type="search"
+                                                                        value={columnFilters[key] || ''}
+                                                                        onChange={(e) => handleColumnFilterChange(key, e.target.value)}
+                                                                        placeholder="..."
+                                                                        className="w-full min-w-[52px] px-1 py-0.5 text-[10px] border border-slate-300 rounded bg-white"
+                                                                    />
+                                                                </th>
+                                                            );
+                                                        })}
                                                     </React.Fragment>
                                                 ))}
                                             </tr>
                                         </>
                                     ) : (
+                                        <>
                                         <tr>
                                                 {visibleColumns.map(col => (
                                                     <th
                                                         key={col.header}
-                                                        className={`p-2 text-center ${getDairyCompactColClass(col.header)}`}
+                                                        className={`p-1.5 text-center align-bottom whitespace-normal leading-tight font-semibold break-words ${getDairyCompactColClass(col.header)}`}
                                                         style={isDairyCompactTable ? undefined : { width: col.width }}
                                                     >
                                                         {col.header === '' ? (
                                                             <input
                                                                 type="checkbox"
                                                                 checked={(() => {
-                                                                const selectable = filteredAnnouncements.filter(isAnnouncementSelectable);
-                                                                return selectable.length > 0 && selectable.every(ann => selectedIds.includes(ann.id));
-                                                            })()}
+                                                                    const selectable = filteredAnnouncements.filter(isAnnouncementSelectable);
+                                                                    return selectable.length > 0 && selectable.every(ann => selectedIds.includes(ann.id));
+                                                                })()}
                                                                 onChange={handleSelectAll}
                                                                 className="cursor-pointer"
                                                             />
@@ -2487,23 +2550,23 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                                                     </th>
                                                 ))}
                                         </tr>
+                                        <tr className="bg-slate-100/80 print:hidden">
+                                            {visibleColumns.map((col) => (
+                                                <th key={`${col.header}-filter`} className={`p-1 font-normal ${getDairyCompactColClass(col.header)}`}>
+                                                    {col.header !== '' && 'accessor' in col && col.accessor ? (
+                                                        <input
+                                                            type="search"
+                                                            placeholder="فیلتر..."
+                                                            className="w-full min-w-0 px-1 py-0.5 text-[10px] border border-slate-300 rounded bg-white"
+                                                            value={columnFilters[col.header] || ''}
+                                                            onChange={(e) => handleColumnFilterChange(col.header, e.target.value)}
+                                                        />
+                                                    ) : null}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                        </>
                                     )}
-                                    <tr className="print:hidden">
-                                        {visibleColumns.map((col) => (
-                                            <th key={`${col.header}-filter`} className={`p-1 font-normal ${getDairyCompactColClass(col.header)}`}>
-                                                {col.header !== '' && 'accessor' in col && col.accessor ? (
-                                                    <input
-                                                    type="text"
-                                                    placeholder="فیلتر..."
-                                                    className="w-full text-center text-xs p-1 border rounded focus:outline-none focus:ring-1 focus:ring-sky-500"
-                                                    value={columnFilters[col.header] || ''}
-                                                    onChange={(e) => handleColumnFilterChange(col.header, e.target.value)}
-                                                    />
-                                                ) : null}
-                                            </th>
-                                        ))}
-                                        {isFullDairyAmbient && [...Array(fullDestTotalCols)].map((_, i) => <th key={`ph-${i}`}></th>)}
-                                    </tr>
                                 </thead>
                                 <tbody>
                                     {tableAnnouncements.map((ann, idx) => (
@@ -2684,6 +2747,7 @@ const FreightDashboard: React.FC<FreightDashboardProps> = (props) => {
                     line-height: 1.25;
                     vertical-align: bottom;
                     max-width: none;
+                    overflow: visible;
                 }
                 .planning-dairy-full th,
                 .planning-dairy-full td {

@@ -112,7 +112,17 @@ router.get('/line-analytics', authenticateToken, getLineAnalytics);
 router.get(
   '/routes/search',
   authenticateToken,
-  authorizeRole(['planner', 'planner_manager', 'sales_expert', 'transport_user', 'personal_transport_user', 'transport_finance', 'finance', 'admin']),
+  authorizeRole([
+    ...PLANNER_ROLES,
+    'transport_user',
+    'personal_transport_user',
+    'transport_finance',
+    'finance',
+    'کاربر ترابری (شرکت)',
+    'کاربر ترابری (شخصی)',
+    'مالی ترابری',
+    'مالی شعب',
+  ]),
   searchDispatchRoutes
 );
 

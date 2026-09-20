@@ -70,29 +70,54 @@ async function fetchDestinationsWithCreators(clientOrPool, announcementId) {
   const db = clientOrPool || pool;
   const nameColumn = await resolveUsersDisplayNameColumn();
   const hasOrig = await hasDestinationOriginalCreatorColumn(db);
-  if (hasOrig) {
+  const orderSql = 'ORDER BY created_at ASC';
+  try {
+    if (hasOrig) {
+      const destResult = await db.query(
+        `SELECT
+           d.*,
+           u_orig.id AS original_creator_user_id,
+           u_orig.${nameColumn} AS original_creator_full_name,
+           u_orig.username AS original_creator_username
+         FROM freight_destinations d
+         LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
+         WHERE d.freight_announcement_id = $1
+         ORDER BY COALESCE(d.sort_order, 999999) ASC, d.created_at ASC`,
+        [announcementId]
+      );
+      return destResult.rows;
+    }
     const destResult = await db.query(
-      `SELECT
-         d.*,
-         u_orig.id AS original_creator_user_id,
-         u_orig.${nameColumn} AS original_creator_full_name,
-         u_orig.username AS original_creator_username
-       FROM freight_destinations d
-       LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
-       WHERE d.freight_announcement_id = $1
-       ORDER BY COALESCE(d.sort_order, 999999) ASC, d.created_at ASC`,
+      `SELECT *
+       FROM freight_destinations
+       WHERE freight_announcement_id = $1
+       ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
+      [announcementId]
+    );
+    return destResult.rows;
+  } catch (err) {
+    console.warn('⚠️ [fetchDestinationsWithCreators] fallback without sort_order:', err.message);
+    if (hasOrig) {
+      const destResult = await db.query(
+        `SELECT
+           d.*,
+           u_orig.id AS original_creator_user_id,
+           u_orig.${nameColumn} AS original_creator_full_name,
+           u_orig.username AS original_creator_username
+         FROM freight_destinations d
+         LEFT JOIN users u_orig ON u_orig.id = d.original_created_by_user_id
+         WHERE d.freight_announcement_id = $1
+         ${orderSql}`,
+        [announcementId]
+      );
+      return destResult.rows;
+    }
+    const destResult = await db.query(
+      `SELECT * FROM freight_destinations WHERE freight_announcement_id = $1 ${orderSql}`,
       [announcementId]
     );
     return destResult.rows;
   }
-  const destResult = await db.query(
-    `SELECT *
-     FROM freight_destinations
-     WHERE freight_announcement_id = $1
-     ORDER BY COALESCE(sort_order, 999999) ASC, created_at ASC`,
-    [announcementId]
-  );
-  return destResult.rows;
 }
 
 async function attachAnnouncementCreatorFields(clientOrPool, announcement) {
@@ -3117,6 +3142,7 @@ async function updateFreightAnnouncement(req, res) {
       
       updated.destinations = await fetchDestinationsWithCreators(pool, id);
       await attachAnnouncementCreatorFields(pool, updated);
+      const destRows = { rows: updated.destinations || [] };
 
       // ارسال real-time notification برای update (با فیلدهای کامل تا UI فوری عوض شود)
       try {
@@ -3403,6 +3429,7 @@ async function createFreightAnnouncement(req, res) {
     
     created.destinations = await fetchDestinationsWithCreators(pool, id);
     await attachAnnouncementCreatorFields(pool, created);
+    const destRows = { rows: created.destinations || [] };
 
     // Attach optional UI fields if supplied to avoid null reference on client
     created.origin_city = originCity || null;
