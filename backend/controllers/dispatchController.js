@@ -31,6 +31,7 @@ const {
   summarizeRegionRestrictions,
   assertAnnouncementAllowedForDriver,
 } = require('../services/bale/baleRegionBans');
+const { isCurrentQueueAnnouncementLaw } = require('../services/dispatch/queueAnnouncementLaw');
 const {
   jalaliToGregorian,
   parseJalaliDateString,
@@ -1058,14 +1059,17 @@ async function resolveQueueEntryDisplayCategory(client, row) {
 async function getStageCandidates(req, res) {
   const stage = req.query.stage || 'stage1';
   const forceStage2 = req.query.forceStage2 === 'true';
-  const subPhase = (req.query.subPhase || '').trim();
+  let subPhase = (req.query.subPhase || '').trim();
   const categoryFilter = req.query.category || '';
   const queueEntryIdParam = req.query.queueEntryId || null;
   if (!['stage1', 'stage2'].includes(stage)) {
     return res.status(400).json({ message: 'پارامتر stage نامعتبر است.' });
   }
-  if (subPhase && !['far', 'near_vf', 'near_all'].includes(subPhase)) {
+  if (subPhase && !['far', 'near_vf', 'near_all', 'vf_both'].includes(subPhase)) {
     return res.status(400).json({ message: 'پارامتر subPhase نامعتبر است.' });
+  }
+  if (stage === 'stage1' && !subPhase && isCurrentQueueAnnouncementLaw()) {
+    subPhase = 'vf_both';
   }
 
   try {
@@ -1282,22 +1286,28 @@ async function getStageCandidates(req, res) {
       [...list].sort((a, b) => (a.position || 0) - (b.position || 0));
 
     let baseStageQueue = [];
+    const sortFarThenNear = list =>
+      [...list]
+        .filter(q => q.queue_type === 'near' || q.queue_type === 'far')
+        .sort((a, b) => {
+          if (a.queue_type !== b.queue_type) {
+            return a.queue_type === 'far' ? -1 : 1;
+          }
+          return (a.position || 0) - (b.position || 0);
+        });
+
     if (stage === 'stage1') {
-      baseStageQueue = sortByPosition(queue.filter(q => q.queue_type === 'far'));
+      baseStageQueue =
+        subPhase === 'vf_both'
+          ? sortFarThenNear(queue)
+          : sortByPosition(queue.filter(q => q.queue_type === 'far'));
     } else if (stage === 'stage2') {
       if (subPhase === 'far') {
         baseStageQueue = sortByPosition(queue.filter(q => q.queue_type === 'far'));
       } else if (subPhase === 'near_vf' || subPhase === 'near_all') {
         baseStageQueue = sortByPosition(queue.filter(q => q.queue_type === 'near'));
       } else {
-        baseStageQueue = queue
-          .filter(q => q.queue_type === 'near' || q.queue_type === 'far')
-          .sort((a, b) => {
-            if (a.queue_type !== b.queue_type) {
-              return a.queue_type === 'far' ? -1 : 1;
-            }
-            return (a.position || 0) - (b.position || 0);
-          });
+        baseStageQueue = sortFarThenNear(queue);
       }
     }
 
@@ -1341,7 +1351,9 @@ async function getStageCandidates(req, res) {
         hasVeryFarHistory: history.length > 0,
         blockedStage1:
           stage === 'stage1' &&
-          (item.queue_type !== 'far' || history.length > 0),
+          (subPhase === 'vf_both'
+            ? history.length > 0
+            : item.queue_type !== 'far' || history.length > 0),
       };
     };
 

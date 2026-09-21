@@ -10,6 +10,11 @@ const {
   classifyCategoryQueueVeryFar,
 } = require('./baleDecision');
 const {
+  isLegacyTransportQueueLaw,
+  getDispatchPhaseChain,
+  getInitialPromotePhases,
+} = require('../dispatch/queueAnnouncementLaw');
+const {
   buildPreferenceBrief,
   incrementAutoAssignStats,
 } = require('./balePreferenceBrief');
@@ -451,7 +456,9 @@ async function sendDeferTurnMessage(session, chatId) {
 function apiStageFromSession(sessionStage) {
   switch (sessionStage) {
     case 'stage1':
-      return { stage: 'stage1', subPhase: '', forceStage2: false };
+      return isLegacyTransportQueueLaw()
+        ? { stage: 'stage1', subPhase: '', forceStage2: false }
+        : { stage: 'stage1', subPhase: 'vf_both', forceStage2: false };
     case 'stage2_far':
       return { stage: 'stage2', subPhase: 'far', forceStage2: true };
     case 'stage2_near_vf':
@@ -463,7 +470,9 @@ function apiStageFromSession(sessionStage) {
     case 'stage2':
       return { stage: 'stage2', subPhase: '', forceStage2: true };
     default:
-      return { stage: sessionStage || 'stage1', subPhase: '', forceStage2: false };
+      return isLegacyTransportQueueLaw()
+        ? { stage: sessionStage || 'stage1', subPhase: '', forceStage2: false }
+        : { stage: sessionStage || 'stage1', subPhase: 'vf_both', forceStage2: false };
   }
 }
 
@@ -771,7 +780,7 @@ async function resolveInitialStage({ stage = 'stage1', vehicleCategory, userId, 
   };
 
   if (stage === 'stage2' || stage === 'stage2_far') {
-    const resolved = await tryPhases(['stage2_far', 'stage2_near_vf', 'stage2_near_all']);
+    const resolved = await tryPhases(getInitialPromotePhases());
     if (resolved) return { ...resolved, autoPromoted: false };
     if ((await countRawQueueForCategory(vehicleCategory)) === 0) {
       throw new Error(
@@ -810,7 +819,7 @@ async function resolveInitialStage({ stage = 'stage1', vehicleCategory, userId, 
   const skipStage1Reason =
     s1.announcements.length > 0 && s1.queue.length === 0 ? 'no_far_queue' : 'no_stage1_loads';
 
-  const promoted = await tryPhases(['stage2_far', 'stage2_near_vf', 'stage2_near_all'], {
+  const promoted = await tryPhases(getInitialPromotePhases(), {
     autoPromoted: true,
   });
   if (promoted) return { ...promoted, skipStage1Reason };
@@ -1000,22 +1009,7 @@ async function tryAdvanceDispatchPhase(sessionId) {
   const session = await loadSession(sessionId);
   if (!session) return false;
 
-  const phaseChain = {
-    stage1: [
-      ['stage2_far', null, 'stage2_far_started'],
-    ],
-    stage2_far: [
-      ['stage2_near_vf', null, 'stage2_near_vf_started'],
-      ['stage2_near_all', null, 'stage2_near_all_started'],
-    ],
-    stage2: [
-      ['stage2_near_vf', null, 'stage2_near_vf_started'],
-      ['stage2_near_all', null, 'stage2_near_all_started'],
-    ],
-    stage2_near_vf: [
-      ['stage2_near_all', null, 'stage2_near_all_started'],
-    ],
-  };
+  const phaseChain = getDispatchPhaseChain();
 
   const attempts = phaseChain[session.stage];
   if (!attempts) return false;

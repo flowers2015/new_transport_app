@@ -4,6 +4,7 @@
 
 const { isVeryFarAnnouncement } = require('../dispatch/dispatchRouteRules');
 const { vehicleMatchesCategory } = require('../dispatch/dispatchVehicleCategory');
+const { isLegacyTransportQueueLaw } = require('../dispatch/queueAnnouncementLaw');
 
 function driverHasVeryFarHistory(driverEntry) {
   if (driverEntry?.hasVeryFarHistory) return true;
@@ -57,7 +58,11 @@ function filterEligibleForDriver(announcements, driverEntry, stage, rejectedAnno
     }
 
     if (stage === 'stage1') {
-      if (queueType !== 'far') return false;
+      if (isLegacyTransportQueueLaw()) {
+        if (queueType !== 'far') return false;
+      } else if (queueType !== 'far' && queueType !== 'near') {
+        return false;
+      }
       if (driverEntry?.blockedStage1 || hasVfHistory) return false;
       return isVeryFarAnnouncement(ann);
     }

@@ -2,6 +2,11 @@ const pool = require('../../db');
 const { filterEligibleForDriver, classifyCategoryQueueVeryFar } = require('../bale/baleDecision');
 const { isVeryFarAnnouncement } = require('./dispatchRouteRules');
 const { computeJalaliCycleRange } = require('./dispatchCycle');
+const {
+  isLegacyTransportQueueLaw,
+  getLegacyPromotePhases,
+  getCurrentPromotePhases,
+} = require('./queueAnnouncementLaw');
 
 function getStageCandidatesHandler() {
   return require('../../controllers/dispatchController').getStageCandidates;
@@ -14,11 +19,13 @@ const CATEGORY_KEY_TO_LABEL = {
 };
 
 const PHASE_LABELS = {
-  stage1: 'مرحله اول — خیلی‌دور (نوبت دور)',
+  stage1: isLegacyTransportQueueLaw()
+    ? 'مرحله اول — خیلی‌دور (نوبت دور)'
+    : 'مرحله اول — خیلی‌دور (دور و نزدیکِ نرفته)',
   stage2_far: 'مرحله دوم — نوبت دور',
   stage2_near_vf: 'مرحله دوم — خیلی‌دور برای نوبت نزدیک',
   stage2_near_all: 'مرحله دوم — نوبت نزدیک (بارهای باقی‌مانده)',
-  stage2_all: 'اعلام یک‌مرحله‌ای — همه بارها طبق نوبت',
+  stage2_all: 'مرحله دوم — همه بارها از ابتدای نوبت دور',
 };
 
 const LOCK_REASONS = {
@@ -56,7 +63,9 @@ function normalizeCategoryLabel(category) {
 function phaseToQuery(phase) {
   switch (phase) {
     case 'stage1':
-      return { stage: 'stage1', subPhase: '', forceStage2: 'false' };
+      return isLegacyTransportQueueLaw()
+        ? { stage: 'stage1', subPhase: '', forceStage2: 'false' }
+        : { stage: 'stage1', subPhase: 'vf_both', forceStage2: 'false' };
     case 'stage2_far':
       return { stage: 'stage2', subPhase: 'far', forceStage2: 'true' };
     case 'stage2_near_vf':
@@ -66,7 +75,9 @@ function phaseToQuery(phase) {
     case 'stage2_all':
       return { stage: 'stage2', subPhase: '', forceStage2: 'true' };
     default:
-      return { stage: 'stage1', subPhase: '', forceStage2: 'false' };
+      return isLegacyTransportQueueLaw()
+        ? { stage: 'stage1', subPhase: '', forceStage2: 'false' }
+        : { stage: 'stage1', subPhase: 'vf_both', forceStage2: 'false' };
   }
 }
 
@@ -118,7 +129,9 @@ function filterActiveStage1Queue(queue, stage1DeferredIds) {
     const driverId = entry.driverId || entry.driver_id;
     if (stage1DeferredIds.has(driverId)) return false;
     if (driverHasVeryFarHistory(entry)) return false;
-    return (entry.queueType || entry.queue_type) === 'far';
+    const qt = entry.queueType || entry.queue_type;
+    if (isLegacyTransportQueueLaw()) return qt === 'far';
+    return qt === 'far' || qt === 'near';
   });
 }
 
@@ -289,7 +302,7 @@ function phaseHasWork(phase, data, deferrals) {
   return anns.length > 0;
 }
 
-function resolveEffectivePhaseFromPayloads(payloads, deferrals) {
+function resolveEffectivePhaseFromPayloadsLegacyTransport(payloads, deferrals) {
   const tryPhases = phases => {
     for (const phase of phases) {
       const data = payloads[phase];
@@ -324,13 +337,64 @@ function resolveEffectivePhaseFromPayloads(payloads, deferrals) {
     return { phase: 'stage1', data: { ...s1, queue: activeS1 }, autoPromoted: false };
   }
 
-  const promoted = tryPhases(['stage2_far', 'stage2_near_vf', 'stage2_near_all']);
+  const promoted = tryPhases(getLegacyPromotePhases());
   if (promoted) return promoted;
 
   const fallback = tryPhases(['stage2_all', 'stage2_near_all', 'stage2_near_vf', 'stage2_far']);
   if (fallback) return fallback;
 
   return { phase: null, data: s1, autoPromoted: false };
+}
+
+function resolveEffectivePhaseFromPayloadsCurrent(payloads, deferrals) {
+  const tryPhases = phases => {
+    for (const phase of phases) {
+      const data = payloads[phase];
+      if (!data) continue;
+      if (phaseHasWork(phase, data, deferrals)) {
+        return {
+          phase,
+          data: { ...data, queue: activeQueueForPhase(phase, data, deferrals) },
+          autoPromoted: phase !== 'stage1',
+        };
+      }
+    }
+    return null;
+  };
+
+  const boardQueue =
+    payloads.stage1?.displayQueue ||
+    payloads.stage2_all?.displayQueue ||
+    payloads.stage2_all?.queue ||
+    [];
+  const vfUniformity = classifyCategoryQueueVeryFar(boardQueue);
+  if (vfUniformity === 'none_went' || vfUniformity === 'all_went') {
+    const unified = tryPhases(['stage2_all']);
+    if (unified) {
+      return { ...unified, autoPromoted: true };
+    }
+  }
+
+  const s1 = payloads.stage1 || {};
+  const activeS1 = activeQueueForPhase('stage1', s1, deferrals);
+  if ((s1.announcements || []).length > 0 && activeS1.length > 0) {
+    return { phase: 'stage1', data: { ...s1, queue: activeS1 }, autoPromoted: false };
+  }
+
+  const promoted = tryPhases(getCurrentPromotePhases());
+  if (promoted) return promoted;
+
+  const fallback = tryPhases(['stage2_all']);
+  if (fallback) return fallback;
+
+  return { phase: null, data: s1, autoPromoted: false };
+}
+
+function resolveEffectivePhaseFromPayloads(payloads, deferrals) {
+  if (isLegacyTransportQueueLaw()) {
+    return resolveEffectivePhaseFromPayloadsLegacyTransport(payloads, deferrals);
+  }
+  return resolveEffectivePhaseFromPayloadsCurrent(payloads, deferrals);
 }
 
 async function resolveEffectivePhase(vehicleCategory, userId = null) {
@@ -363,6 +427,33 @@ function resolveEntryAssignPhase(entry, globalPhase, deferrals, payloads) {
       isDeferredThisPhase: false,
       assignStage: 'stage2',
       inactive: (data.announcements || []).length === 0,
+    };
+  }
+
+  if (!isLegacyTransportQueueLaw() && globalPhase === 'stage1') {
+    if (deferrals.stage1.has(driverId)) {
+      return {
+        phase: 'stage1',
+        data: payloads.stage1,
+        isDeferredThisPhase: true,
+        assignStage: 'stage1',
+      };
+    }
+    const activeS1 = filterActiveStage1Queue(payloads.stage1?.queue, deferrals.stage1);
+    if (activeS1.some(q => q.id === entryId) && (payloads.stage1?.announcements || []).length > 0) {
+      return {
+        phase: 'stage1',
+        data: payloads.stage1,
+        isDeferredThisPhase: false,
+        assignStage: 'stage1',
+      };
+    }
+    return {
+      phase: 'stage1',
+      data: payloads.stage1,
+      isDeferredThisPhase: false,
+      assignStage: 'stage1',
+      inactive: true,
     };
   }
 
@@ -495,6 +586,7 @@ function buildAnnouncementEligibility(announcements, driverEntry, phase, options
         isVeryFarAnnouncement(ann) &&
         phase !== 'stage2_far' &&
         phase !== 'stage2_near_all' &&
+        phase !== 'stage2_all' &&
         phase !== 'stage2'
       ) {
         lockReason = LOCK_REASONS.very_far_history;
@@ -605,11 +697,11 @@ function computeEntryRowStatus(entry, entryCtx, eligibleCount, globalPhase) {
     }
   }
 
-  if (entryCtx.inactive || !entryPhase) {
-    return 'inactive';
-  }
   if (entryPhase === 'stage1' && hasVf) {
     return 'very_far_history';
+  }
+  if (entryCtx.inactive || !entryPhase) {
+    return 'inactive';
   }
   return eligibleCount > 0 ? 'ready' : 'inactive';
 }
@@ -695,7 +787,11 @@ async function getQueueAssignHints(vehicleCategory, userId = null, assignMode = 
       ).length;
     }
 
-    if (!freeMode && !entryCtx.isDeferredThisPhase) {
+    // قانون جاری: تا وقتی فاز خیلی‌دور (مرحله ۱) باز است، هیچ‌کس به بارهای باقی‌مانده ارتقا نمی‌یابد
+    const blockPromotionDuringStage1 =
+      !isLegacyTransportQueueLaw() && globalPhase === 'stage1';
+
+    if (!freeMode && !entryCtx.isDeferredThisPhase && !blockPromotionDuringStage1) {
       if (entryQueueType === 'near') {
         const s2all = payloads.stage2_near_all || {};
         const nearAllEligible = filterEligibleForDriver(
@@ -992,7 +1088,7 @@ async function getAssignContext(queueEntryId, userId = null, assignMode = 'free'
   const isDeferred = entryCtx.isDeferredThisPhase;
   const inActiveNearVfTurn = isNearDriverInActiveVfTurn(driverEntry, deferrals, payloads);
   const inActiveQueue =
-    phase === 'stage2_far' || phase === 'stage2_near_all'
+    phase === 'stage2_far' || phase === 'stage2_near_all' || phase === 'stage2_all'
       ? (driverEntry.queueType || driverEntry.queue_type) ===
         (queueRow.queue_type === 'far' ? 'far' : 'near')
       : phase === 'stage2_near_vf'
@@ -1014,6 +1110,7 @@ async function getAssignContext(queueEntryId, userId = null, assignMode = 'free'
       inActiveQueue ||
       phase === 'stage2_far' ||
       phase === 'stage2_near_all' ||
+      phase === 'stage2_all' ||
       (phase === 'stage2_near_vf' && inActiveNearVfTurn),
     freeMode: false,
   });

@@ -122,6 +122,13 @@ function getDestinationDisplay(ann) {
   return raw;
 }
 
+function announcementLineLabel(ann) {
+  const raw = ann?.lineType || ann?.line_type;
+  if (!raw) return '—';
+  const { formatFreightLineTypeFa } = require('../../utils/freightEnums');
+  return formatFreightLineTypeFa(raw) || '—';
+}
+
 function formatRouteKm(ann) {
   const km = ann.route?.round_trip_km;
   if (km) return `${Math.round(Number(km))} کیلومتر`;
@@ -167,7 +174,7 @@ function formatAnnouncementMetaLines(ann, { markdown = false } = {}) {
 }
 
 function formatAnnouncementRow(index, ann) {
-  const line = ann.lineType || '—';
+  const line = announcementLineLabel(ann);
   const dest = getDestinationDisplay(ann);
   const km = formatRouteKm(ann);
   const origin = getOriginDisplay(ann);
@@ -181,7 +188,7 @@ function formatAnnouncementRow(index, ann) {
 }
 
 function formatAnnouncementRowMarkdown(index, ann) {
-  const line = escapeMarkdown(ann.lineType || '—');
+  const line = escapeMarkdown(announcementLineLabel(ann));
   const dest = escapeMarkdown(getDestinationDisplay(ann));
   const km = escapeMarkdown(formatRouteKm(ann));
   const origin = escapeMarkdown(getOriginDisplay(ann));
@@ -197,7 +204,7 @@ function formatAnnouncementRowMarkdown(index, ann) {
 function formatAssignmentGroupMessage(driverName, rowNumber, ann) {
   const name = escapeMarkdown(driverName || '—');
   const dest = escapeMarkdown(getDestinationDisplay(ann));
-  const line = escapeMarkdown(ann.lineType || '—');
+  const line = escapeMarkdown(announcementLineLabel(ann));
   return `✅ ${name} بار مسیر ${dest} لاین ${line} را انتخاب کرد`;
 }
 
@@ -344,6 +351,7 @@ module.exports = {
   formatAnnouncementListMarkdown,
   formatAssignmentGroupMessage,
   formatRouteKm,
+  announcementLineLabel,
   getOriginDisplay,
   formatQueueSnapshot,
   formatGroupStageTitle,

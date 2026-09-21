@@ -1,4 +1,5 @@
 const pool = require('../../db');
+const { formatFreightLineTypeFa } = require('../../utils/freightEnums');
 
 function combineOrigins(row) {
   if (!row?.origin_city) return '—';
@@ -74,7 +75,7 @@ async function enrichAnnouncements(announcements) {
 
     return {
       ...ann,
-      lineType: ann.lineType || row?.line_type,
+      lineType: formatFreightLineTypeFa(ann.lineType || row?.line_type),
       originCity: combineOrigins(row || { origin_city: ann.originCity }),
       brand: combineBrands(row || { brand: ann.brand }),
       cargoValue: ann.cargoValue ?? (row?.cargo_value != null ? Number(row.cargo_value) : null),

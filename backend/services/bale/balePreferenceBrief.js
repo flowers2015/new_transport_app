@@ -1,10 +1,16 @@
 const pool = require('../../db');
 const { fetchDriverPreferences } = require('./baleDispatchBridge');
+const { formatFreightLineTypeFa } = require('../../utils/freightEnums');
+
+function lineLabelFa(lineType) {
+  const raw = String(lineType || '').trim();
+  return raw ? formatFreightLineTypeFa(raw) : '';
+}
 
 function formatTakenLine(item) {
   const parts = [
     item.announcementCode || '—',
-    item.lineType ? `لاین ${item.lineType}` : null,
+    item.lineType ? `لاین ${lineLabelFa(item.lineType)}` : null,
     item.originCity && item.destinationCity
       ? `${item.originCity}→${item.destinationCity}`
       : item.destinationCity || item.originCity,
@@ -77,7 +83,7 @@ async function buildPreferenceBrief(driverId, options = {}) {
   if (announcement) {
     const annLine = [
       announcement.announcementCode || announcement.code,
-      announcement.lineType ? `لاین ${announcement.lineType}` : null,
+      announcement.lineType ? `لاین ${lineLabelFa(announcement.lineType)}` : null,
       announcement.originCity,
       announcement.destination?.city || announcement.destinationCity,
     ]
@@ -101,7 +107,7 @@ async function buildPreferenceBrief(driverId, options = {}) {
     `شما این بار را انتخاب نکردید؛ طبق نوبت و آمار ترجیحات انتخاب شد.\n` +
     `تعداد دفعاتی که سیستم برای شما خودکار تخصیص داده: ${autoStats.autoAssignCount}\n` +
     (announcement
-      ? `بار: ${announcement.announcementCode || ''} | لاین: ${announcement.lineType || '—'} | ` +
+      ? `بار: ${announcement.announcementCode || ''} | لاین: ${lineLabelFa(announcement.lineType) || '—'} | ` +
         `${announcement.originCity || '—'} → ${announcement.destination?.city || announcement.destinationCity || '—'}`
       : '');
 
