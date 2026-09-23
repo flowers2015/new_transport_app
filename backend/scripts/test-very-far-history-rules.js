@@ -221,5 +221,84 @@ assert(
   jalaliDay(financeExceptionTripDate({ bill_of_lading_date: '1405-06-20' })) === '1405/06/20'
 );
 
+console.log('\n=== بار به راننده دیگری رسیده: دیگر سفر او نیست ===');
+assert(
+  'لغو و واگذاری به راننده دیگر = لغو، نه نهایی',
+  resolveAssignmentCertainty(baseRow({ is_driver_of_record: false, is_cancelled: true }))
+    .certainty === 'cancelled'
+);
+assert(
+  'حتی اگر اعلام‌بار بعداً نهایی شده باشد',
+  resolveAssignmentCertainty(
+    baseRow({ is_driver_of_record: false, is_cancelled: true, freight_status: 'Finalized' })
+  ).certainty === 'cancelled'
+);
+assert(
+  'راننده همان است: نهایی می‌ماند',
+  resolveAssignmentCertainty(baseRow({ is_driver_of_record: true })).certainty === 'finalized'
+);
+assert(
+  'کوئری‌های بدون این ستون رفتار قبلی را دارند',
+  resolveAssignmentCertainty(baseRow()).certainty === 'finalized'
+);
+assert(
+  'و در خلاصه دوره هم نمی‌آید',
+  buildCycleSummary([
+    mapAssignmentRow(
+      baseRow({ is_driver_of_record: false, is_cancelled: true }),
+      timestampToJalaliDate
+    ),
+  ]).veryFar.length === 0
+);
+
+console.log('\n=== مقصد عوض‌شده: مسیر بیات نباید کیلومتر را تعیین کند ===');
+const { resolveTripKmAndBucket } = require('../services/dispatch/driverPreferences');
+
+// تخصیص برای زاهدان بوده، راننده در یزد تخلیه کرده و مقصد به یزد تغییر کرده
+const staleZahedanRow = {
+  assigned_route_km: 3150,
+  assigned_distance_category: 'خیلی‌دور',
+  assigned_route_city: 'زاهدان',
+  assignment_distance_km: 3150,
+  assigned_route_matches_destination: false,
+  dest_route_km: 1400,
+  dest_distance_category: 'دور',
+  dest_city: 'یزد',
+};
+assert('کیلومتر از مقصد فعلی خوانده می‌شود', resolveTripKmAndBucket(staleZahedanRow).km === 1400);
+assert(
+  'دسته هم از مقصد فعلی — دیگر خیلی‌دور نیست',
+  resolveTripKmAndBucket(staleZahedanRow).bucket !== 'veryFar'
+);
+
+const validRow = {
+  assigned_route_km: 3150,
+  assigned_distance_category: 'خیلی‌دور',
+  assignment_distance_km: 3150,
+  assigned_route_matches_destination: true,
+  dest_route_km: 3150,
+  dest_distance_category: 'خیلی‌دور',
+};
+assert('مقصد تغییر نکرده: خیلی‌دور می‌ماند', resolveTripKmAndBucket(validRow).bucket === 'veryFar');
+assert('و کیلومترش درست است', resolveTripKmAndBucket(validRow).km === 3150);
+
+const multiDestRow = {
+  assigned_route_km: 900,
+  assigned_distance_category: 'نزدیک',
+  assigned_route_matches_destination: true,
+  dest_route_km: 2750,
+  dest_distance_category: 'خیلی‌دور',
+};
+assert(
+  'چندمقصدی: دورترین مقصد ملاک است',
+  resolveTripKmAndBucket(multiDestRow).km === 2750
+);
+
+assert(
+  'تور استثنایی (بدون مسیر تخصیص) دست‌نخورده کار می‌کند',
+  resolveTripKmAndBucket({ dest_route_km: 2400, dest_distance_category: 'خیلی‌دور' }).bucket ===
+    'veryFar'
+);
+
 console.log(`\n=== نتیجه: ${passed} موفق، ${failed} ناموفق ===\n`);
 process.exit(failed === 0 ? 0 : 1);

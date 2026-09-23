@@ -1848,9 +1848,9 @@ async function getDriverPreferences(req, res) {
           fa.priority,
           COALESCE(fd.city, fd_fallback.city) AS destination_city,
           COALESCE(fd.created_at, fd_fallback.created_at) AS destination_created_at,
-          dr.route_category,
-          dr.distance_category,
-          dr.round_trip_km,
+          COALESCE(dest_route.route_category, dr.route_category) AS route_category,
+          COALESCE(dest_route.distance_category, dr.distance_category) AS distance_category,
+          COALESCE(dest_route.round_trip_km, dr.round_trip_km) AS round_trip_km,
           v.vehicle_code,
           v.vehicle_category AS vehicle_category,
           COALESCE(da.queue_type, dqe.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
@@ -1858,6 +1858,13 @@ async function getDriverPreferences(req, res) {
           fa.status AS freight_status,
           fa.finance_disposition,
           fa.finance_reject_type,
+          (
+            fa.id IS NULL
+            OR (
+              fa.assigned_driver_id IS NOT NULL
+              AND fa.assigned_driver_id::text = da.driver_id::text
+            )
+          ) AS is_driver_of_record,
           COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
@@ -1870,6 +1877,17 @@ async function getDriverPreferences(req, res) {
           LIMIT 1
         ) fd_fallback ON TRUE
         LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+        -- مقصد ممکن است بعد از تخصیص عوض شده باشد (مثلاً زاهدان → یزد)؛
+        -- کیلومتر و دسته باید با مقصد فعلی بخواند، نه مسیر ثبت‌شده هنگام تخصیص
+        LEFT JOIN LATERAL (
+          SELECT dr3.route_category, dr3.distance_category, dr3.round_trip_km
+          FROM dispatch_routes dr3
+          WHERE dr3.is_active = TRUE
+            AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr3.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+              = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd.city, fd_fallback.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+          ORDER BY COALESCE(dr3.round_trip_km, 0) DESC NULLS LAST
+          LIMIT 1
+        ) dest_route ON TRUE
         LEFT JOIN vehicles v ON v.id = da.vehicle_id
         LEFT JOIN LATERAL (
           SELECT dqe2.queue_type
@@ -2249,9 +2267,9 @@ async function getDriverBehaviorAnalysis(req, res) {
           fa.origin_city,
           COALESCE(fd.city, fd_fallback.city) AS destination_city,
           COALESCE(fd.created_at, fd_fallback.created_at) AS destination_created_at,
-          dr.route_category,
-          dr.distance_category,
-          dr.round_trip_km,
+          COALESCE(dest_route.route_category, dr.route_category) AS route_category,
+          COALESCE(dest_route.distance_category, dr.distance_category) AS distance_category,
+          COALESCE(dest_route.round_trip_km, dr.round_trip_km) AS round_trip_km,
           v.vehicle_code,
           v.vehicle_category AS vehicle_category,
           COALESCE(da.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
@@ -2259,6 +2277,13 @@ async function getDriverBehaviorAnalysis(req, res) {
           fa.status AS freight_status,
           fa.finance_disposition,
           fa.finance_reject_type,
+          (
+            fa.id IS NULL
+            OR (
+              fa.assigned_driver_id IS NOT NULL
+              AND fa.assigned_driver_id::text = da.driver_id::text
+            )
+          ) AS is_driver_of_record,
           COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
@@ -2271,6 +2296,16 @@ async function getDriverBehaviorAnalysis(req, res) {
           LIMIT 1
         ) fd_fallback ON TRUE
         LEFT JOIN dispatch_routes dr ON dr.id = da.route_id
+        -- مقصد ممکن است بعد از تخصیص عوض شده باشد؛ کیلومتر باید با مقصد فعلی بخواند
+        LEFT JOIN LATERAL (
+          SELECT dr3.route_category, dr3.distance_category, dr3.round_trip_km
+          FROM dispatch_routes dr3
+          WHERE dr3.is_active = TRUE
+            AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr3.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+              = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd.city, fd_fallback.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+          ORDER BY COALESCE(dr3.round_trip_km, 0) DESC NULLS LAST
+          LIMIT 1
+        ) dest_route ON TRUE
         LEFT JOIN vehicles v ON v.id = da.vehicle_id
           WHERE da.driver_id = $1
           AND (

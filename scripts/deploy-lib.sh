@@ -199,6 +199,7 @@ deploy_run_optional_migrations() {
         "migrations/create_planning_manager_approval_permissions_table.js"
         "migrations/add_permission_type_to_planning_manager_approval_permissions.js"
         "migrations/fix_financial_period_names.js"
+        "migrations/fix_cancelled_assignment_finalized_at.js"
     )
 
     for mig in "${migrations[@]}"; do

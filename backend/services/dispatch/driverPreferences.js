@@ -74,9 +74,13 @@ function resolveAssignmentCertainty(row) {
   const freightStatus = row.freight_status || row.status || null;
   const isCancelledFlag = Boolean(row.is_cancelled);
   const freightCancelled = freightStatus === 'Cancelled';
-  const finalizedAt = row.assignment_finalized_at || null;
+  // بار دیگر به نام این راننده نیست: تخصیصش لغو شده یا به راننده دیگری رسیده،
+  // پس نه تاریخ اتمام خودش و نه وضعیت «نهایی» اعلام‌بار به او مربوط است.
+  const lostToAnotherDriver = row.is_driver_of_record === false;
+  const finalizedAt = (lostToAnotherDriver ? null : row.assignment_finalized_at) || null;
   const isFinalized =
-    Boolean(finalizedAt) || freightStatus === 'Finalized' || freightStatus === 'InTransit';
+    !lostToAnotherDriver &&
+    (Boolean(finalizedAt) || freightStatus === 'Finalized' || freightStatus === 'InTransit');
 
   // رد مالی «اجرا نشده»: سفر انجام نشده — نه در سابقه خیلی‌دور، نه در آمار دوره
   if (isTripNotExecuted(row)) {
@@ -565,15 +569,20 @@ function resolveTripCategoryLabel(row) {
 }
 
 function resolveTripKmAndBucket(row) {
-  const assignedKm = Number(row.assigned_route_km);
+  // مسیر ثبت‌شده هنگام تخصیص وقتی مقصد بعداً عوض شده (مثلاً زاهدان → یزد) بیات است
+  // و نباید کیلومتر و دستهٔ سفر را تعیین کند؛ فقط مقصد فعلی ملاک است.
+  const assignedRouteIsStale = row.assigned_route_matches_destination === false;
+  const assignedKm = assignedRouteIsStale ? NaN : Number(row.assigned_route_km);
   const destKm = Number(row.dest_route_km);
-  const assignKm = Number(row.assignment_distance_km);
+  const assignKm = assignedRouteIsStale ? NaN : Number(row.assignment_distance_km);
   const kmCandidates = [assignedKm, destKm, assignKm].filter(n => Number.isFinite(n) && n > 0);
   const km = kmCandidates.length ? Math.max(...kmCandidates) : 0;
 
+  const assignedDistanceCategory = assignedRouteIsStale ? '' : row.assigned_distance_category;
+  const assignedRouteCategory = assignedRouteIsStale ? '' : row.assigned_route_category;
   const routeLike = {
-    distance_category: row.assigned_distance_category || row.dest_distance_category || '',
-    route_category: row.assigned_route_category || row.dest_route_category || '',
+    distance_category: assignedDistanceCategory || row.dest_distance_category || '',
+    route_category: assignedRouteCategory || row.dest_route_category || '',
     round_trip_km: km || null,
     distance_km: km || null,
   };
@@ -583,8 +592,21 @@ function resolveTripKmAndBucket(row) {
   return { km, bucket };
 }
 
-/** تاریخ قرارگرفتن تور در دوره نوبت: اتمام تخصیص روی نوبت، وگرنه روی اعلام‌بار */
-const CYCLE_MEMBERSHIP_AT_SQL = `COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at)`;
+/**
+ * تاریخ قرارگرفتن تور در دوره نوبت: اتمام تخصیص روی نوبت، وگرنه روی اعلام‌بار.
+ *
+ * تاریخ اعلام‌بار فقط وقتی به این راننده تعلق دارد که اعلام‌بار هنوز به نام او باشد.
+ * اگر تخصیصش لغو شده یا بار به راننده دیگری داده شده، این سفر را نرفته و نباید
+ * از تاریخ اتمامِ رانندهٔ بعدی سابقه بگیرد.
+ */
+const CYCLE_MEMBERSHIP_AT_SQL = `
+  CASE
+    WHEN fa.id IS NULL THEN da.assignment_finalized_at
+    WHEN fa.assigned_driver_id IS NOT NULL
+     AND fa.assigned_driver_id::text = da.driver_id::text
+      THEN COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at)
+    ELSE NULL
+  END`;
 
 async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, options = {}) {
   if (!driverIds?.length) return [];
@@ -621,6 +643,16 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
         dr.distance_category AS assigned_distance_category,
         dr.route_category AS assigned_route_category,
         dr.city AS assigned_route_city,
+        (
+          dr.id IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM freight_destinations fd_chk
+            WHERE fd_chk.freight_announcement_id = fa.id
+              AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd_chk.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+                = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+          )
+        ) AS assigned_route_matches_destination,
         dest.round_trip_km AS dest_route_km,
         dest.distance_category AS dest_distance_category,
         dest.route_category AS dest_route_category,
@@ -918,5 +950,6 @@ module.exports = {
   fetchDriverCycleStatsByCategory,
   fetchDriverCycleStatsAll,
   aggregateCycleTripStats,
+  resolveTripKmAndBucket,
   groupAssignmentsByTrip: require('./multiDestinationAssignments').groupAssignmentsByTrip,
 };
