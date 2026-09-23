@@ -131,6 +131,27 @@ export function isReannouncement(ann: FreightAnnouncement): boolean {
 /** @deprecated use isReannouncement */
 export const isReannouncedFromLeftover = isReannouncement;
 
+/**
+ * ترتیب ردیف‌ها مطابق رنگ بارگیری در جدول:
+ * سفید (راننده تخصیص شده ولی انبار بارگیری را شروع نکرده) بالا،
+ * زرد (در حال بارگیری) وسط، خاکستری (تمام‌شده) پایین.
+ */
+const LOADING_STATUS_DISPLAY_RANK: Record<string, number> = {
+    in_progress: 1,
+    completed: 2,
+};
+
+export function loadingStatusDisplayRank(loadingStatus?: string | null): number {
+    return LOADING_STATUS_DISPLAY_RANK[String(loadingStatus || '')] ?? 0;
+}
+
+/** مرتب‌سازی پایدار — ترتیب قبلی داخل هر گروه دست‌نخورده می‌ماند */
+export function sortByLoadingStatus(items: FreightAnnouncement[]): FreightAnnouncement[] {
+    return [...items].sort(
+        (a, b) => loadingStatusDisplayRank(a.loadingStatus) - loadingStatusDisplayRank(b.loadingStatus)
+    );
+}
+
 export function applyTransportLiveDisplayOrder(
     items: FreightAnnouncement[],
     options: {
@@ -144,6 +165,10 @@ export function applyTransportLiveDisplayOrder(
 
     if (options.activeLine === FreightLineType.IceCream && !isPendingBillOfLadingTab(options.activeLine)) {
         list = sortByIceCreamDisplayOrder(list);
+    }
+
+    if (options.activeLine === FreightLineType.Dairy && !isPendingBillOfLadingTab(options.activeLine)) {
+        list = sortByLoadingStatus(list);
     }
 
     const useMyView =
