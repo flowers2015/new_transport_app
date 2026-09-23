@@ -1,18 +1,12 @@
 const pool = require('../db');
 const crypto = require('crypto');
-const { jalaliMonthName } = require('../utils/jalali');
+const { jalaliMonthLabel } = require('../utils/jalali');
 
 /**
  * نام دوره از ماهِ تاریخ پایان می‌آید، نه تاریخ شروع:
  * دوره‌ای که ۱۴۰۵/۰۴/۲۶ شروع و ۱۴۰۵/۰۵/۲۵ تمام می‌شود «مرداد ۱۴۰۵» است.
  */
-function buildPeriodName(endDate) {
-  const parts = String(endDate || '').replace(/-/g, '/').split('/');
-  if (parts.length < 2) return null;
-  const monthName = jalaliMonthName(parseInt(parts[1], 10));
-  if (!monthName) return null;
-  return `${monthName} ${parts[0]}`;
-}
+const buildPeriodName = jalaliMonthLabel;
 
 /**
  * ایجاد جداول دوره‌های مالی و لاگ تغییرات

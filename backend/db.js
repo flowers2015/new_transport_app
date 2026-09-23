@@ -50,13 +50,15 @@ pool.on('error', (err, client) => {
 
 // Log pool stats periodically (every 5 minutes) - فقط در حالت development
 if (process.env.NODE_ENV !== 'production') {
-  setInterval(() => {
+  const statsTimer = setInterval(() => {
     console.log('📊 [DB Pool] Stats:', {
       total: pool.totalCount,
       idle: pool.idleCount,
       waiting: pool.waitingCount
     });
   }, 5 * 60 * 1000);
+  // تایمر نباید اسکریپت‌های یک‌بارمصرف را زنده نگه دارد
+  statsTimer.unref();
 }
 
 module.exports = pool;

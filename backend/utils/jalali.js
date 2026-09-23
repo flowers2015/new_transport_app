@@ -149,6 +149,15 @@ function jalaliMonthName(jm) {
     return JALALI_MONTH_NAMES[Number(jm) - 1] || null;
 }
 
+/** '1405/06/25' → 'شهریور 1405' */
+function jalaliMonthLabel(jalaliDate) {
+    const parts = String(jalaliDate || '').replace(/-/g, '/').split('/');
+    if (parts.length < 2) return null;
+    const monthName = jalaliMonthName(parseInt(parts[1], 10));
+    if (!monthName) return null;
+    return `${monthName} ${parts[0]}`;
+}
+
 function getJalaliMonthRange(jy, jm) {
     const daysInMonth = jalaali.jalaaliMonthLength(jy, jm);
     const startDate = `${jy}/${pad2(jm)}/01`;
@@ -169,5 +178,6 @@ module.exports = {
     getJalaliMonthRange,
     validateJalaliDateString,
     jalaliMonthName,
+    jalaliMonthLabel,
     JALALI_MONTH_NAMES,
 };

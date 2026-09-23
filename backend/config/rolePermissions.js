@@ -64,9 +64,10 @@ const rolePermissions = {
   transport_user: {
     menus: [
       'freight_tracking',
-      'upcoming_freight'
+      'upcoming_freight',
+      'commission_archive'
     ],
-    description: 'کاربر ترابری (شرکت)'
+    description: 'کاربر ترابری (شرکت) — بایگانی دوره‌های مالی فقط رویت'
   },
 
   // کاربر ترابری (خودرو شخصی)

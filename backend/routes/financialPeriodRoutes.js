@@ -14,7 +14,14 @@ const { authenticateToken, authorizeRole } = require('../middleware/authMiddlewa
 
 // نقش‌های مالی
 const financeRoles = ['finance', 'central_finance', 'transport_finance', 'admin', 'مالی ترابری', 'مالی مرکزی'];
-const financeReadRoles = [...financeRoles, 'auditor', 'حسابرس'];
+// فقط رویت بایگانی دوره‌ها — بدون بستن، بازکردن یا بایگانی دوره
+const financeReadRoles = [
+  ...financeRoles,
+  'auditor',
+  'حسابرس',
+  'transport_user',
+  'کاربر ترابری (شرکت)',
+];
 // فقط ادمین می‌تونه دوره رو باز کنه
 const adminRoles = ['admin'];
 

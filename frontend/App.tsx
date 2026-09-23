@@ -701,7 +701,7 @@ const App: React.FC = () => {
                 return <TransportFinanceContainer currentUser={currentUser} currentView={View.TransportFinanceCalculation} onNavigate={handleNavigate} />;
             case View.MonthlyCommissionCalculation:
                 console.log('[App] Render view:', View.MonthlyCommissionCalculation);
-                if (currentUser?.role === UserRole.Auditor || currentUser?.role === UserRole.TransportationFinance || currentUser?.role === UserRole.Admin) {
+                if (currentUser?.role === UserRole.Auditor || currentUser?.role === UserRole.TransportationFinance || currentUser?.role === UserRole.Admin || currentUser?.role === UserRole.TransportationUser) {
                     return <TransportFinanceContainer currentUser={currentUser} currentView={View.MonthlyCommissionCalculation} onNavigate={handleNavigate} />;
                 }
                 return <div className="p-8 text-center text-red-600">دسترسی به این بخش ندارید.</div>;

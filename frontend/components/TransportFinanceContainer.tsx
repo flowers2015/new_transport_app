@@ -28,7 +28,10 @@ const TransportFinanceContainer: React.FC<TransportFinanceContainerProps> = ({ c
         return (
             <MonthlyCommissionCalculation
                 currentUser={currentUser}
-                archiveOnly={currentUser.role === UserRole.Auditor}
+                archiveOnly={
+                    currentUser.role === UserRole.Auditor ||
+                    currentUser.role === UserRole.TransportationUser
+                }
             />
         );
     }

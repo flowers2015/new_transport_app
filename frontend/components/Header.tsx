@@ -98,6 +98,7 @@ const Header: React.FC<HeaderProps> = ({
       { view: View.TransportFinanceCalculation, label: 'محاسبه هزینه تور', roles: [UserRole.TransportationFinance] },
       { view: View.MonthlyCommissionCalculation, label: 'محاسبه پورسانت', roles: [UserRole.TransportationFinance] },
       { view: View.MonthlyCommissionCalculation, label: 'بایگانی پورسانت', roles: [UserRole.Auditor] },
+      { view: View.MonthlyCommissionCalculation, label: 'بایگانی دوره‌های مالی', roles: [UserRole.TransportationUser] },
       { view: View.UserManagement, label: 'تعریف مالی شعب', roles: [UserRole.BranchFinanceManager] },
       { view: View.TransportFinancePaymentList, label: 'لیست پرداخت', roles: [UserRole.TransportationFinance] },
       { view: View.TransportFinancePaidInvoices, label: 'صورتحساب‌های پرداخت شده', roles: [UserRole.TransportationFinance] },

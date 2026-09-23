@@ -31,7 +31,14 @@ const {
 } = require('../controllers/allowanceRegulationController');
 
 const financeRoles = ['finance', 'central_finance', 'transport_finance', 'admin'];
-const financeReadRoles = [...financeRoles, 'auditor'];
+// بایگانی دوره‌ها بدون نرخ‌های بخشنامه قابل نمایش نیست — فقط خواندن
+const financeReadRoles = [
+  ...financeRoles,
+  'auditor',
+  'حسابرس',
+  'transport_user',
+  'کاربر ترابری (شرکت)',
+];
 
 // Routes for Food Regulations
 router.get(
