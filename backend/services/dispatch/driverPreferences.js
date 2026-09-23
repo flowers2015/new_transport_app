@@ -6,11 +6,31 @@ const {
   presetCategories,
 } = require('./dispatchVehicleCategory');
 
+const { parseJalaliDateString } = require('../../utils/jalali');
+
 const CATEGORY_KEY_TO_LABEL = {
   trailer: 'تریلی',
   'mini-trailer': 'مینی تریلی',
   'ten-wheel': 'ده چرخ',
 };
+
+/**
+ * رد مالی «اجرا نشده» یعنی راننده آن تور را نرفته — از سابقه نوبت حذف می‌شود.
+ * رد مالی «ناقص» یعنی رفته ولی رکوردش با تور استثنایی جایگزین می‌شود — سابقه می‌ماند.
+ */
+const FINANCE_REJECT_NOT_EXECUTED = 'not_executed';
+
+function isFinanceRejected(row) {
+  return String(row?.finance_disposition || row?.financeDisposition || '') === 'rejected';
+}
+
+function isTripNotExecuted(row) {
+  return (
+    isFinanceRejected(row) &&
+    String(row?.finance_reject_type || row?.financeRejectType || '') ===
+      FINANCE_REJECT_NOT_EXECUTED
+  );
+}
 
 function normalizeCategoryFilter(categoryParam) {
   if (!categoryParam || typeof categoryParam !== 'string') return null;
@@ -58,6 +78,10 @@ function resolveAssignmentCertainty(row) {
   const isFinalized =
     Boolean(finalizedAt) || freightStatus === 'Finalized' || freightStatus === 'InTransit';
 
+  // رد مالی «اجرا نشده»: سفر انجام نشده — نه در سابقه خیلی‌دور، نه در آمار دوره
+  if (isTripNotExecuted(row)) {
+    return { certainty: 'finance_rejected', certaintyLabel: 'رد مالی — اجرا نشده' };
+  }
   // لغو واقعی اعلام‌بار (قبل از نهایی شدن)
   if (freightCancelled && !isFinalized) {
     return { certainty: 'cancelled', certaintyLabel: 'لغو / تعیین‌تکلیف نشده' };
@@ -119,6 +143,8 @@ function mapAssignmentRow(row, timestampToJalaliDate) {
     isCancelled: row.is_cancelled || false,
     freightStatus: row.freight_status || null,
     assignmentFinalizedAt: row.assignment_finalized_at || null,
+    financeDisposition: row.finance_disposition || null,
+    financeRejectType: row.finance_reject_type || null,
     certainty: certaintyInfo.certainty,
     certaintyLabel: certaintyInfo.certaintyLabel,
     note: null,
@@ -140,6 +166,9 @@ function formatKm(km) {
   if (km == null || Number.isNaN(Number(km))) return '';
   return `${Math.round(Number(km)).toLocaleString('fa-IR')} km`;
 }
+
+/** تخصیص‌هایی که سفرشان انجام نشده و نباید در سابقه و تحلیل بیایند */
+const EXCLUDED_CERTAINTIES = new Set(['cancelled', 'finance_rejected']);
 
 function buildAssignmentNotes(taken, skipped) {
   const takenByDay = new Map();
@@ -164,19 +193,20 @@ function buildAssignmentNotes(taken, skipped) {
     const dayKey = sameDayKey(item.assignedAt);
     if (!dayKey) continue;
 
-    if (item.certainty === 'cancelled') {
+    if (EXCLUDED_CERTAINTIES.has(item.certainty)) {
+      const label = item.certainty === 'finance_rejected' ? 'رد مالی — اجرا نشده' : 'لغو';
       const sameDayTaken = (takenByDay.get(dayKey) || []).filter(
-        t => t.id !== item.id && t.certainty !== 'cancelled'
+        t => t.id !== item.id && !EXCLUDED_CERTAINTIES.has(t.certainty)
       );
       const sameDaySkipped = (skippedByDay.get(dayKey) || []).filter(s => s.isVeryFar);
       if (sameDayTaken.length > 0) {
         const chosen = sameDayTaken[0];
-        item.note = `(لغو — در همان روز «${formatDestination(chosen)}» انتخاب شد)`;
+        item.note = `(${label} — در همان روز «${formatDestination(chosen)}» انتخاب شد)`;
       } else if (sameDaySkipped.length > 0) {
         const missed = sameDaySkipped[0];
-        item.note = `(لغو — بار خیلی‌دور «${formatDestination(missed)}» ${formatKm(missed.roundTripKm)} در دسترس بود)`;
+        item.note = `(${label} — بار خیلی‌دور «${formatDestination(missed)}» ${formatKm(missed.roundTripKm)} در دسترس بود)`;
       } else {
-        item.note = '(لغو — تعیین‌تکلیف نشده)';
+        item.note = `(${label} — تعیین‌تکلیف نشده)`;
       }
       continue;
     }
@@ -193,7 +223,7 @@ function buildAssignmentNotes(taken, skipped) {
   for (const item of skipped) {
     const dayKey = sameDayKey(item.seenAt);
     const sameDayTaken = dayKey ? takenByDay.get(dayKey) || [] : [];
-    const activeTaken = sameDayTaken.filter(t => t.certainty !== 'cancelled');
+    const activeTaken = sameDayTaken.filter(t => !EXCLUDED_CERTAINTIES.has(t.certainty));
     if (activeTaken.length > 0) {
       const chosen = activeTaken[0];
       const vfLabel = item.isVeryFar ? 'بار خیلی‌دور' : 'بار';
@@ -239,6 +269,7 @@ function buildStats(taken) {
     finalizedCount: taken.filter(t => t.certainty === 'finalized').length,
     pendingCount: taken.filter(t => t.certainty === 'pending').length,
     cancelledCount: taken.filter(t => t.certainty === 'cancelled').length,
+    financeRejectedCount: taken.filter(t => t.certainty === 'finance_rejected').length,
     totalTaken: taken.length,
   };
 }
@@ -438,9 +469,9 @@ function buildBehaviorNarrative(situations, lineMix, meta) {
 }
 
 function buildBehaviorAnalysis(taken, meta = {}) {
-  const source = (taken || []).filter(item => item && item.certainty !== 'cancelled');
+  const source = (taken || []).filter(item => item && !EXCLUDED_CERTAINTIES.has(item.certainty));
   const finalized = source.filter(item => item.certainty === 'finalized');
-  const trips = finalized.length ? finalized : source.filter(item => item.certainty !== 'cancelled');
+  const trips = finalized.length ? finalized : source;
 
   const farQueue = trips.filter(item => isFarQueueType(item.queueType));
   const nearQueue = trips.filter(item => isNearQueueType(item.queueType));
@@ -628,12 +659,15 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
       ) dest_cities ON TRUE
       WHERE da.driver_id = ANY($1::varchar[])
         AND (fa.id IS NULL OR fa.status IS NULL OR fa.status NOT IN ('Cancelled'))
-        AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+        AND NOT (
+          COALESCE(fa.finance_disposition, '') = 'rejected'
+          AND COALESCE(fa.finance_reject_type, '') = '${FINANCE_REJECT_NOT_EXECUTED}'
+        )
         ${finalizedSql}
     `,
     [driverIds, cycleStart, cycleEnd]
   );
-  return rows.map(row => {
+  const trips = rows.map(row => {
     const { km, bucket } = resolveTripKmAndBucket(row);
     return {
       id: row.id,
@@ -650,6 +684,154 @@ async function fetchDriverCycleTrips(pool, driverIds, cycleStart, cycleEnd, opti
       isVeryFar: bucket === 'veryFar',
     };
   });
+
+  const exceptionTrips = await fetchFinanceExceptionTrips(
+    pool,
+    driverIds,
+    cycleStart,
+    cycleEnd
+  );
+  return trips.concat(exceptionTrips);
+}
+
+/**
+ * تاریخ واقعی سفرِ تور استثنایی. مرجع، تاریخ صدور بارنامه است؛
+ * اول روی خود اعلام‌بار، بعد محاسبه راننده، بعد تراکنش بارنامه (میلادی).
+ * تاریخ بارگیری فقط وقتی بارنامه هیچ‌جا ثبت نشده.
+ */
+function financeExceptionTripDate(row) {
+  const fromJalali = raw => {
+    const text = String(raw || '').trim();
+    if (!text) return null;
+    return parseJalaliDateString(text.replace(/-/g, '/').split(/[ T]/)[0]);
+  };
+  const fromGregorian = raw => {
+    if (!raw) return null;
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  return (
+    fromJalali(row.bill_of_lading_date) ||
+    fromJalali(row.calc_bill_of_lading_date) ||
+    fromGregorian(row.txn_bill_of_lading_at) ||
+    fromJalali(row.loading_date) ||
+    fromGregorian(row.created_at)
+  );
+}
+
+/**
+ * تورهای استثنایی مالی رکورد تخصیص نوبت ندارند، ولی سفر واقعی راننده هستند.
+ * دوره‌شان از تاریخ صدور بارنامه خوانده می‌شود، نه زمان ثبت مالی.
+ * اگر جایگزینِ توری باشند که هنوز در سابقه هست (رد مالی «ناقص»)، دوباره شمرده نمی‌شوند.
+ */
+async function fetchFinanceExceptionTrips(pool, driverIds, cycleStart, cycleEnd) {
+  let rows = [];
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          fa.id,
+          fa.assigned_driver_id AS driver_id,
+          fa.announcement_code,
+          fa.created_at,
+          fa.loading_date,
+          fa.bill_of_lading_date,
+          calc.bill_of_lading_date AS calc_bill_of_lading_date,
+          txn.transaction_date AS txn_bill_of_lading_at,
+          fa.vehicle_type,
+          v.current_vehicle_type,
+          v.model AS vehicle_model,
+          replaced.finance_reject_type AS replaced_reject_type,
+          dest.round_trip_km AS dest_route_km,
+          dest.distance_category AS dest_distance_category,
+          dest.route_category AS dest_route_category,
+          dest.city AS dest_city,
+          dest_cities.cities AS dest_cities_label
+        FROM freight_announcements fa
+        LEFT JOIN vehicles v ON v.id = fa.assigned_vehicle_id
+        LEFT JOIN freight_announcements replaced ON replaced.related_exception_id = fa.id
+        LEFT JOIN LATERAL (
+          SELECT NULLIF(TRIM(dc.bill_of_lading_date), '') AS bill_of_lading_date
+          FROM driver_calculations dc
+          WHERE dc.announcement_id = fa.id
+            AND NULLIF(TRIM(dc.bill_of_lading_date), '') IS NOT NULL
+          ORDER BY dc.created_at DESC
+          LIMIT 1
+        ) calc ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT ft.transaction_date
+          FROM freight_transactions ft
+          WHERE ft.announcement_id = fa.id
+            AND ft.transaction_date IS NOT NULL
+          ORDER BY ft.created_at DESC
+          LIMIT 1
+        ) txn ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT dr2.round_trip_km, dr2.distance_category, dr2.route_category, dr2.city
+          FROM freight_destinations fd
+          INNER JOIN dispatch_routes dr2
+            ON dr2.is_active = TRUE
+           AND REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(dr2.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+             = REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(fd.city, ''), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+          WHERE fd.freight_announcement_id = fa.id
+          ORDER BY COALESCE(dr2.round_trip_km, 0) DESC NULLS LAST
+          LIMIT 1
+        ) dest ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT string_agg(x.city, '، ' ORDER BY x.min_sort) AS cities
+          FROM (
+            SELECT
+              MIN(TRIM(fd.city)) AS city,
+              MIN(COALESCE(fd.sort_order, 999999)) AS min_sort
+            FROM freight_destinations fd
+            WHERE fd.freight_announcement_id = fa.id
+              AND NULLIF(TRIM(fd.city), '') IS NOT NULL
+            GROUP BY REPLACE(REPLACE(REPLACE(REPLACE(TRIM(fd.city), 'ي', 'ی'), 'ك', 'ک'), '‌', ''), ' ', '')
+          ) x
+        ) dest_cities ON TRUE
+        WHERE COALESCE(fa.announcement_source, '') = 'finance_exception'
+          AND fa.assigned_driver_id = ANY($1::varchar[])
+          AND fa.status NOT IN ('Cancelled')
+          AND COALESCE(fa.finance_disposition, '') <> 'rejected'
+      `,
+      [driverIds]
+    );
+    rows = result.rows || [];
+  } catch (error) {
+    console.warn('⚠️ [driverPreferences] finance exception trips skipped:', error.message);
+    return [];
+  }
+
+  const from = new Date(cycleStart).getTime();
+  const to = new Date(cycleEnd).getTime();
+
+  return rows
+    .filter(row => {
+      // تور اصلی که «ناقص» رد شده هنوز در سابقه است — جایگزینش را دوباره نشمار
+      const replacedType = row.replaced_reject_type;
+      if (replacedType && replacedType !== FINANCE_REJECT_NOT_EXECUTED) return false;
+      return true;
+    })
+    .map(row => ({ row, at: financeExceptionTripDate(row) }))
+    .filter(({ at }) => at && at.getTime() >= from && at.getTime() <= to)
+    .map(({ row, at }) => {
+      const { km, bucket } = resolveTripKmAndBucket(row);
+      return {
+        id: row.id,
+        driverId: row.driver_id,
+        announcementId: row.id,
+        announcementCode: row.announcement_code,
+        createdAt: at,
+        assignedAt: at,
+        stage: 'finance_exception',
+        city: row.dest_cities_label || row.dest_city || null,
+        categoryLabel: resolveTripCategoryLabel(row),
+        km,
+        bucket,
+        isVeryFar: bucket === 'veryFar',
+      };
+    });
 }
 
 async function fetchDriverCycleStatsAll(pool, driverIds, cycleStart, cycleEnd) {
@@ -725,6 +907,10 @@ module.exports = {
   buildBehaviorAnalysis,
   routeIsVeryFar,
   resolveAssignmentCertainty,
+  isFinanceRejected,
+  isTripNotExecuted,
+  financeExceptionTripDate,
+  FINANCE_REJECT_NOT_EXECUTED,
   isFarOrVeryFarOpportunity,
   fetchDriversFinalizedKm,
   fetchDriversVeryFarCount,

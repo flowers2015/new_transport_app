@@ -915,7 +915,7 @@ export interface DispatchDriverSearchResult extends DispatchQueueDriver {
     nationalCode?: string | null;
 }
 
-export type AssignmentCertainty = 'finalized' | 'pending' | 'cancelled';
+export type AssignmentCertainty = 'finalized' | 'pending' | 'cancelled' | 'finance_rejected';
 
 export interface DriverPreferenceTripSummary {
     id: string;
@@ -939,6 +939,7 @@ export interface DriverPreferenceStats {
     finalizedCount: number;
     pendingCount: number;
     cancelledCount: number;
+    financeRejectedCount?: number;
     totalTaken: number;
 }
 

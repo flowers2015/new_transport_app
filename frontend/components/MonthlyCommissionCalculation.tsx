@@ -433,17 +433,11 @@ const MonthlyCommissionCalculation: React.FC<MonthlyCommissionCalculationProps> 
                 'Content-Type': 'application/json',
             };
             
-            // نام دوره
-            const startParts = startDate.split('/');
-            const persianMonths = ['', 'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
-            const monthNum = parseInt(startParts[1]);
-            const periodName = `${persianMonths[monthNum]} ${startParts[0]}`;
-            
+            // نام دوره را سرور از ماه تاریخ پایان می‌سازد
             const res = await fetch(getApiUrl('financial/periods/close'), {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
-                    periodName,
                     startDate,
                     endDate,
                     userId: currentUser.id,

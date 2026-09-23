@@ -28,10 +28,14 @@ type DayQueueEntry = {
     isVeryFar: boolean;
     isTarget: boolean;
     announcementId?: string;
-    certainty?: 'finalized' | 'pending' | 'cancelled' | string;
+    certainty?: 'finalized' | 'pending' | 'cancelled' | 'finance_rejected' | string;
     routeBucket?: 'veryFar' | 'far' | 'near' | string;
     queueType?: 'far' | 'near' | string;
 };
+
+/** تخصیص‌هایی که سفرشان انجام نشده: لغو تخصیص و رد مالی «اجرا نشده» */
+const isVoidedCertainty = (certainty?: string) =>
+    certainty === 'cancelled' || certainty === 'finance_rejected';
 
 function isFromQueue(queuePosition?: number | null, queueEntryId?: string | null) {
     if (queueEntryId) return true;
@@ -237,8 +241,8 @@ function buildDayTable(
 
     const organizeBucket = (list: DayQueueEntry[]) => {
         const deduped = dedupeBucket(list);
-        const cancelled = deduped.filter(e => e.certainty === 'cancelled');
-        const active = deduped.filter(e => e.certainty !== 'cancelled');
+        const cancelled = deduped.filter(e => isVoidedCertainty(e.certainty));
+        const active = deduped.filter(e => !isVoidedCertainty(e.certainty));
         const inQueue = active.filter(e => e.fromQueue);
         const outside = active.filter(e => !e.fromQueue);
 
@@ -426,16 +430,27 @@ function StatsBar({ stats }: { stats: DriverPreferenceStats }) {
             <span className="rounded-full bg-rose-100 text-rose-800 px-2 py-0.5">
                 لغو: {stats.cancelledCount}
             </span>
+            {(stats.financeRejectedCount ?? 0) > 0 && (
+                <span
+                    className="rounded-full bg-slate-200 text-slate-700 px-2 py-0.5"
+                    title="تور رد مالی (اجرا نشده) — در سابقه خیلی‌دور شمرده نمی‌شود"
+                >
+                    رد مالی: {stats.financeRejectedCount}
+                </span>
+            )}
         </div>
     );
 }
 
 function QueueEntryLine({ entry }: { entry: DayQueueEntry }) {
-    const cancelled = entry.certainty === 'cancelled';
+    const financeRejected = entry.certainty === 'finance_rejected';
+    const cancelled = isVoidedCertainty(entry.certainty);
     const pending = entry.certainty === 'pending';
     const slotLabel =
         cancelled
-            ? 'لغو'
+            ? financeRejected
+                ? 'رد مالی'
+                : 'لغو'
             : entry.queuePosition != null && Number(entry.queuePosition) >= 1
               ? String(entry.queuePosition)
               : 'خارج از نوبت';

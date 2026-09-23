@@ -140,6 +140,15 @@ function shiftJalaliMonth(jy, jm, monthsToShift) {
     return { year: newYear, month: newMonth };
 }
 
+const JALALI_MONTH_NAMES = [
+    'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+    'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
+];
+
+function jalaliMonthName(jm) {
+    return JALALI_MONTH_NAMES[Number(jm) - 1] || null;
+}
+
 function getJalaliMonthRange(jy, jm) {
     const daysInMonth = jalaali.jalaaliMonthLength(jy, jm);
     const startDate = `${jy}/${pad2(jm)}/01`;
@@ -159,4 +168,6 @@ module.exports = {
     shiftJalaliMonth,
     getJalaliMonthRange,
     validateJalaliDateString,
+    jalaliMonthName,
+    JALALI_MONTH_NAMES,
 };

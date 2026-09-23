@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "setup": "node setup.js",
     "test:freight-kartabl": "node scripts/test-freight-kartabl-unification.js",
-    "test:queue-law": "node scripts/test-queue-announcement-law.js"
+    "test:queue-law": "node scripts/test-queue-announcement-law.js",
+    "test:very-far-history": "node scripts/test-very-far-history-rules.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

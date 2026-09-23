@@ -1,5 +1,18 @@
 const pool = require('../db');
 const crypto = require('crypto');
+const { jalaliMonthName } = require('../utils/jalali');
+
+/**
+ * نام دوره از ماهِ تاریخ پایان می‌آید، نه تاریخ شروع:
+ * دوره‌ای که ۱۴۰۵/۰۴/۲۶ شروع و ۱۴۰۵/۰۵/۲۵ تمام می‌شود «مرداد ۱۴۰۵» است.
+ */
+function buildPeriodName(endDate) {
+  const parts = String(endDate || '').replace(/-/g, '/').split('/');
+  if (parts.length < 2) return null;
+  const monthName = jalaliMonthName(parseInt(parts[1], 10));
+  if (!monthName) return null;
+  return `${monthName} ${parts[0]}`;
+}
 
 /**
  * ایجاد جداول دوره‌های مالی و لاگ تغییرات
@@ -485,7 +498,6 @@ async function closePeriod(req, res) {
     await createFinancialTables();
     
     const {
-      periodName,
       startDate,
       endDate,
       notes,
@@ -493,8 +505,13 @@ async function closePeriod(req, res) {
       userName
     } = req.body;
     
-    if (!periodName || !startDate || !endDate) {
-      return res.status(400).json({ message: 'نام دوره، تاریخ شروع و پایان الزامی است' });
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: 'تاریخ شروع و پایان دوره الزامی است' });
+    }
+
+    const periodName = buildPeriodName(endDate);
+    if (!periodName) {
+      return res.status(400).json({ message: 'تاریخ پایان دوره نامعتبر است' });
     }
 
     // بررسی وجود دوره با همین تاریخ

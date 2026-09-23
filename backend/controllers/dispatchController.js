@@ -1856,6 +1856,8 @@ async function getDriverPreferences(req, res) {
           COALESCE(da.queue_type, dqe.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
           COALESCE(da.is_cancelled, FALSE) AS is_cancelled,
           fa.status AS freight_status,
+          fa.finance_disposition,
+          fa.finance_reject_type,
           COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id
@@ -2255,6 +2257,8 @@ async function getDriverBehaviorAnalysis(req, res) {
           COALESCE(da.queue_type, CASE WHEN da.stage = 'stage1' THEN 'far' ELSE 'near' END) AS queue_type,
           COALESCE(da.is_cancelled, FALSE) AS is_cancelled,
           fa.status AS freight_status,
+          fa.finance_disposition,
+          fa.finance_reject_type,
           COALESCE(da.assignment_finalized_at, fa.assignment_finalized_at) AS assignment_finalized_at
         FROM dispatch_assignments da
         LEFT JOIN freight_announcements fa ON fa.id = da.freight_announcement_id

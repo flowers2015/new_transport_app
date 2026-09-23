@@ -5653,9 +5653,11 @@ async function assignVehicleAndDriverInternal(req, res) {
       try {
         // اگر reassignment باشد، dispatch_assignments قبلی را cancel می‌کنیم
         if (isReassignment) {
+          // راننده قبلی این بار را نرفته — تاریخ اتمام تخصیصش هم باید پاک شود
           const cancelResult = await client.query(
             `UPDATE dispatch_assignments
-             SET is_cancelled = TRUE
+             SET is_cancelled = TRUE,
+                 assignment_finalized_at = NULL
              WHERE freight_announcement_id = $1 
                AND (is_cancelled IS NULL OR is_cancelled = FALSE)`,
             [announcementId]
@@ -11175,10 +11177,12 @@ async function cancelAssignment(req, res) {
     // علامت‌گذاری تخصیص‌های مربوطه به عنوان لغو شده
     // تخصیص‌های لغو شده در ترجیحات راننده نمایش داده می‌شوند اما با علامت لغو
     // اما در آمار و تابلو اعلام بار نمایش داده نمی‌شوند
+    // پاک‌کردن تاریخ اتمام تخصیص: این سفر انجام نشده و نباید در سابقه خیلی‌دور دوره بماند
     await client.query(
       `UPDATE dispatch_assignments
-       SET is_cancelled = TRUE
-       WHERE freight_announcement_id = $1 AND is_cancelled = FALSE`,
+       SET is_cancelled = TRUE,
+           assignment_finalized_at = NULL
+       WHERE freight_announcement_id = $1`,
       [announcementId]
     );
 
